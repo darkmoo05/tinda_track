@@ -16,6 +16,6 @@ class TindaTrackApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const MainShell(),
-    );
+    ); //yes von
   }
 }

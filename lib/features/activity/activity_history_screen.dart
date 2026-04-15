@@ -1,207 +1,241 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
-import '../../shared/widgets/architect_card.dart';
+import '../../shared/widgets/architect_app_bar.dart';
+import 'widgets/activity_tile.dart';
+import 'widgets/date_header.dart';
 
-class ActivityHistoryScreen extends StatefulWidget {
+class ActivityHistoryScreen extends StatelessWidget {
   const ActivityHistoryScreen({super.key});
 
   @override
-  State<ActivityHistoryScreen> createState() => _ActivityHistoryScreenState();
-}
-
-class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        title: Text(
-          'Activity History',
-          style: Theme.of(context).textTheme.headlineSmall,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: ArchitectAppBar(
+          title: 'Financial Architect',
+          actions: [
+            IconButton(
+              onPressed: () {},
+              icon: const Icon(Icons.search_rounded, color: AppColors.onSurfaceVariant),
+            ),
+            IconButton(
+              onPressed: () {},
+              icon: const Icon(Icons.settings_outlined, color: AppColors.onSurfaceVariant),
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.search_rounded),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.filter_list_rounded),
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.onSurfaceVariant,
-          indicatorColor: AppColors.primary,
-          indicatorWeight: 3,
-          dividerColor: Colors.transparent,
-          tabs: const [
-            Tab(text: 'All'),
-            Tab(text: 'Income'),
-            Tab(text: 'Expenses'),
-            Tab(text: 'Charges'),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildTabBar(),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildHistoryList(_getTransactions()),
+                  _buildHistoryList(_getOwnerMovements()),
+                ],
+              ),
+            ),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildActivityList(context),
-          _buildActivityList(context), // Dummy for other tabs
-          _buildActivityList(context),
-          _buildActivityList(context),
+    );
+  }
+
+  Widget _buildTabBar() {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.surfaceContainerLow, width: 1),
+        ),
+      ),
+      child: TabBar(
+        labelColor: AppColors.primary,
+        unselectedLabelColor: AppColors.onSurfaceVariant.withOpacity(0.5),
+        indicatorColor: AppColors.primary,
+        indicatorWeight: 3,
+        labelStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+          letterSpacing: 1.0,
+        ),
+        tabs: const [
+          Tab(text: 'TRANSACTIONS'),
+          Tab(text: 'OWNER MOVEMENTS'),
         ],
       ),
     );
   }
 
-  Widget _buildActivityList(BuildContext context) {
+  Widget _buildHistoryList(List<Map<String, dynamic>> items) {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        _buildDateHeader(context, 'Today'),
-        _buildActivityItem(
-          context,
-          'GCash Transfer',
-          'Juan Dela Cruz',
-          '-₱500.00',
-          '2:45 PM',
-          Icons.account_balance_wallet_rounded,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Movements',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ],
         ),
-        _buildActivityItem(
-          context,
-          'Direct Deposit',
-          'Partner Payout',
-          '+₱12,000.00',
-          '11:30 AM',
-          Icons.add_circle_outline_rounded,
+        const SizedBox(height: 20),
+        _buildSearchAndFilter(),
+        ..._groupItemsByDate(items),
+        const SizedBox(height: 100), // Bottom padding for FAB
+      ],
+    );
+  }
+
+  Widget _buildSearchAndFilter() {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEEEF0),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const TextField(
+              decoration: InputDecoration(
+                hintText: 'Search party, account, or ref ID',
+                hintStyle: TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant),
+                prefixIcon: Icon(Icons.search_rounded, size: 20, color: AppColors.onSurfaceVariant),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
         ),
-        const SizedBox(height: 24),
-        _buildDateHeader(context, 'Yesterday'),
-        _buildActivityItem(
-          context,
-          'Service Charge',
-          'Office Rental',
-          '-₱5,000.00',
-          'Apr 13',
-          Icons.business_center_rounded,
-        ),
-        _buildActivityItem(
-          context,
-          'Owner Movement',
-          'Capital Top-up',
-          '+₱50,000.00',
-          'Apr 13',
-          Icons.trending_up_rounded,
-        ),
-        const SizedBox(height: 24),
-        _buildDateHeader(context, 'April 12, 2026'),
-        _buildActivityItem(
-          context,
-          'Water Bill',
-          'PrimeWater',
-          '-₱1,200.00',
-          'Apr 12',
-          Icons.water_drop_rounded,
+        const SizedBox(width: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEEEEF0),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.tune_rounded, size: 24, color: AppColors.primary),
         ),
       ],
     );
   }
 
-  Widget _buildDateHeader(BuildContext context, String date) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        date,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
+  List<Widget> _groupItemsByDate(List<Map<String, dynamic>> items) {
+    List<Widget> grouped = [];
+    String lastDate = '';
+
+    for (var item in items) {
+      if (item['date'] != lastDate) {
+        lastDate = item['date'];
+        grouped.add(ArchitectDateHeader(label: lastDate));
+      }
+      grouped.add(ArchitectActivityTile(
+        title: item['title'],
+        type: item['type'],
+        reference: item['ref'],
+        amount: item['amount'],
+        time: item['time'],
+        icon: item['icon'],
+        iconColor: item['iconColor'],
+      ));
+    }
+    return grouped;
   }
 
-  Widget _buildActivityItem(
-    BuildContext context,
-    String title,
-    String subtitle,
-    String amount,
-    String time,
-    IconData icon,
-  ) {
-    final isPositive = amount.startsWith('+');
+  List<Map<String, dynamic>> _getTransactions() {
+    return [
+      {
+        'date': 'Today',
+        'title': 'SM Mart - Grocery',
+        'type': 'Cash Out',
+        'ref': '9021-X99',
+        'amount': '- ₱1,240.50',
+        'time': '14:22',
+        'icon': Icons.call_received_rounded,
+        'iconColor': Colors.green,
+      },
+      {
+        'date': 'Today',
+        'title': 'Juan Dela Cruz',
+        'type': 'Cash In',
+        'ref': 'G-Save Transfer',
+        'amount': '+ ₱5,000.00',
+        'time': '09:15',
+        'icon': Icons.call_made_rounded,
+        'iconColor': Colors.blue,
+      },
+      {
+        'date': 'Yesterday',
+        'title': 'Meralco Bill',
+        'type': 'Cash Out',
+        'ref': 'Utilities',
+        'amount': '- ₱4,562.18',
+        'time': '18:45',
+        'icon': Icons.bolt_rounded,
+        'iconColor': Colors.amber[800],
+      },
+      {
+        'date': 'Yesterday',
+        'title': 'Shell Petron',
+        'type': 'Cash Out',
+        'ref': 'Fuel',
+        'amount': '- ₱2,100.00',
+        'time': '07:30',
+        'icon': Icons.local_gas_station_rounded,
+        'iconColor': Colors.green,
+      },
+      {
+        'date': '20 May 2024',
+        'title': 'Monthly Salary',
+        'type': 'Cash In',
+        'ref': 'Global Corp Inc.',
+        'amount': '+ ₱45,000.00',
+        'time': '08:00',
+        'icon': Icons.account_balance_rounded,
+        'iconColor': Colors.blue,
+      },
+    ];
+  }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: ArchitectCard(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: AppColors.primary,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  Text(
-                    subtitle,
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  amount,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: isPositive ? AppColors.secondary : AppColors.onSurface,
-                  ),
-                ),
-                Text(
-                  time,
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+  List<Map<String, dynamic>> _getOwnerMovements() {
+    return [
+      {
+        'date': 'Today',
+        'title': 'Owner Capital Add',
+        'type': 'Injection',
+        'ref': 'FA-9921',
+        'amount': '+ ₱10,000.00',
+        'time': '10:00',
+        'icon': Icons.add_circle_outline_rounded,
+        'iconColor': Colors.purple,
+      },
+      {
+        'date': 'Yesterday',
+        'title': 'Owner Draw',
+        'type': 'Withdrawal',
+        'ref': 'FA-0021',
+        'amount': '- ₱2,500.00',
+        'time': '16:30',
+        'icon': Icons.remove_circle_outline_rounded,
+        'iconColor': Colors.red,
+      },
+      {
+        'date': '15 May 2024',
+        'title': 'Capital Reinvestment',
+        'type': 'Adjustment',
+        'ref': 'FA-1102',
+        'amount': '+ ₱5,000.00',
+        'time': '09:00',
+        'icon': Icons.autorenew_rounded,
+        'iconColor': Colors.indigo,
+      },
+    ];
   }
 }
