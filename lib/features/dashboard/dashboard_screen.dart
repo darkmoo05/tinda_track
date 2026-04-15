@@ -57,7 +57,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildOnHandCashCard(context, dashboard),
               const SizedBox(height: 24),
               ArchitectAnalyticsCard(
-                title: 'Charges Collected',
+                title: 'Charges\nCollected',
                 value: _dashboardRepository.formatCurrency(
                   dashboard.recordedFlow,
                 ),
@@ -81,8 +81,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildActivityTabs(),
               const SizedBox(height: 24),
               _buildRecentActivityList(dashboard),
-              const SizedBox(height: 16),
-              _buildViewFullHistory(context),
               const SizedBox(height: 100),
             ],
           ),
@@ -181,13 +179,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildActivityTabs() {
-    return Row(
-      children: [
-        _buildPillTab('Transactions', true),
-        const SizedBox(width: 12),
-        _buildPillTab('Owner Movements', false),
-      ],
-    );
+    return Row(children: [_buildPillTab('Transactions', true)]);
   }
 
   Widget _buildPillTab(String label, bool isActive) {
@@ -223,23 +215,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           )
           .toList(),
-    );
-  }
-
-  Widget _buildViewFullHistory(BuildContext context) {
-    return Center(
-      child: TextButton(
-        onPressed: () {},
-        child: const Text(
-          'VIEW FULL ARCHITECTURE HISTORY',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-            color: AppColors.primary,
-          ),
-        ),
-      ),
     );
   }
 }

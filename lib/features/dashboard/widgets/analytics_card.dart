@@ -67,7 +67,8 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
               Expanded(
                 child: Text(
                   widget.title.toUpperCase(),
-                  maxLines: 1,
+                  maxLines: 2,
+                  softWrap: true,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.bold,
