@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../parties/data/party_repository.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   const AddTransactionScreen({super.key});
@@ -14,10 +15,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _markupController = TextEditingController();
   final _partnerFeeController = TextEditingController();
   final _notesController = TextEditingController();
+  final PartyRepository _partyRepository = PartyRepository.instance;
 
   String _selectedType = 'Bank Deposit';
   bool _customerPaysFee = false;
-  String? _partyName;
+  PartyRecord? _matchedParty;
 
   final List<String> _transactionTypes = [
     'Bank Deposit',
@@ -43,6 +45,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   double get _netCashToDrawer {
     final principal = double.tryParse(_principalController.text) ?? 0;
     return _customerPaysFee ? principal : principal - _computedFee;
+  }
+
+  bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
+
+  bool get _isRegisteredAccount => _matchedParty != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _partyRepository.ensureLoaded().then((_) {
+      if (!mounted) {
+        return;
+      }
+      _resolvePartyFromAccount(_accountController.text);
+    });
   }
 
   @override
@@ -104,17 +121,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   hint: 'Search or enter account number',
                   suffixIcon: Icons.search_rounded,
                   keyboardType: TextInputType.number,
-                  onChanged: (_) {
-                    setState(() {
-                      _partyName = _accountController.text == '0012984432'
-                          ? 'Julian Alexander Sterling'
-                          : null;
-                    });
-                  },
+                  onChanged: _resolvePartyFromAccount,
                 ),
-                if (_partyName != null) ...[
+                if (_hasTypedAccount && _isRegisteredAccount) ...[
                   const SizedBox(height: 8),
-                  _buildPartyFoundBanner(_partyName!),
+                  _buildPartyFoundBanner(_matchedParty!.name),
+                ],
+                if (_hasTypedAccount && !_isRegisteredAccount) ...[
+                  const SizedBox(height: 8),
+                  _buildPartyNotRegisteredAlert(),
                 ],
                 const SizedBox(height: 16),
                 _buildTextField(
@@ -189,7 +204,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -211,7 +226,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         _fieldLabel(label),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           onChanged: onChanged,
           decoration: _inputDecoration(),
           icon: const Icon(
@@ -277,7 +292,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: AppColors.primary,
+          activeThumbColor: AppColors.primary,
         ),
       ],
     );
@@ -287,7 +302,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.secondary.withOpacity(0.08),
+        color: AppColors.secondary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -309,6 +324,59 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPartyNotRegisteredAlert() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          final registered = await _openPartyRegistrationPopup(
+            prefilledAccountNumber: _accountController.text.trim(),
+          );
+          if (!mounted) {
+            return;
+          }
+          if (registered) {
+            await _resolvePartyFromAccount(_accountController.text);
+          }
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.error.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.error,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Parties not registered. Tap here to register details before saving.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.person_add_alt_1_rounded,
+                color: AppColors.error,
+                size: 16,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -387,7 +455,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   Icon(
                     Icons.info_outline_rounded,
                     size: 14,
-                    color: AppColors.onSurfaceVariant.withOpacity(0.6),
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
                   ),
                 ],
               ),
@@ -406,7 +474,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             'Fees are calculated based on the current Standard Tier partner agreement.',
             style: TextStyle(
               fontSize: 11,
-              color: AppColors.onSurfaceVariant.withOpacity(0.8),
+              color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -449,7 +517,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: ElevatedButton(
-        onPressed: () => Navigator.of(context).pop(),
+        onPressed: _onSaveTransaction,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
@@ -468,6 +536,157 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _resolvePartyFromAccount(String accountNumber) async {
+    final requestedAccount = accountNumber.trim();
+    final matchedParty = await _partyRepository.findByAccount(requestedAccount);
+    if (!mounted) {
+      return;
+    }
+
+    if (_accountController.text.trim() != requestedAccount) {
+      return;
+    }
+
+    setState(() {
+      _matchedParty = matchedParty;
+    });
+  }
+
+  Future<void> _onSaveTransaction() async {
+    final accountNumber = _accountController.text.trim();
+
+    if (accountNumber.isEmpty) {
+      _showMessage('Account number is required before saving.');
+      return;
+    }
+
+    // Capture messenger before any async gap to avoid 'attached' assertion.
+    final messenger = ScaffoldMessenger.maybeOf(context);
+
+    await _resolvePartyFromAccount(accountNumber);
+
+    if (!_isRegisteredAccount) {
+      _showSnackBar(
+        messenger,
+        'Party is not registered yet. Register details first.',
+      );
+      final registered = await _openPartyRegistrationPopup(
+        prefilledAccountNumber: accountNumber,
+      );
+      if (!registered) {
+        return;
+      }
+
+      if (!mounted) return;
+
+      await _resolvePartyFromAccount(_accountController.text);
+
+      if (!mounted) return;
+
+      if (_isRegisteredAccount) {
+        _showSnackBar(
+          messenger,
+          'Party registered! Review the details and tap Save to continue.',
+        );
+      } else {
+        _showSnackBar(
+          messenger,
+          'Unable to verify registration. Please try again.',
+        );
+      }
+      return; // Stay on transaction screen so user can review before saving.
+    }
+
+    if (!mounted) return;
+
+    _showSnackBar(messenger, 'Transaction saved for ${_matchedParty!.name}.');
+    Navigator.of(context).pop();
+  }
+
+  void _showSnackBar(ScaffoldMessengerState? messenger, String message) {
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<bool> _openPartyRegistrationPopup({
+    required String prefilledAccountNumber,
+  }) async {
+    if (!mounted) return false;
+
+    // Use a proper StatefulWidget dialog so that mounted/setState
+    // are reliably scoped to the dialog's own element lifecycle,
+    // preventing the 'attached' RenderObject assertion after awaits.
+    final registeredAccount = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _PartyRegistrationDialog(
+        prefilledAccountNumber: prefilledAccountNumber,
+        repository: _partyRepository,
+      ),
+    );
+
+    if (registeredAccount != null && mounted) {
+      _accountController.text = registeredAccount;
+      return true;
+    }
+    return false;
+  }
+
+  Widget _buildPopupField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    TextInputType? keyboardType,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: AppColors.surfaceContainerLow,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      return;
+    }
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Text _fieldLabel(String label) {
@@ -491,6 +710,201 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Extracted StatefulWidget for party registration dialog.
+// Using a proper StatefulWidget ensures that `mounted` and `setState` are
+// reliably tied to this widget's own element — avoiding the RenderObject
+// 'attached' assertion that occurs when StatefulBuilder's setState is called
+// after an async gap during dialog overlay transitions.
+// ---------------------------------------------------------------------------
+
+class _PartyRegistrationDialog extends StatefulWidget {
+  const _PartyRegistrationDialog({
+    required this.prefilledAccountNumber,
+    required this.repository,
+  });
+
+  final String prefilledAccountNumber;
+  final PartyRepository repository;
+
+  @override
+  State<_PartyRegistrationDialog> createState() =>
+      _PartyRegistrationDialogState();
+}
+
+class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
+  late final TextEditingController _fullNameController;
+  late final TextEditingController _accountController;
+  String? _errorText;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fullNameController = TextEditingController();
+    _accountController = TextEditingController(
+      text: widget.prefilledAccountNumber,
+    );
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _accountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onRegister() async {
+    final fullName = _fullNameController.text.trim();
+    final accountNumber = _accountController.text.trim();
+
+    if (fullName.isEmpty || accountNumber.isEmpty) {
+      setState(() {
+        _errorText = 'Please complete full name and account number.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _errorText = null;
+    });
+
+    final bool inserted;
+    try {
+      inserted = await widget.repository.registerParty(
+        fullName: fullName,
+        accountNumber: accountNumber,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorText = 'Unable to save party. Please try again.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (!inserted) {
+      setState(() {
+        _isSaving = false;
+        _errorText =
+            'Account already registered or invalid. Use a unique account number.';
+      });
+      return;
+    }
+
+    // Pop and return the registered account number to the caller.
+    Navigator.of(context).pop(accountNumber);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      title: const Text(
+        'Party Registration',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Define a new financial entity before recording this transaction.',
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          _dialogField(
+            controller: _fullNameController,
+            label: 'Full Name / Entity',
+            hint: 'Enter party full name',
+          ),
+          const SizedBox(height: 12),
+          _dialogField(
+            controller: _accountController,
+            label: 'Account Number',
+            hint: 'Enter account number',
+            keyboardType: TextInputType.number,
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _errorText!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _isSaving ? null : _onRegister,
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+          label: Text(_isSaving ? 'Saving…' : 'Register Party'),
+        ),
+      ],
+    );
+  }
+
+  Widget _dialogField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    TextInputType? keyboardType,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: AppColors.surfaceContainerLow,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
