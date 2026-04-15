@@ -17,13 +17,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   bool _fabOpen = false;
-
-  final List<Widget> _screens = [
-    const DashboardScreen(),
-    const ActivityHistoryScreen(),
-    const PartyManagementScreen(),
-    const ChargesScreen(),
-  ];
+  int _refreshToken = 0;
 
   void _onItemTapped(int index) {
     setState(() {
@@ -35,11 +29,16 @@ class _MainShellState extends State<MainShell> {
     setState(() => _fabOpen = !_fabOpen);
   }
 
-  void _openTransaction() {
+  Future<void> _openTransaction() async {
     setState(() => _fabOpen = false);
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const AddTransactionScreen()));
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
+    );
+    if (saved == true && mounted) {
+      setState(() {
+        _refreshToken++;
+      });
+    }
   }
 
   void _openOwnerMovement() {
@@ -54,7 +53,15 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       body: Stack(
         children: [
-          IndexedStack(index: _selectedIndex, children: _screens),
+          IndexedStack(
+            index: _selectedIndex,
+            children: [
+              DashboardScreen(key: ValueKey('dashboard-$_refreshToken')),
+              ActivityHistoryScreen(key: ValueKey('history-$_refreshToken')),
+              PartyManagementScreen(key: ValueKey('parties-$_refreshToken')),
+              ChargesScreen(key: ValueKey('charges-$_refreshToken')),
+            ],
+          ),
           if (_fabOpen) ...[
             Positioned.fill(
               child: GestureDetector(

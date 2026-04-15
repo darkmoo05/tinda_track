@@ -38,7 +38,10 @@ class PartyListItem extends StatelessWidget {
                 CircleAvatar(
                   radius: 20,
                   backgroundColor: AppColors.surfaceContainerLow,
-                  child: Text(name[0], style: const TextStyle(fontWeight: FontWeight.bold)),
+                  child: Text(
+                    name[0],
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -49,7 +52,10 @@ class PartyListItem extends StatelessWidget {
                         children: [
                           Text(
                             name,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           _buildStatusBadge(status),
@@ -57,7 +63,9 @@ class PartyListItem extends StatelessWidget {
                       ),
                       Text(
                         'Joined $joinDate',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(fontSize: 10),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelMedium?.copyWith(fontSize: 10),
                       ),
                     ],
                   ),
@@ -68,28 +76,22 @@ class PartyListItem extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      id,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    Text(
-                      description,
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                  ],
+                Expanded(
+                  child: Text(
+                    description,
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
                 ),
                 Row(
                   children: [
                     _buildActionButton(Icons.edit_outlined, onEdit),
                     const SizedBox(width: 8),
-                    _buildActionButton(Icons.delete_outline_rounded, onDelete, color: Colors.red[100], iconColor: Colors.red),
+                    _buildActionButton(
+                      Icons.delete_outline_rounded,
+                      onDelete,
+                      color: Colors.red[100],
+                      iconColor: Colors.red,
+                    ),
                   ],
                 ),
               ],
@@ -119,7 +121,12 @@ class PartyListItem extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton(IconData icon, VoidCallback onTap, {Color? color, Color? iconColor}) {
+  Widget _buildActionButton(
+    IconData icon,
+    VoidCallback onTap, {
+    Color? color,
+    Color? iconColor,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),

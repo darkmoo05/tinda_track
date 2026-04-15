@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../core/data/app_database.dart';
 import '../../core/app_theme.dart';
+import '../charges/data/charge_repository.dart';
+import '../charges/charges_screen.dart';
 import '../parties/data/party_repository.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -12,13 +15,14 @@ class AddTransactionScreen extends StatefulWidget {
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _accountController = TextEditingController();
   final _principalController = TextEditingController();
-  final _markupController = TextEditingController();
-  final _partnerFeeController = TextEditingController();
   final _notesController = TextEditingController();
   final PartyRepository _partyRepository = PartyRepository.instance;
+  final ChargeRepository _chargeRepository = ChargeRepository.instance;
+  final AppDatabase _database = AppDatabase.instance;
+  bool _missingRangeAlertVisible = false;
+  bool _missingRangeAlertShownForCurrentInput = false;
 
   String _selectedType = 'Bank Deposit';
-  bool _customerPaysFee = false;
   PartyRecord? _matchedParty;
 
   final List<String> _transactionTypes = [
@@ -30,21 +34,37 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     'Money Transfer',
   ];
 
-  double get _computedFee {
+  ChargeBracketRecord? get _matchedChargeBracket {
     final principal = double.tryParse(_principalController.text) ?? 0;
-    return principal * 0.01; // 1% placeholder fee
+    if (principal <= 0) {
+      return null;
+    }
+
+    for (final bracket in _chargeRepository.brackets.value) {
+      if (principal >= bracket.lowerBound && principal <= bracket.upperBound) {
+        return bracket;
+      }
+    }
+    return null;
+  }
+
+  double get _chargeFee {
+    final principal = double.tryParse(_principalController.text) ?? 0;
+    if (principal <= 0) {
+      return 0;
+    }
+    return _matchedChargeBracket?.chargeAmount ?? 0;
   }
 
   double get _taxAdjustment => 0.0;
 
   double get _totalCollected {
     final principal = double.tryParse(_principalController.text) ?? 0;
-    return _customerPaysFee ? principal + _computedFee : principal;
+    return principal + _chargeFee;
   }
 
   double get _netCashToDrawer {
-    final principal = double.tryParse(_principalController.text) ?? 0;
-    return _customerPaysFee ? principal : principal - _computedFee;
+    return _totalCollected;
   }
 
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
@@ -60,14 +80,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
       _resolvePartyFromAccount(_accountController.text);
     });
+    _chargeRepository.ensureLoaded().then((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _accountController.dispose();
     _principalController.dispose();
-    _markupController.dispose();
-    _partnerFeeController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -140,41 +164,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildTextField(
-                        controller: _markupController,
-                        label: 'Markup (Opt)',
-                        hint: '0.00',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildTextField(
-                        controller: _partnerFeeController,
-                        label: 'Partner Fee (Opt)',
-                        hint: '0.00',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildToggleRow(
-                  label: 'Customer Pays Fee',
-                  value: _customerPaysFee,
-                  onChanged: (val) => setState(() => _customerPaysFee = val),
+                  onChanged: _onPrincipalChanged,
                 ),
                 const SizedBox(height: 16),
                 _buildTextField(
@@ -268,31 +258,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ? Icon(suffixIcon, color: AppColors.onSurfaceVariant, size: 20)
                 : null,
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToggleRow({
-    required String label,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.onSurface,
-          ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeThumbColor: AppColors.primary,
         ),
       ],
     );
@@ -404,10 +369,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          _buildPreviewRow(
-            'Computed Fee',
-            '₱ ${_computedFee.toStringAsFixed(2)}',
-          ),
+          _buildPreviewRow('Charge Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
+          if (_matchedChargeBracket != null) ...[
+            const SizedBox(height: 4),
+            _buildPreviewRow(
+              'Charge Range',
+              '${_matchedChargeBracket!.lowerBound} - ${_matchedChargeBracket!.upperBound}',
+            ),
+          ],
           const SizedBox(height: 8),
           _buildPreviewRow(
             'Tax Adjustment',
@@ -471,7 +440,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Fees are calculated based on the current Standard Tier partner agreement.',
+            'Charge fee is based on configured bracket ranges for the principal amount.',
             style: TextStyle(
               fontSize: 11,
               color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
@@ -554,11 +523,95 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     });
   }
 
+  void _onPrincipalChanged(String _) {
+    setState(() {});
+
+    final principal = double.tryParse(_principalController.text.trim()) ?? 0;
+    final hasRange = _matchedChargeBracket != null;
+
+    if (principal <= 0 || hasRange) {
+      _missingRangeAlertShownForCurrentInput = false;
+      return;
+    }
+
+    if (_missingRangeAlertShownForCurrentInput || _missingRangeAlertVisible) {
+      return;
+    }
+
+    _missingRangeAlertShownForCurrentInput = true;
+    _showMissingChargeRangeAlert();
+  }
+
+  Future<void> _showMissingChargeRangeAlert() async {
+    if (!mounted || _missingRangeAlertVisible) {
+      return;
+    }
+
+    _missingRangeAlertVisible = true;
+    final goToCharges = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Missing Charge Range',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'The entered principal amount does not match any configured charge range. Please create a new charges range first.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.payments_outlined, size: 18),
+            label: const Text('Go to Charges'),
+          ),
+        ],
+      ),
+    );
+    _missingRangeAlertVisible = false;
+
+    if (!mounted || goToCharges != true) {
+      return;
+    }
+
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ChargesScreen()));
+
+    if (!mounted) {
+      return;
+    }
+
+    await _chargeRepository.ensureLoaded();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
   Future<void> _onSaveTransaction() async {
     final accountNumber = _accountController.text.trim();
+    final principal = double.tryParse(_principalController.text.trim()) ?? 0;
 
     if (accountNumber.isEmpty) {
       _showMessage('Account number is required before saving.');
+      return;
+    }
+
+    if (principal <= 0) {
+      _showMessage('Principal amount is required before saving.');
+      return;
+    }
+
+    if (_matchedChargeBracket == null) {
+      _showMessage(
+        'No charge range found for this principal amount. Create a new range first.',
+      );
+      _showMissingChargeRangeAlert();
       return;
     }
 
@@ -601,8 +654,61 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     if (!mounted) return;
 
+    final saved = await _saveTransactionRecord();
+    if (!saved) {
+      if (!mounted) return;
+      _showSnackBar(messenger, 'Unable to save transaction. Please try again.');
+      return;
+    }
+
+    if (!mounted) return;
+
     _showSnackBar(messenger, 'Transaction saved for ${_matchedParty!.name}.');
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(true);
+  }
+
+  Future<bool> _saveTransactionRecord() async {
+    final principal = double.tryParse(_principalController.text.trim()) ?? 0;
+    final chargeFee = _chargeFee;
+    final totalCollected = _totalCollected;
+    final accountNumber = _accountController.text.trim();
+    final notes = _notesController.text.trim();
+
+    if (principal <= 0 || _matchedParty == null) {
+      return false;
+    }
+
+    final isOutflow =
+        _selectedType.contains('Out') || _selectedType.contains('Withdrawal');
+    final walletDelta = isOutflow ? principal : -principal;
+    final onHandDelta = isOutflow ? -principal : totalCollected;
+    final now = DateTime.now();
+    final reference = accountNumber;
+    final iconKey = isOutflow ? 'cash_out' : 'cash_in';
+    final noteBase = notes.isEmpty
+        ? 'Account $accountNumber • ${_matchedParty!.name}'
+        : notes;
+    final persistedNote = '$noteBase • Charge ₱${chargeFee.toStringAsFixed(2)}';
+
+    final db = await _database.database;
+    try {
+      await db.insert(AppDatabase.ledgerTable, {
+        'entry_type': 'transaction',
+        'title': _selectedType,
+        'note': persistedNote,
+        'reference': reference,
+        'amount': totalCollected,
+        'wallet_delta': walletDelta,
+        'on_hand_delta': onHandDelta,
+        'recorded_flow': totalCollected,
+        'tag': 'Transaction',
+        'icon_key': iconKey,
+        'created_at': now.toIso8601String(),
+      });
+      return true;
+    } on Exception {
+      return false;
+    }
   }
 
   void _showSnackBar(ScaffoldMessengerState? messenger, String message) {
@@ -794,8 +900,7 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
     if (!inserted) {
       setState(() {
         _isSaving = false;
-        _errorText =
-            'Account already registered or invalid. Use a unique account number.';
+        _errorText = 'Account already registered.';
       });
       return;
     }

@@ -1,13 +1,27 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
+import 'data/party_repository.dart';
 import 'widgets/search_input.dart';
 import 'widgets/party_health_card.dart';
 import 'widgets/verification_warning_card.dart';
 import 'widgets/party_list_item.dart';
 
-class PartyManagementScreen extends StatelessWidget {
+class PartyManagementScreen extends StatefulWidget {
   const PartyManagementScreen({super.key});
+
+  @override
+  State<PartyManagementScreen> createState() => _PartyManagementScreenState();
+}
+
+class _PartyManagementScreenState extends State<PartyManagementScreen> {
+  final PartyRepository _partyRepository = PartyRepository.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _partyRepository.ensureLoaded();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +31,10 @@ class PartyManagementScreen extends StatelessWidget {
         actions: [
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.settings_outlined, color: AppColors.onSurfaceVariant),
+            icon: const Icon(
+              Icons.settings_outlined,
+              color: AppColors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(width: 8),
         ],
@@ -29,19 +46,36 @@ class PartyManagementScreen extends StatelessWidget {
           const SizedBox(height: 16),
           const ArchitectSearchInput(),
           const SizedBox(height: 24),
-          const PartyHealthHero(
-            totalEntities: 124,
-            verificationRate: 98.2,
+          ValueListenableBuilder<List<PartyRecord>>(
+            valueListenable: _partyRepository.parties,
+            builder: (context, parties, child) {
+              final total = parties.length;
+              final verified = parties.where((p) => p.isVerified).length;
+              final rate = total == 0 ? 0.0 : (verified / total) * 100;
+              return PartyHealthHero(
+                totalEntities: total,
+                verificationRate: rate,
+              );
+            },
           ),
           const SizedBox(height: 24),
-          VerificationWarningCard(
-            count: 12,
-            onReview: () {},
+          ValueListenableBuilder<List<PartyRecord>>(
+            valueListenable: _partyRepository.parties,
+            builder: (context, parties, child) {
+              final pendingCount = parties.where((p) => !p.isVerified).length;
+              return VerificationWarningCard(
+                count: pendingCount,
+                onReview: () {},
+              );
+            },
           ),
           const SizedBox(height: 32),
           _buildListHeader(context),
           const SizedBox(height: 16),
-          _buildPartiesList(),
+          ValueListenableBuilder<List<PartyRecord>>(
+            valueListenable: _partyRepository.parties,
+            builder: (context, parties, child) => _buildPartiesList(parties),
+          ),
           const SizedBox(height: 100), // Bottom padding for FAB
         ],
       ),
@@ -73,52 +107,493 @@ class PartyManagementScreen extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          'PARTY DETAILS & STATUS',
+          'ACTIVE ENTITIES',
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
             fontWeight: FontWeight.bold,
             letterSpacing: 1.0,
           ),
         ),
-        Text(
-          'ACTIONS',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.0,
+        ElevatedButton.icon(
+          onPressed: _onAddParty,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('ADD PARTY'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildPartiesList() {
+  Widget _buildPartiesList(List<PartyRecord> parties) {
+    if (parties.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.outlineVariant),
+        ),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.people_outline_rounded,
+              size: 32,
+              color: AppColors.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No parties saved yet',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'This screen now shows only records stored in your local database.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
+      children: parties
+          .map(
+            (party) => PartyListItem(
+              name: party.name,
+              id: party.entityId,
+              description: '${party.description} • ${party.accountNumber}',
+              joinDate: party.joinDate,
+              status: party.isVerified
+                  ? PartyStatus.verified
+                  : PartyStatus.pending,
+              onEdit: () => _onEditParty(party),
+              onDelete: () => _onDeleteParty(party),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Future<void> _onAddParty() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _AddPartyDialog(repository: _partyRepository),
+    );
+  }
+
+  Future<void> _onEditParty(PartyRecord party) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          _EditPartyDialog(party: party, repository: _partyRepository),
+    );
+  }
+
+  Future<void> _onDeleteParty(PartyRecord party) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete Party',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${party.name}"? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    await _partyRepository.deleteParty(party.id);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Edit Party Dialog — proper StatefulWidget so async save is safe.
+// ---------------------------------------------------------------------------
+
+class _EditPartyDialog extends StatefulWidget {
+  const _EditPartyDialog({required this.party, required this.repository});
+
+  final PartyRecord party;
+  final PartyRepository repository;
+
+  @override
+  State<_EditPartyDialog> createState() => _EditPartyDialogState();
+}
+
+class _EditPartyDialogState extends State<_EditPartyDialog> {
+  late final TextEditingController _fullNameController;
+  late final TextEditingController _accountController;
+  String? _errorText;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fullNameController = TextEditingController(text: widget.party.name);
+    _accountController = TextEditingController(
+      text: widget.party.accountNumber,
+    );
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _accountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onSave() async {
+    final fullName = _fullNameController.text.trim();
+    final accountNumber = _accountController.text.trim();
+
+    if (fullName.isEmpty || accountNumber.isEmpty) {
+      setState(() {
+        _errorText = 'Please complete full name and account number.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _errorText = null;
+    });
+
+    final bool updated;
+    try {
+      updated = await widget.repository.updateParty(
+        widget.party.id,
+        fullName: fullName,
+        accountNumber: accountNumber,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorText = 'Unable to save changes. Please try again.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (!updated) {
+      setState(() {
+        _isSaving = false;
+        _errorText =
+            'Account number may already be in use. Use a different number.';
+      });
+      return;
+    }
+
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      title: const Text(
+        'Edit Party',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Update the party details below.',
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          _dialogField(
+            controller: _fullNameController,
+            label: 'Full Name / Entity',
+            hint: 'Enter party full name',
+          ),
+          const SizedBox(height: 12),
+          _dialogField(
+            controller: _accountController,
+            label: 'Account Number',
+            hint: 'Enter account number',
+            keyboardType: TextInputType.number,
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _errorText!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _isSaving ? null : _onSave,
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_outlined, size: 18),
+          label: Text(_isSaving ? 'Saving…' : 'Save Changes'),
+        ),
+      ],
+    );
+  }
+
+  Widget _dialogField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    TextInputType? keyboardType,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        PartyListItem(
-          name: 'Acme Global Holdings',
-          id: 'FA-8829-001',
-          description: 'Corporate Primary',
-          joinDate: 'Oct 2023',
-          status: PartyStatus.verified,
-          onEdit: () {},
-          onDelete: () {},
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurfaceVariant,
+          ),
         ),
-        PartyListItem(
-          name: 'Julian Rivera',
-          id: 'FA-1102-044',
-          description: 'Private Wealth',
-          joinDate: 'Jan 2024',
-          status: PartyStatus.pending,
-          onEdit: () {},
-          onDelete: () {},
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: AppColors.surfaceContainerLow,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+          ),
         ),
-        PartyListItem(
-          name: 'Terra Labs ESG',
-          id: 'FA-4402-992',
-          description: 'Institutional Trust',
-          joinDate: 'Dec 2022',
-          status: PartyStatus.verified,
-          onEdit: () {},
-          onDelete: () {},
+      ],
+    );
+  }
+}
+
+class _AddPartyDialog extends StatefulWidget {
+  const _AddPartyDialog({required this.repository});
+
+  final PartyRepository repository;
+
+  @override
+  State<_AddPartyDialog> createState() => _AddPartyDialogState();
+}
+
+class _AddPartyDialogState extends State<_AddPartyDialog> {
+  late final TextEditingController _fullNameController;
+  late final TextEditingController _accountController;
+  String? _errorText;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fullNameController = TextEditingController();
+    _accountController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _accountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onAdd() async {
+    final fullName = _fullNameController.text.trim();
+    final accountNumber = _accountController.text.trim();
+
+    if (fullName.isEmpty || accountNumber.isEmpty) {
+      setState(() {
+        _errorText = 'Please complete full name and account number.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _errorText = null;
+    });
+
+    final bool added;
+    try {
+      added = await widget.repository.registerParty(
+        fullName: fullName,
+        accountNumber: accountNumber,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorText = 'Unable to add party. Please try again.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (!added) {
+      setState(() {
+        _isSaving = false;
+        _errorText =
+            'Account number may already be in use. Use a different number.';
+      });
+      return;
+    }
+
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      title: const Text(
+        'Add Party',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Create a new party record for Active Entities.',
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          _dialogField(
+            controller: _fullNameController,
+            label: 'Full Name / Entity',
+            hint: 'Enter party full name',
+          ),
+          const SizedBox(height: 12),
+          _dialogField(
+            controller: _accountController,
+            label: 'Account Number',
+            hint: 'Enter account number',
+            keyboardType: TextInputType.number,
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _errorText!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _isSaving ? null : _onAdd,
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+          label: Text(_isSaving ? 'Saving…' : 'Add Party'),
+        ),
+      ],
+    );
+  }
+
+  Widget _dialogField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    TextInputType? keyboardType,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: AppColors.surfaceContainerLow,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+          ),
         ),
       ],
     );

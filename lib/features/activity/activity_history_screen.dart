@@ -1,11 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 import '../../core/app_theme.dart';
+import '../../core/data/app_database.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import 'widgets/activity_tile.dart';
 import 'widgets/date_header.dart';
 
-class ActivityHistoryScreen extends StatelessWidget {
+class ActivityHistoryScreen extends StatefulWidget {
   const ActivityHistoryScreen({super.key});
+
+  @override
+  State<ActivityHistoryScreen> createState() => _ActivityHistoryScreenState();
+}
+
+class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
+  final AppDatabase _database = AppDatabase.instance;
+  final NumberFormat _currencyFormat = NumberFormat.currency(
+    locale: 'en_PH',
+    symbol: '₱',
+    decimalDigits: 2,
+  );
+  final DateFormat _fullDateFormat = DateFormat('dd MMM yyyy');
+  final DateFormat _timeFormat = DateFormat('HH:mm');
+
+  late Future<List<_HistoryRow>> _historyFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _historyFuture = _loadHistory();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,28 +42,51 @@ class ActivityHistoryScreen extends StatelessWidget {
           actions: [
             IconButton(
               onPressed: () {},
-              icon: const Icon(Icons.search_rounded, color: AppColors.onSurfaceVariant),
+              icon: const Icon(
+                Icons.search_rounded,
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
             IconButton(
               onPressed: () {},
-              icon: const Icon(Icons.settings_outlined, color: AppColors.onSurfaceVariant),
+              icon: const Icon(
+                Icons.settings_outlined,
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 8),
           ],
         ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildTabBar(),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  _buildHistoryList(_getTransactions()),
-                  _buildHistoryList(_getOwnerMovements()),
-                ],
-              ),
-            ),
-          ],
+        body: FutureBuilder<List<_HistoryRow>>(
+          future: _historyFuture,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final allRows = snapshot.data!;
+            final transactions = allRows
+                .where((row) => row.entryType == 'transaction')
+                .toList();
+            final ownerMovements = allRows
+                .where((row) => row.entryType == 'owner_movement')
+                .toList();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTabBar(),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _buildHistoryList(transactions),
+                      _buildHistoryList(ownerMovements),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -46,7 +94,7 @@ class ActivityHistoryScreen extends StatelessWidget {
 
   Widget _buildTabBar() {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(color: AppColors.surfaceContainerLow, width: 1),
         ),
@@ -69,27 +117,76 @@ class ActivityHistoryScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHistoryList(List<Map<String, dynamic>> items) {
+  Widget _buildHistoryList(List<_HistoryRow> items) {
+    if (items.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          _buildHeader(),
+          const SizedBox(height: 20),
+          _buildSearchAndFilter(),
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.outlineVariant),
+            ),
+            child: const Column(
+              children: [
+                Icon(
+                  Icons.history_rounded,
+                  size: 32,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'No history yet',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'New entries will appear here once you save transactions or owner movements.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 100),
+        ],
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Movements',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: AppColors.onSurface,
-              ),
-            ),
-          ],
-        ),
+        _buildHeader(),
         const SizedBox(height: 20),
         _buildSearchAndFilter(),
         ..._groupItemsByDate(items),
-        const SizedBox(height: 100), // Bottom padding for FAB
+        const SizedBox(height: 100),
+      ],
+    );
+  }
+
+  Widget _buildHeader() {
+    return const Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          'Movements',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: AppColors.onSurface,
+          ),
+        ),
       ],
     );
   }
@@ -107,8 +204,15 @@ class ActivityHistoryScreen extends StatelessWidget {
             child: const TextField(
               decoration: InputDecoration(
                 hintText: 'Search party, account, or ref ID',
-                hintStyle: TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant),
-                prefixIcon: Icon(Icons.search_rounded, size: 20, color: AppColors.onSurfaceVariant),
+                hintStyle: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  size: 20,
+                  color: AppColors.onSurfaceVariant,
+                ),
                 border: InputBorder.none,
               ),
             ),
@@ -121,121 +225,151 @@ class ActivityHistoryScreen extends StatelessWidget {
             color: const Color(0xFFEEEEF0),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.tune_rounded, size: 24, color: AppColors.primary),
+          child: const Icon(
+            Icons.tune_rounded,
+            size: 24,
+            color: AppColors.primary,
+          ),
         ),
       ],
     );
   }
 
-  List<Widget> _groupItemsByDate(List<Map<String, dynamic>> items) {
-    List<Widget> grouped = [];
+  List<Widget> _groupItemsByDate(List<_HistoryRow> items) {
+    final grouped = <Widget>[];
     String lastDate = '';
 
-    for (var item in items) {
-      if (item['date'] != lastDate) {
-        lastDate = item['date'];
-        grouped.add(ArchitectDateHeader(label: lastDate));
+    for (final item in items) {
+      final dateLabel = _dateLabel(item.createdAt);
+      if (dateLabel != lastDate) {
+        lastDate = dateLabel;
+        grouped.add(ArchitectDateHeader(label: dateLabel));
       }
-      grouped.add(ArchitectActivityTile(
-        title: item['title'],
-        type: item['type'],
-        reference: item['ref'],
-        amount: item['amount'],
-        time: item['time'],
-        icon: item['icon'],
-        iconColor: item['iconColor'],
-      ));
+
+      final isOutgoing = item.iconKey == 'cash_out';
+      grouped.add(
+        ArchitectActivityTile(
+          title: item.title,
+          type: item.tag,
+          reference: item.reference,
+          amount:
+              '${isOutgoing ? '-' : '+'} ${_currencyFormat.format(item.amount)}',
+          time: _timeFormat.format(item.createdAt),
+          icon: _iconFor(item.iconKey),
+          iconColor: _colorFor(item.iconKey),
+        ),
+      );
     }
+
     return grouped;
   }
 
-  List<Map<String, dynamic>> _getTransactions() {
-    return [
-      {
-        'date': 'Today',
-        'title': 'SM Mart - Grocery',
-        'type': 'Cash Out',
-        'ref': '9021-X99',
-        'amount': '- ₱1,240.50',
-        'time': '14:22',
-        'icon': Icons.call_received_rounded,
-        'iconColor': Colors.green,
-      },
-      {
-        'date': 'Today',
-        'title': 'Juan Dela Cruz',
-        'type': 'Cash In',
-        'ref': 'G-Save Transfer',
-        'amount': '+ ₱5,000.00',
-        'time': '09:15',
-        'icon': Icons.call_made_rounded,
-        'iconColor': Colors.blue,
-      },
-      {
-        'date': 'Yesterday',
-        'title': 'Meralco Bill',
-        'type': 'Cash Out',
-        'ref': 'Utilities',
-        'amount': '- ₱4,562.18',
-        'time': '18:45',
-        'icon': Icons.bolt_rounded,
-        'iconColor': Colors.amber[800],
-      },
-      {
-        'date': 'Yesterday',
-        'title': 'Shell Petron',
-        'type': 'Cash Out',
-        'ref': 'Fuel',
-        'amount': '- ₱2,100.00',
-        'time': '07:30',
-        'icon': Icons.local_gas_station_rounded,
-        'iconColor': Colors.green,
-      },
-      {
-        'date': '20 May 2024',
-        'title': 'Monthly Salary',
-        'type': 'Cash In',
-        'ref': 'Global Corp Inc.',
-        'amount': '+ ₱45,000.00',
-        'time': '08:00',
-        'icon': Icons.account_balance_rounded,
-        'iconColor': Colors.blue,
-      },
-    ];
+  Future<List<_HistoryRow>> _loadHistory() async {
+    final db = await _database.database;
+    final rows = await db.query(
+      AppDatabase.ledgerTable,
+      orderBy: 'created_at DESC, id DESC',
+    );
+
+    return rows
+        .map((row) {
+          final entryType = row['entry_type'] as String;
+          final reference = row['reference'] as String;
+          final displayReference = entryType == 'transaction'
+              ? _resolveTransactionAccountNumber(
+                  reference,
+                  (row['note'] as String?) ?? '',
+                )
+              : reference;
+
+          return _HistoryRow(
+            entryType: entryType,
+            title: row['title'] as String,
+            reference: displayReference,
+            amount: (row['amount'] as num).toDouble(),
+            tag: row['tag'] as String,
+            iconKey: row['icon_key'] as String,
+            createdAt: DateTime.parse(row['created_at'] as String),
+          );
+        })
+        .toList(growable: false);
   }
 
-  List<Map<String, dynamic>> _getOwnerMovements() {
-    return [
-      {
-        'date': 'Today',
-        'title': 'Owner Capital Add',
-        'type': 'Injection',
-        'ref': 'FA-9921',
-        'amount': '+ ₱10,000.00',
-        'time': '10:00',
-        'icon': Icons.add_circle_outline_rounded,
-        'iconColor': Colors.purple,
-      },
-      {
-        'date': 'Yesterday',
-        'title': 'Owner Draw',
-        'type': 'Withdrawal',
-        'ref': 'FA-0021',
-        'amount': '- ₱2,500.00',
-        'time': '16:30',
-        'icon': Icons.remove_circle_outline_rounded,
-        'iconColor': Colors.red,
-      },
-      {
-        'date': '15 May 2024',
-        'title': 'Capital Reinvestment',
-        'type': 'Adjustment',
-        'ref': 'FA-1102',
-        'amount': '+ ₱5,000.00',
-        'time': '09:00',
-        'icon': Icons.autorenew_rounded,
-        'iconColor': Colors.indigo,
-      },
-    ];
+  String _resolveTransactionAccountNumber(String reference, String note) {
+    final numericRef = reference.replaceAll(RegExp(r'[^0-9]'), '');
+    if (numericRef.isNotEmpty) {
+      return numericRef;
+    }
+
+    final match = RegExp(
+      r'Account\s*([0-9]+)',
+      caseSensitive: false,
+    ).firstMatch(note);
+    if (match != null && match.groupCount >= 1) {
+      return match.group(1)!;
+    }
+
+    return reference;
   }
+
+  String _dateLabel(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(dateTime.year, dateTime.month, dateTime.day);
+    final difference = today.difference(target).inDays;
+
+    if (difference == 0) return 'Today';
+    if (difference == 1) return 'Yesterday';
+    return _fullDateFormat.format(dateTime);
+  }
+
+  IconData _iconFor(String iconKey) {
+    switch (iconKey) {
+      case 'wallet':
+        return Icons.account_balance_wallet_outlined;
+      case 'cash':
+        return Icons.payments_outlined;
+      case 'cash_in':
+        return Icons.call_made_rounded;
+      case 'cash_out':
+        return Icons.call_received_rounded;
+      default:
+        return Icons.receipt_long_rounded;
+    }
+  }
+
+  Color _colorFor(String iconKey) {
+    switch (iconKey) {
+      case 'wallet':
+        return AppColors.primary;
+      case 'cash':
+        return AppColors.secondary;
+      case 'cash_in':
+        return AppColors.secondary;
+      case 'cash_out':
+        return AppColors.error;
+      default:
+        return AppColors.onSurfaceVariant;
+    }
+  }
+}
+
+class _HistoryRow {
+  const _HistoryRow({
+    required this.entryType,
+    required this.title,
+    required this.reference,
+    required this.amount,
+    required this.tag,
+    required this.iconKey,
+    required this.createdAt,
+  });
+
+  final String entryType;
+  final String title;
+  final String reference;
+  final double amount;
+  final String tag;
+  final String iconKey;
+  final DateTime createdAt;
 }

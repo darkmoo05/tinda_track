@@ -4,15 +4,11 @@ import '../../../core/app_theme.dart';
 class ArchitectBalanceHero extends StatelessWidget {
   final String balance;
   final String label;
-  final VoidCallback onSend;
-  final VoidCallback onReceive;
 
   const ArchitectBalanceHero({
     super.key,
     required this.balance,
     required this.label,
-    required this.onSend,
-    required this.onReceive,
   });
 
   @override
@@ -64,45 +60,9 @@ class ArchitectBalanceHero extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             'Available for transactions',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              _buildInlineButton('Send', onSend),
-              const SizedBox(width: 12),
-              _buildInlineButton('Receive', onReceive),
-            ],
+            style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildInlineButton(String label, VoidCallback onPressed) {
-    return Expanded(
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: TextButton(
-          onPressed: onPressed,
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ),
       ),
     );
   }

@@ -1,60 +1,108 @@
 import 'package:flutter/material.dart';
+
 import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
-import 'widgets/alert_card.dart';
-import 'widgets/balance_hero_card.dart';
-import 'widgets/analytics_card.dart';
+import 'data/dashboard_repository.dart';
 import 'widgets/activity_item.dart';
+import 'widgets/alert_card.dart';
+import 'widgets/analytics_card.dart';
+import 'widgets/balance_hero_card.dart';
 import 'widgets/income_architecture_card.dart';
+import '../transactions/add_owner_movement_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final DashboardRepository _dashboardRepository = DashboardRepository();
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const ArchitectAppBar(title: 'Financial Architect'),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          ArchitectAlertCard(
-            title: 'Low GCash Balance Detected',
-            message: 'Your current wallet is below the ₱500.00 threshold.',
-            actionLabel: 'TOP UP NOW',
-            onAction: () {},
+    return FutureBuilder<DashboardSnapshot>(
+      future: _dashboardRepository.loadSnapshot(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            appBar: ArchitectAppBar(title: 'Financial Architect'),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final dashboard = snapshot.data!;
+
+        return Scaffold(
+          appBar: const ArchitectAppBar(title: 'Financial Architect'),
+          body: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              if (dashboard.showAlertCard)
+                ArchitectAlertCard(
+                  title: dashboard.alertTitle,
+                  message: dashboard.alertMessage,
+                  actionLabel: dashboard.alertActionLabel,
+                  onAction: () => _onAlertAction(dashboard.alertActionLabel),
+                ),
+              if (dashboard.showAlertCard) const SizedBox(height: 24),
+              ArchitectBalanceHero(
+                balance: _dashboardRepository.formatCurrency(
+                  dashboard.walletBalance,
+                ),
+                label: 'GCash Wallet Balance',
+              ),
+              const SizedBox(height: 24),
+              _buildOnHandCashCard(context, dashboard),
+              const SizedBox(height: 24),
+              ArchitectAnalyticsCard(
+                title: 'Charges Collected',
+                value: _dashboardRepository.formatCurrency(
+                  dashboard.recordedFlow,
+                ),
+                trend: dashboard.flowTrendLabel,
+                subtitle: dashboard.flowCaption,
+                spots: dashboard.flowSpots,
+                xLabels: dashboard.flowLabels,
+                dates: dashboard.flowDates,
+              ),
+              const SizedBox(height: 24),
+              IncomeArchitectureCard(
+                walletSpots: dashboard.walletSpots,
+                cashSpots: dashboard.cashSpots,
+                xLabels: dashboard.xLabels,
+                walletTotal: dashboard.walletBalance,
+                onHandTotal: dashboard.onHandCash,
+              ),
+              const SizedBox(height: 32),
+              _buildRecentActivityHeader(context),
+              const SizedBox(height: 16),
+              _buildActivityTabs(),
+              const SizedBox(height: 24),
+              _buildRecentActivityList(dashboard),
+              const SizedBox(height: 16),
+              _buildViewFullHistory(context),
+              const SizedBox(height: 100),
+            ],
           ),
-          const SizedBox(height: 24),
-          ArchitectBalanceHero(
-            balance: '₱ 14,250.60',
-            label: 'GCash Wallet Balance',
-            onSend: () {},
-            onReceive: () {},
-          ),
-          const SizedBox(height: 24),
-          _buildOnHandCashCard(context),
-          const SizedBox(height: 24),
-          const ArchitectAnalyticsCard(
-            title: 'Net Income',
-            value: '₱ 1,840.00',
-            trend: '+12%',
-          ),
-          const SizedBox(height: 24),
-          const IncomeArchitectureCard(),
-          const SizedBox(height: 32),
-          _buildRecentActivityHeader(context),
-          const SizedBox(height: 16),
-          _buildActivityTabs(),
-          const SizedBox(height: 24),
-          _buildRecentActivityList(),
-          const SizedBox(height: 16),
-          _buildViewFullHistory(context),
-          const SizedBox(height: 100), // Bottom padding for FAB
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildOnHandCashCard(BuildContext context) {
+  void _onAlertAction(String actionLabel) {
+    if (actionLabel == 'ADD CASH') {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const AddOwnerMovementScreen()));
+    }
+  }
+
+  Widget _buildOnHandCashCard(
+    BuildContext context,
+    DashboardSnapshot dashboard,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -62,7 +110,7 @@ class DashboardScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -101,36 +149,18 @@ class DashboardScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  '₱ 3,420.00',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                Text(
+                  _dashboardRepository.formatCurrency(dashboard.onHandCash),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const Text(
                   'Physical currency on-site',
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () {},
-                  child: Row(
-                    children: [
-                      Text(
-                        'Log Movement',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green[700],
-                        ),
-                      ),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: Colors.green[700],
-                        size: 16,
-                      ),
-                    ],
                   ),
                 ),
               ],
@@ -179,34 +209,20 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRecentActivityList() {
+  Widget _buildRecentActivityList(DashboardSnapshot dashboard) {
     return Column(
-      children: const [
-        ArchitectActivityItem(
-          title: 'Meralco Bill Payment',
-          subtitle: 'REF: 902182210 • 13 Oct 2023',
-          amount: '-₱ 4,520.15',
-          tag: 'Merchant',
-          icon: Icons.add_circle_outline,
-          iconColor: Colors.green,
-        ),
-        ArchitectActivityItem(
-          title: 'Maria Santos',
-          subtitle: 'REF: 002133441 • 12 Oct 2023',
-          amount: '+₱ 2,500.00',
-          tag: 'Transfer',
-          icon: Icons.account_balance_wallet_outlined,
-          iconColor: AppColors.primary,
-        ),
-        ArchitectActivityItem(
-          title: '7-Eleven Cash In',
-          subtitle: 'REF: 221788222 • 11 Oct 2023',
-          amount: '+₱ 1,000.00',
-          tag: 'Ops',
-          icon: Icons.storefront_rounded,
-          iconColor: Colors.grey,
-        ),
-      ],
+      children: dashboard.activities
+          .map(
+            (activity) => ArchitectActivityItem(
+              title: activity.title,
+              subtitle: activity.subtitle,
+              amount: activity.amount,
+              tag: activity.tag,
+              icon: activity.icon,
+              iconColor: activity.iconColor,
+            ),
+          )
+          .toList(),
     );
   }
 
