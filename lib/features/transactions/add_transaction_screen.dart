@@ -21,18 +21,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final AppDatabase _database = AppDatabase.instance;
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
+  bool _isLoadingTransactionTypes = true;
 
   String _selectedType = 'Bank Deposit';
   PartyRecord? _matchedParty;
 
-  final List<String> _transactionTypes = [
-    'Bank Deposit',
-    'Bank Withdrawal',
-    'GCash Cash In',
-    'GCash Cash Out',
-    'Bills Payment',
-    'Money Transfer',
-  ];
+  List<TransactionTypeRecord> _transactionTypes = const [];
+
+  TransactionTypeRecord? get _selectedTransactionType {
+    for (final type in _transactionTypes) {
+      if (type.name == _selectedType) {
+        return type;
+      }
+    }
+    return null;
+  }
 
   ChargeBracketRecord? get _matchedChargeBracket {
     final principal = double.tryParse(_principalController.text) ?? 0;
@@ -74,6 +77,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   @override
   void initState() {
     super.initState();
+    _loadTransactionTypes();
     _partyRepository.ensureLoaded().then((_) {
       if (!mounted) {
         return;
@@ -134,10 +138,32 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               children: [
                 _buildDropdownField(
                   label: 'Transaction Type',
-                  value: _selectedType,
+                  value:
+                      _transactionTypes.any(
+                        (type) => type.name == _selectedType,
+                      )
+                      ? _selectedType
+                      : null,
                   items: _transactionTypes,
-                  onChanged: (val) => setState(() => _selectedType = val!),
+                  onChanged: _isLoadingTransactionTypes
+                      ? null
+                      : (val) {
+                          if (val == null) {
+                            return;
+                          }
+                          setState(() => _selectedType = val);
+                        },
+                  onAddPressed: _showAddTransactionTypeDialog,
+                  onManagePressed: _showManageTransactionTypesDialog,
                 ),
+                if (_selectedTransactionType != null) ...[
+                  const SizedBox(height: 8),
+                  _buildFlowTypeHint(_selectedTransactionType!.isOutflow),
+                ],
+                if (_isLoadingTransactionTypes) ...[
+                  const SizedBox(height: 8),
+                  const LinearProgressIndicator(minHeight: 2),
+                ],
                 const SizedBox(height: 16),
                 _buildTextField(
                   controller: _accountController,
@@ -206,29 +232,337 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   Widget _buildDropdownField({
     required String label,
-    required String value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
+    required String? value,
+    required List<TransactionTypeRecord> items,
+    ValueChanged<String?>? onChanged,
+    VoidCallback? onAddPressed,
+    VoidCallback? onManagePressed,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _fieldLabel(label),
-        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _fieldLabel(label),
+            const Spacer(),
+            if (onAddPressed != null)
+              _buildTypeActionButton(
+                label: 'Add Type',
+                icon: Icons.add_rounded,
+                color: AppColors.primary,
+                onTap: onAddPressed,
+              ),
+            if (onManagePressed != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: _buildTypeActionButton(
+                  label: 'Manage',
+                  icon: Icons.settings_rounded,
+                  color: AppColors.onSurfaceVariant,
+                  onTap: onManagePressed,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 2),
         DropdownButtonFormField<String>(
           initialValue: value,
+          isExpanded: true,
           onChanged: onChanged,
           decoration: _inputDecoration(),
           icon: const Icon(
             Icons.expand_more_rounded,
             color: AppColors.onSurfaceVariant,
           ),
+          selectedItemBuilder: (context) {
+            return items
+                .map(
+                  (t) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      t.name,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                )
+                .toList();
+          },
           items: items
-              .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+              .map(
+                (t) => DropdownMenuItem(
+                  value: t.name,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 180),
+                        child: Text(
+                          t.name,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: t.isOutflow
+                              ? AppColors.error.withValues(alpha: 0.12)
+                              : AppColors.secondary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          t.isOutflow ? 'OUTFLOW' : 'INFLOW',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: t.isOutflow
+                                ? AppColors.error
+                                : AppColors.secondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
               .toList(),
         ),
       ],
     );
+  }
+
+  Widget _buildTypeActionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(7),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: AppColors.outlineVariant.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFlowTypeHint(bool isOutflow) {
+    return Row(
+      children: [
+        Icon(
+          isOutflow ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+          size: 14,
+          color: isOutflow ? AppColors.error : AppColors.secondary,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          isOutflow
+              ? 'This type is marked as Outflow.'
+              : 'This type is marked as Inflow.',
+          style: TextStyle(
+            fontSize: 11,
+            color: isOutflow ? AppColors.error : AppColors.secondary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _loadTransactionTypes({String? preferSelect}) async {
+    setState(() {
+      _isLoadingTransactionTypes = true;
+    });
+
+    final loadedTypes = await _database.loadTransactionTypeRecords();
+    if (!mounted) {
+      return;
+    }
+
+    final fallbackType = loadedTypes.isNotEmpty
+        ? loadedTypes.first.name
+        : 'Bank Deposit';
+    final preferred = preferSelect?.trim();
+    final nextSelected =
+        (preferred != null && loadedTypes.any((type) => type.name == preferred))
+        ? preferred
+        : (loadedTypes.any((type) => type.name == _selectedType)
+              ? _selectedType
+              : fallbackType);
+
+    setState(() {
+      _transactionTypes = loadedTypes;
+      _selectedType = nextSelected;
+      _isLoadingTransactionTypes = false;
+    });
+  }
+
+  Future<void> _showAddTransactionTypeDialog() async {
+    final createdType = await showDialog<_TransactionTypeDraft>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.56),
+      builder: (_) =>
+          _UpsertTransactionTypeDialog(existingTypes: _transactionTypes),
+    );
+
+    if (createdType == null || createdType.name.trim().isEmpty) {
+      return;
+    }
+
+    await _database.insertTransactionType(
+      createdType.name,
+      isOutflow: createdType.isOutflow,
+    );
+    if (!mounted) {
+      return;
+    }
+
+    await _loadTransactionTypes(preferSelect: createdType.name.trim());
+    if (!mounted) {
+      return;
+    }
+    _showMessage('Transaction type added: ${createdType.name.trim()}');
+  }
+
+  Future<void> _showManageTransactionTypesDialog() async {
+    if (_transactionTypes.isEmpty) {
+      _showMessage('No transaction types available. Add one first.');
+      return;
+    }
+
+    final selectedAction = await showDialog<_TypeActionPayload>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.56),
+      builder: (_) => _ManageTransactionTypesDialog(
+        types: _transactionTypes,
+        selectedTypeName: _selectedType,
+      ),
+    );
+
+    if (selectedAction == null || !mounted) {
+      return;
+    }
+
+    switch (selectedAction.action) {
+      case _TypeAction.edit:
+        await _editTransactionType(selectedAction.type);
+        break;
+      case _TypeAction.delete:
+        await _deleteTransactionType(selectedAction.type);
+        break;
+    }
+  }
+
+  Future<void> _editTransactionType(TransactionTypeRecord type) async {
+    final result = await showDialog<_TransactionTypeDraft>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.56),
+      builder: (_) => _UpsertTransactionTypeDialog(
+        existingTypes: _transactionTypes,
+        initialName: type.name,
+        initialIsOutflow: type.isOutflow,
+      ),
+    );
+
+    if (result == null || result.name.trim().isEmpty) {
+      return;
+    }
+
+    try {
+      await _database.updateTransactionType(
+        id: type.id,
+        name: result.name,
+        isOutflow: result.isOutflow,
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showMessage('Unable to update type. Name may already exist.');
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    await _loadTransactionTypes(preferSelect: result.name);
+    if (!mounted) {
+      return;
+    }
+    _showMessage('Transaction type updated.');
+  }
+
+  Future<void> _deleteTransactionType(TransactionTypeRecord type) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.56),
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('Delete Transaction Type'),
+          content: Text('Are you sure you want to delete "${type.name}"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true) {
+      return;
+    }
+
+    await _database.deleteTransactionType(type.id);
+    if (!mounted) {
+      return;
+    }
+
+    await _loadTransactionTypes();
+    if (!mounted) {
+      return;
+    }
+    _showMessage('Transaction type deleted.');
   }
 
   Widget _buildTextField({
@@ -678,8 +1012,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return false;
     }
 
-    final isOutflow =
-        _selectedType.contains('Out') || _selectedType.contains('Withdrawal');
+    final isOutflow = _selectedTransactionType?.isOutflow ?? false;
     final walletDelta = isOutflow ? principal : -principal;
     final onHandDelta = isOutflow ? -principal : totalCollected;
     final now = DateTime.now();
@@ -818,6 +1151,250 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
     );
   }
+}
+
+class _UpsertTransactionTypeDialog extends StatefulWidget {
+  const _UpsertTransactionTypeDialog({
+    required this.existingTypes,
+    this.initialName,
+    this.initialIsOutflow,
+  });
+
+  final List<TransactionTypeRecord> existingTypes;
+  final String? initialName;
+  final bool? initialIsOutflow;
+
+  @override
+  State<_UpsertTransactionTypeDialog> createState() =>
+      _UpsertTransactionTypeDialogState();
+}
+
+class _UpsertTransactionTypeDialogState
+    extends State<_UpsertTransactionTypeDialog> {
+  late final TextEditingController _controller;
+  late bool _isOutflow;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName ?? '');
+    _isOutflow = widget.initialIsOutflow ?? false;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onSave() {
+    final raw = _controller.text.trim();
+    if (raw.isEmpty) {
+      setState(() {
+        _errorText = 'Type name is required.';
+      });
+      return;
+    }
+
+    final initialLower = (widget.initialName ?? '').trim().toLowerCase();
+    final exists = widget.existingTypes.any((type) {
+      final lower = type.name.toLowerCase();
+      if (lower == initialLower) {
+        return false;
+      }
+      return lower == raw.toLowerCase();
+    });
+    if (exists) {
+      setState(() {
+        _errorText = 'Transaction type already exists.';
+      });
+      return;
+    }
+
+    Navigator.of(
+      context,
+    ).pop(_TransactionTypeDraft(name: raw, isOutflow: _isOutflow));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.initialName != null;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(isEditing ? 'Edit Transaction Type' : 'Add Transaction Type'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              hintText: 'e.g. Remittance Pickup',
+              errorText: _errorText,
+              filled: true,
+              fillColor: AppColors.surfaceContainerLow,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _isOutflow ? 'Mark as Outflow' : 'Mark as Inflow',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _isOutflow ? AppColors.error : AppColors.secondary,
+                    ),
+                  ),
+                ),
+                Switch(
+                  value: _isOutflow,
+                  onChanged: (value) {
+                    setState(() {
+                      _isOutflow = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _onSave,
+          child: Text(isEditing ? 'Update' : 'Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ManageTransactionTypesDialog extends StatelessWidget {
+  const _ManageTransactionTypesDialog({
+    required this.types,
+    required this.selectedTypeName,
+  });
+
+  final List<TransactionTypeRecord> types;
+  final String selectedTypeName;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Manage Transaction Types'),
+      content: SizedBox(
+        width: 420,
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: types.length,
+          separatorBuilder: (_, __) => const Divider(height: 12),
+          itemBuilder: (context, index) {
+            final type = types[index];
+            final isSelected = type.name == selectedTypeName;
+            return Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        type.name,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        type.isOutflow ? 'Outflow type' : 'Inflow type',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: type.isOutflow
+                              ? AppColors.error
+                              : AppColors.secondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Edit',
+                  onPressed: () {
+                    Navigator.of(context).pop(
+                      _TypeActionPayload(action: _TypeAction.edit, type: type),
+                    );
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                ),
+                IconButton(
+                  tooltip: 'Delete',
+                  onPressed: () {
+                    Navigator.of(context).pop(
+                      _TypeActionPayload(
+                        action: _TypeAction.delete,
+                        type: type,
+                      ),
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: AppColors.error,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+class _TransactionTypeDraft {
+  const _TransactionTypeDraft({required this.name, required this.isOutflow});
+
+  final String name;
+  final bool isOutflow;
+}
+
+enum _TypeAction { edit, delete }
+
+class _TypeActionPayload {
+  const _TypeActionPayload({required this.action, required this.type});
+
+  final _TypeAction action;
+  final TransactionTypeRecord type;
 }
 
 // ---------------------------------------------------------------------------

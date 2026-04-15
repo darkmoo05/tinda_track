@@ -10,6 +10,7 @@ class AppDatabase {
   static const String ledgerTable = 'ledger_entries';
   static const String partiesTable = 'parties';
   static const String chargesTable = 'charges';
+  static const String transactionTypesTable = 'transaction_types';
 
   Database? _database;
   DatabaseFactory? _databaseFactory;
@@ -30,11 +31,13 @@ class AppDatabase {
     _database = await databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 3,
+        version: 5,
         onCreate: (db, version) async {
           await _createLedgerTable(db);
           await _createPartiesTable(db);
           await _createChargesTable(db);
+          await _createTransactionTypesTable(db);
+          await _seedTransactionTypesIfEmpty(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -43,9 +46,21 @@ class AppDatabase {
           if (oldVersion < 3) {
             await _createChargesTable(db);
           }
+          if (oldVersion < 4) {
+            await _createTransactionTypesTable(db);
+            await _seedTransactionTypesIfEmpty(db);
+          }
+          if (oldVersion < 5) {
+            await db.execute(
+              'ALTER TABLE $transactionTypesTable ADD COLUMN is_outflow INTEGER NOT NULL DEFAULT 0',
+            );
+            await _backfillDefaultOutflowTypes(db);
+          }
         },
         onOpen: (db) async {
           await _seedLedgerIfEmpty(db);
+          await _seedTransactionTypesIfEmpty(db);
+          await _backfillDefaultOutflowTypes(db);
           await _removeLegacyDummyParties(db);
         },
       ),
@@ -120,6 +135,17 @@ class AppDatabase {
     ''');
   }
 
+  Future<void> _createTransactionTypesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $transactionTypesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        is_outflow INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
   Future<void> _seedLedgerIfEmpty(Database db) async {
     final result = await db.rawQuery(
       'SELECT COUNT(*) AS count FROM $ledgerTable',
@@ -143,6 +169,117 @@ class AppDatabase {
       whereArgs: const ['0012984432', '3311981021', '8800459920'],
     );
   }
+
+  Future<void> _seedTransactionTypesIfEmpty(Database db) async {
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS count FROM $transactionTypesTable',
+    );
+    final count = (result.first['count'] as int?) ?? 0;
+    if (count > 0) {
+      return;
+    }
+
+    final batch = db.batch();
+    final now = DateTime.now().toIso8601String();
+    for (final type in _defaultTransactionTypes) {
+      batch.insert(transactionTypesTable, {
+        'name': type.name,
+        'is_outflow': type.isOutflow ? 1 : 0,
+        'created_at': now,
+      });
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<String>> loadTransactionTypes() async {
+    final records = await loadTransactionTypeRecords();
+    return records.map((record) => record.name).toList(growable: false);
+  }
+
+  Future<List<TransactionTypeRecord>> loadTransactionTypeRecords() async {
+    final db = await database;
+    await _seedTransactionTypesIfEmpty(db);
+    final rows = await db.query(
+      transactionTypesTable,
+      columns: ['id', 'name', 'is_outflow'],
+      orderBy: 'name COLLATE NOCASE ASC, id ASC',
+    );
+    return rows
+        .map(
+          (row) => TransactionTypeRecord(
+            id: (row['id'] as num).toInt(),
+            name: (row['name'] as String).trim(),
+            isOutflow: ((row['is_outflow'] as num?) ?? 0) == 1,
+          ),
+        )
+        .where((record) => record.name.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<void> insertTransactionType(
+    String name, {
+    bool isOutflow = false,
+  }) async {
+    final normalized = name.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final db = await database;
+    await db.insert(transactionTypesTable, {
+      'name': normalized,
+      'is_outflow': isOutflow ? 1 : 0,
+      'created_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> updateTransactionType({
+    required int id,
+    required String name,
+    required bool isOutflow,
+  }) async {
+    final normalized = name.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final db = await database;
+    await db.update(
+      transactionTypesTable,
+      {'name': normalized, 'is_outflow': isOutflow ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<void> deleteTransactionType(int id) async {
+    final db = await database;
+    await db.delete(transactionTypesTable, where: 'id = ?', whereArgs: [id]);
+    await _seedTransactionTypesIfEmpty(db);
+  }
+
+  Future<void> _backfillDefaultOutflowTypes(Database db) async {
+    for (final type in _defaultTransactionTypes.where(
+      (type) => type.isOutflow,
+    )) {
+      await db.update(
+        transactionTypesTable,
+        {'is_outflow': 1},
+        where: 'LOWER(name) = LOWER(?)',
+        whereArgs: [type.name],
+      );
+    }
+  }
+
+  static const List<_DefaultTransactionType> _defaultTransactionTypes = [
+    _DefaultTransactionType(name: 'Bank Deposit', isOutflow: false),
+    _DefaultTransactionType(name: 'Bank Withdrawal', isOutflow: true),
+    _DefaultTransactionType(name: 'GCash Cash In', isOutflow: false),
+    _DefaultTransactionType(name: 'GCash Cash Out', isOutflow: true),
+    _DefaultTransactionType(name: 'Bills Payment', isOutflow: true),
+    _DefaultTransactionType(name: 'Money Transfer', isOutflow: true),
+  ];
 
   List<Map<String, Object>> get _seedEntries => [
     {
@@ -198,4 +335,23 @@ class AppDatabase {
       'created_at': '2026-04-14T15:20:00.000',
     },
   ];
+}
+
+class TransactionTypeRecord {
+  const TransactionTypeRecord({
+    required this.id,
+    required this.name,
+    required this.isOutflow,
+  });
+
+  final int id;
+  final String name;
+  final bool isOutflow;
+}
+
+class _DefaultTransactionType {
+  const _DefaultTransactionType({required this.name, required this.isOutflow});
+
+  final String name;
+  final bool isOutflow;
 }
