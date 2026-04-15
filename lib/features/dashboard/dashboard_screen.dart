@@ -5,6 +5,7 @@ import 'widgets/alert_card.dart';
 import 'widgets/balance_hero_card.dart';
 import 'widgets/analytics_card.dart';
 import 'widgets/activity_item.dart';
+import 'widgets/income_architecture_card.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -37,6 +38,8 @@ class DashboardScreen extends StatelessWidget {
             value: '₱ 1,840.00',
             trend: '+12%',
           ),
+          const SizedBox(height: 24),
+          const IncomeArchitectureCard(),
           const SizedBox(height: 32),
           _buildRecentActivityHeader(context),
           const SizedBox(height: 16),
@@ -90,20 +93,24 @@ class DashboardScreen extends StatelessWidget {
                         letterSpacing: 1.0,
                       ),
                     ),
-                    Icon(Icons.payments_outlined, color: Colors.green[700], size: 20),
+                    Icon(
+                      Icons.payments_outlined,
+                      color: Colors.green[700],
+                      size: 20,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 const Text(
                   '₱ 3,420.00',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const Text(
                   'Physical currency on-site',
-                  style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 GestureDetector(
@@ -118,7 +125,11 @@ class DashboardScreen extends StatelessWidget {
                           color: Colors.green[700],
                         ),
                       ),
-                      Icon(Icons.chevron_right_rounded, color: Colors.green[700], size: 16),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.green[700],
+                        size: 16,
+                      ),
                     ],
                   ),
                 ),
@@ -133,9 +144,9 @@ class DashboardScreen extends StatelessWidget {
   Widget _buildRecentActivityHeader(BuildContext context) {
     return Text(
       'Recent Activities',
-      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-        fontWeight: FontWeight.bold,
-      ),
+      style: Theme.of(
+        context,
+      ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 
