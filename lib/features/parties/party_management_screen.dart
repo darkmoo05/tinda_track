@@ -1,10 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import 'data/party_repository.dart';
 import 'widgets/search_input.dart';
 import 'widgets/party_health_card.dart';
-import 'widgets/verification_warning_card.dart';
 import 'widgets/party_list_item.dart';
 
 class PartyManagementScreen extends StatefulWidget {
@@ -16,11 +17,19 @@ class PartyManagementScreen extends StatefulWidget {
 
 class _PartyManagementScreenState extends State<PartyManagementScreen> {
   final PartyRepository _partyRepository = PartyRepository.instance;
+  Timer? _searchDebounce;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _partyRepository.ensureLoaded();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
   }
 
   @override
@@ -44,7 +53,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
         children: [
           _buildHeader(context),
           const SizedBox(height: 16),
-          const ArchitectSearchInput(),
+          ArchitectSearchInput(onChanged: _onSearchChanged),
           const SizedBox(height: 24),
           ValueListenableBuilder<List<PartyRecord>>(
             valueListenable: _partyRepository.parties,
@@ -52,20 +61,15 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
               final total = parties.length;
               final verified = parties.where((p) => p.isVerified).length;
               final rate = total == 0 ? 0.0 : (verified / total) * 100;
-              return PartyHealthHero(
-                totalEntities: total,
-                verificationRate: rate,
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          ValueListenableBuilder<List<PartyRecord>>(
-            valueListenable: _partyRepository.parties,
-            builder: (context, parties, child) {
-              final pendingCount = parties.where((p) => !p.isVerified).length;
-              return VerificationWarningCard(
-                count: pendingCount,
-                onReview: () {},
+              return FutureBuilder<List<PartyActivityRecord>>(
+                future: _partyRepository.loadMostActiveParties(limit: 5),
+                builder: (context, snapshot) {
+                  return PartyHealthHero(
+                    totalEntities: total,
+                    verificationRate: rate,
+                    activeParties: snapshot.data ?? const [],
+                  );
+                },
               );
             },
           ),
@@ -74,7 +78,13 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
           const SizedBox(height: 16),
           ValueListenableBuilder<List<PartyRecord>>(
             valueListenable: _partyRepository.parties,
-            builder: (context, parties, child) => _buildPartiesList(parties),
+            builder: (context, parties, child) {
+              final filteredParties = _applySearch(parties);
+              return _buildPartiesList(
+                filteredParties,
+                hasActiveSearch: _searchQuery.trim().isNotEmpty,
+              );
+            },
           ),
           const SizedBox(height: 100), // Bottom padding for FAB
         ],
@@ -130,7 +140,10 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
     );
   }
 
-  Widget _buildPartiesList(List<PartyRecord> parties) {
+  Widget _buildPartiesList(
+    List<PartyRecord> parties, {
+    required bool hasActiveSearch,
+  }) {
     if (parties.isEmpty) {
       return Container(
         width: double.infinity,
@@ -149,14 +162,18 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'No parties saved yet',
+              hasActiveSearch
+                  ? 'No matching parties found'
+                  : 'No parties saved yet',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(
-              'This screen now shows only records stored in your local database.',
+              hasActiveSearch
+                  ? 'Try a different keyword for name, entity ID, account, or description.'
+                  : 'This screen now shows only records stored in your local database.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: AppColors.onSurfaceVariant,
@@ -184,6 +201,35 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
           )
           .toList(),
     );
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _searchQuery = value;
+      });
+    });
+  }
+
+  List<PartyRecord> _applySearch(List<PartyRecord> parties) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return parties;
+    }
+
+    return parties
+        .where((party) {
+          final searchable = [
+            party.name,
+            party.entityId,
+            party.accountNumber,
+            party.description,
+          ].join(' ').toLowerCase();
+          return searchable.contains(query);
+        })
+        .toList(growable: false);
   }
 
   Future<void> _onAddParty() async {

@@ -23,6 +23,18 @@ class PartyRecord {
   });
 }
 
+class PartyActivityRecord {
+  final PartyRecord party;
+  final int transactionCount;
+  final double totalRecordedFlow;
+
+  const PartyActivityRecord({
+    required this.party,
+    required this.transactionCount,
+    required this.totalRecordedFlow,
+  });
+}
+
 class PartyRepository {
   PartyRepository._();
 
@@ -66,6 +78,81 @@ class PartyRepository {
     required String accountNumber,
   }) {
     return _registerParty(fullName: fullName, accountNumber: accountNumber);
+  }
+
+  Future<List<PartyActivityRecord>> loadMostActiveParties({
+    int limit = 5,
+  }) async {
+    await ensureLoaded();
+    if (limit <= 0 || parties.value.isEmpty) {
+      return const [];
+    }
+
+    final db = await _database.database;
+    final rows = await db.query(
+      AppDatabase.ledgerTable,
+      columns: ['reference', 'amount'],
+      where:
+          "entry_type = ? AND reference IS NOT NULL AND TRIM(reference) != ''",
+      whereArgs: const ['transaction'],
+    );
+
+    final countsByAccount = <String, int>{};
+    final flowByAccount = <String, double>{};
+    for (final row in rows) {
+      final reference = (row['reference'] as String?)?.trim() ?? '';
+      final normalizedReference = _normalizeAccount(reference);
+      if (normalizedReference.isEmpty) {
+        continue;
+      }
+
+      countsByAccount.update(
+        normalizedReference,
+        (value) => value + 1,
+        ifAbsent: () => 1,
+      );
+
+      final amount = (row['amount'] as num?)?.toDouble() ?? 0;
+      flowByAccount.update(
+        normalizedReference,
+        (value) => value + amount,
+        ifAbsent: () => amount,
+      );
+    }
+
+    final metrics = <PartyActivityRecord>[];
+    for (final party in parties.value) {
+      final key = _normalizeAccount(party.accountNumber);
+      final count = countsByAccount[key] ?? 0;
+      if (count <= 0) {
+        continue;
+      }
+
+      metrics.add(
+        PartyActivityRecord(
+          party: party,
+          transactionCount: count,
+          totalRecordedFlow: flowByAccount[key] ?? 0,
+        ),
+      );
+    }
+
+    metrics.sort((a, b) {
+      final byCount = b.transactionCount.compareTo(a.transactionCount);
+      if (byCount != 0) {
+        return byCount;
+      }
+      final byFlow = b.totalRecordedFlow.compareTo(a.totalRecordedFlow);
+      if (byFlow != 0) {
+        return byFlow;
+      }
+      return a.party.name.toLowerCase().compareTo(b.party.name.toLowerCase());
+    });
+
+    if (metrics.length <= limit) {
+      return metrics;
+    }
+    return metrics.take(limit).toList(growable: false);
   }
 
   Future<bool> _registerParty({

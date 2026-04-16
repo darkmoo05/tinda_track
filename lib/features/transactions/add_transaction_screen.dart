@@ -5,6 +5,8 @@ import '../charges/data/charge_repository.dart';
 import '../charges/charges_screen.dart';
 import '../parties/data/party_repository.dart';
 
+enum _ChargeHandlingMode { addOnTop, deductFromEnteredAmount }
+
 class AddTransactionScreen extends StatefulWidget {
   const AddTransactionScreen({super.key});
 
@@ -22,6 +24,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
   bool _isLoadingTransactionTypes = true;
+  _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
 
   String _selectedType = 'Bank Deposit';
   PartyRecord? _matchedParty;
@@ -59,11 +62,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return _matchedChargeBracket?.chargeAmount ?? 0;
   }
 
-  double get _taxAdjustment => 0.0;
+  double get _enteredAmount {
+    return double.tryParse(_principalController.text) ?? 0;
+  }
+
+  double get _amountToSend {
+    if (_chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount) {
+      final amount = _enteredAmount - _chargeFee;
+      return amount > 0 ? amount : 0;
+    }
+    return _enteredAmount;
+  }
 
   double get _totalCollected {
-    final principal = double.tryParse(_principalController.text) ?? 0;
-    return principal + _chargeFee;
+    if (_chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount) {
+      return _enteredAmount;
+    }
+    return _enteredAmount + _chargeFee;
   }
 
   double get _netCashToDrawer {
@@ -192,6 +207,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   ),
                   onChanged: _onPrincipalChanged,
                 ),
+                const SizedBox(height: 12),
+                _buildChargeHandlingSelector(),
                 const SizedBox(height: 16),
                 _buildTextField(
                   controller: _notesController,
@@ -703,6 +720,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ],
           ),
           const SizedBox(height: 16),
+          _buildPreviewRow(
+            'Charge Handling',
+            _chargeHandlingMode == _ChargeHandlingMode.addOnTop
+                ? 'Charge Added On Top'
+                : 'Charge Deducted From Amount',
+          ),
+          const SizedBox(height: 4),
           _buildPreviewRow('Charge Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
           if (_matchedChargeBracket != null) ...[
             const SizedBox(height: 4),
@@ -711,10 +735,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               '${_matchedChargeBracket!.lowerBound} - ${_matchedChargeBracket!.upperBound}',
             ),
           ],
-          const SizedBox(height: 8),
-          _buildPreviewRow(
-            'Tax Adjustment',
-            '₱ ${_taxAdjustment.toStringAsFixed(2)}',
+          const SizedBox(height: 4),
+          _buildHighlightedPreviewRow(
+            'Amount Sent to GCash',
+            '₱ ${_amountToSend.toStringAsFixed(2)}',
           ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -774,7 +798,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Charge fee is based on configured bracket ranges for the principal amount.',
+            _chargeHandlingMode == _ChargeHandlingMode.addOnTop
+                ? 'Charge is added on top of the entered amount. Example: entered ₱100 + charge ₱5 = collect ₱105, send ₱100.'
+                : 'Charge is deducted from the entered amount. Example: entered ₱100 with charge ₱5 = send ₱95.',
             style: TextStyle(
               fontSize: 11,
               color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
@@ -804,6 +830,85 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             fontWeight: FontWeight.w600,
             color: AppColors.onSurface,
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHighlightedPreviewRow(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.account_balance_wallet_rounded,
+                size: 14,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChargeHandlingSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fieldLabel('Charge Handling'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('Add Charge On Top'),
+              selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
+              onSelected: (_) {
+                setState(() {
+                  _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+                });
+              },
+            ),
+            ChoiceChip(
+              label: const Text('Deduct Charge From Amount'),
+              selected:
+                  _chargeHandlingMode ==
+                  _ChargeHandlingMode.deductFromEnteredAmount,
+              onSelected: (_) {
+                setState(() {
+                  _chargeHandlingMode =
+                      _ChargeHandlingMode.deductFromEnteredAmount;
+                });
+              },
+            ),
+          ],
         ),
       ],
     );
@@ -949,6 +1054,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
+    if (_amountToSend <= 0) {
+      _showMessage(
+        'Amount to send must be greater than zero. Adjust entered amount or charge handling.',
+      );
+      return;
+    }
+
     // Capture messenger before any async gap to avoid 'attached' assertion.
     final messenger = ScaffoldMessenger.maybeOf(context);
 
@@ -973,17 +1085,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (!mounted) return;
 
       if (_isRegisteredAccount) {
-        _showSnackBar(
-          messenger,
-          'Party registered! Review the details and tap Save to continue.',
-        );
+        _showSnackBar(messenger, 'Party registered. Saving transaction now...');
       } else {
         _showSnackBar(
           messenger,
           'Unable to verify registration. Please try again.',
         );
+        return;
       }
-      return; // Stay on transaction screen so user can review before saving.
     }
 
     if (!mounted) return;
@@ -1002,7 +1111,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<bool> _saveTransactionRecord() async {
-    final principal = double.tryParse(_principalController.text.trim()) ?? 0;
+    final principal = _amountToSend;
     final chargeFee = _chargeFee;
     final totalCollected = _totalCollected;
     final accountNumber = _accountController.text.trim();

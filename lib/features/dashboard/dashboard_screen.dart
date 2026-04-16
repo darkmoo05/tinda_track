@@ -10,7 +10,7 @@ import 'widgets/balance_hero_card.dart';
 import 'widgets/income_architecture_card.dart';
 import '../transactions/add_owner_movement_screen.dart';
 
-enum _DashboardActivityFilter { all, business, personal }
+enum _DashboardActivityFilter { all, business, personal, transactions }
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.onDataChanged});
@@ -325,6 +325,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             setState(() => _activityFilter = _DashboardActivityFilter.personal);
           },
         ),
+        _buildPillTab(
+          'Transactions',
+          _activityFilter == _DashboardActivityFilter.transactions,
+          () {
+            setState(
+              () => _activityFilter = _DashboardActivityFilter.transactions,
+            );
+          },
+        ),
       ],
     );
   }
@@ -357,20 +366,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildRecentActivityList(DashboardSnapshot dashboard) {
-    final activities = dashboard.activities
-        .where((activity) {
-          switch (_activityFilter) {
-            case _DashboardActivityFilter.all:
-              return true;
-            case _DashboardActivityFilter.business:
-              return activity.scope.toLowerCase() != 'personal';
-            case _DashboardActivityFilter.personal:
-              return activity.scope.toLowerCase() == 'personal';
-          }
-        })
-        .toList(growable: false);
+    final activities =
+        dashboard.activities
+            .where((activity) {
+              switch (_activityFilter) {
+                case _DashboardActivityFilter.all:
+                  return true;
+                case _DashboardActivityFilter.business:
+                  return activity.scope.toLowerCase() != 'personal';
+                case _DashboardActivityFilter.personal:
+                  return activity.scope.toLowerCase() == 'personal';
+                case _DashboardActivityFilter.transactions:
+                  return activity.tag.toLowerCase().contains('transaction');
+              }
+            })
+            .toList(growable: false)
+          ..sort((a, b) {
+            final byDate = b.createdAt.compareTo(a.createdAt);
+            if (byDate != 0) {
+              return byDate;
+            }
+            return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          });
 
-    if (activities.isEmpty) {
+    final recentActivities = activities.take(5).toList(growable: false);
+
+    if (recentActivities.isEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(18),
@@ -386,7 +407,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     return Column(
-      children: activities
+      children: recentActivities
           .map(
             (activity) => ArchitectActivityItem(
               title: activity.title,

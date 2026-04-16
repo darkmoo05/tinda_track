@@ -66,6 +66,7 @@ class DashboardActivity {
     required this.amount,
     required this.tag,
     required this.scope,
+    required this.createdAt,
     required this.icon,
     required this.iconColor,
   });
@@ -75,6 +76,7 @@ class DashboardActivity {
   final String amount;
   final String tag;
   final String scope;
+  final DateTime createdAt;
   final IconData icon;
   final Color iconColor;
 }
@@ -379,6 +381,7 @@ class DashboardRepository {
       amount: '${isOutgoing ? '-' : '+'}${_currencyFormat.format(amount)}',
       tag: _activityTag(row),
       scope: scope,
+      createdAt: createdAt,
       icon: _iconFor(iconKey),
       iconColor: _colorFor(iconKey),
     );
