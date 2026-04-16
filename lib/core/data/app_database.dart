@@ -1,0 +1,590 @@
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as path;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+class AppDatabase {
+  AppDatabase._();
+
+  static final AppDatabase instance = AppDatabase._();
+
+  static const String ledgerTable = 'ledger_entries';
+  static const String partiesTable = 'parties';
+  static const String chargesTable = 'charges';
+  static const String transactionTypesTable = 'transaction_types';
+  static const String ownerMovementCategoriesTable =
+      'owner_movement_categories';
+
+  Database? _database;
+  DatabaseFactory? _databaseFactory;
+
+  Future<void> init() async {
+    await database;
+  }
+
+  Future<Database> get database async {
+    if (_database != null) {
+      return _database!;
+    }
+
+    final databaseFactory = _resolveFactory();
+    final databasesPath = await databaseFactory.getDatabasesPath();
+    final databasePath = path.join(databasesPath, 'tinda_track.db');
+
+    _database = await databaseFactory.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 7,
+        onCreate: (db, version) async {
+          await _createLedgerTable(db);
+          await _createPartiesTable(db);
+          await _createChargesTable(db);
+          await _createTransactionTypesTable(db);
+          await _createOwnerMovementCategoriesTable(db);
+          await _seedTransactionTypesIfEmpty(db);
+          await _seedOwnerMovementCategoriesIfEmpty(db);
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await _createPartiesTable(db);
+          }
+          if (oldVersion < 3) {
+            await _createChargesTable(db);
+          }
+          if (oldVersion < 4) {
+            await _createTransactionTypesTable(db);
+            await _seedTransactionTypesIfEmpty(db);
+          }
+          if (oldVersion < 5) {
+            final columnExists = await _columnExists(
+              db,
+              transactionTypesTable,
+              'is_outflow',
+            );
+            if (!columnExists) {
+              await db.execute(
+                'ALTER TABLE $transactionTypesTable ADD COLUMN is_outflow INTEGER NOT NULL DEFAULT 0',
+              );
+            }
+            await _backfillDefaultOutflowTypes(db);
+          }
+          if (oldVersion < 6) {
+            final hasScopeColumn = await _columnExists(
+              db,
+              ledgerTable,
+              'owner_scope',
+            );
+            final hasMovementTypeColumn = await _columnExists(
+              db,
+              ledgerTable,
+              'owner_movement_type',
+            );
+            final hasCategoryColumn = await _columnExists(
+              db,
+              ledgerTable,
+              'owner_category',
+            );
+
+            if (!hasScopeColumn) {
+              await db.execute(
+                "ALTER TABLE $ledgerTable ADD COLUMN owner_scope TEXT NOT NULL DEFAULT 'Business'",
+              );
+            }
+            if (!hasMovementTypeColumn) {
+              await db.execute(
+                'ALTER TABLE $ledgerTable ADD COLUMN owner_movement_type TEXT',
+              );
+            }
+            if (!hasCategoryColumn) {
+              await db.execute(
+                'ALTER TABLE $ledgerTable ADD COLUMN owner_category TEXT',
+              );
+            }
+            await _createOwnerMovementCategoriesTable(db);
+            await _seedOwnerMovementCategoriesIfEmpty(db);
+          }
+          if (oldVersion < 7) {
+            final hasPartyNameColumn = await _columnExists(
+              db,
+              ledgerTable,
+              'owner_party_name',
+            );
+            final hasPartyAccountColumn = await _columnExists(
+              db,
+              ledgerTable,
+              'owner_party_account',
+            );
+
+            if (!hasPartyNameColumn) {
+              await db.execute(
+                'ALTER TABLE $ledgerTable ADD COLUMN owner_party_name TEXT',
+              );
+            }
+            if (!hasPartyAccountColumn) {
+              await db.execute(
+                'ALTER TABLE $ledgerTable ADD COLUMN owner_party_account TEXT',
+              );
+            }
+          }
+        },
+        onOpen: (db) async {
+          await _seedLedgerIfEmpty(db);
+          await _seedTransactionTypesIfEmpty(db);
+          await _seedOwnerMovementCategoriesIfEmpty(db);
+          await _backfillDefaultOutflowTypes(db);
+          await _removeLegacyDummyParties(db);
+        },
+      ),
+    );
+
+    return _database!;
+  }
+
+  DatabaseFactory _resolveFactory() {
+    if (_databaseFactory != null) {
+      return _databaseFactory!;
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.windows:
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+        sqfliteFfiInit();
+        _databaseFactory = databaseFactoryFfi;
+        break;
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+      case TargetPlatform.fuchsia:
+        _databaseFactory = databaseFactory;
+        break;
+    }
+
+    return _databaseFactory!;
+  }
+
+  Future<void> _createLedgerTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $ledgerTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        note TEXT NOT NULL,
+        reference TEXT NOT NULL,
+        amount REAL NOT NULL,
+        wallet_delta REAL NOT NULL,
+        on_hand_delta REAL NOT NULL,
+        recorded_flow REAL NOT NULL,
+        tag TEXT NOT NULL,
+        icon_key TEXT NOT NULL,
+        owner_scope TEXT NOT NULL DEFAULT 'Business',
+        owner_movement_type TEXT,
+        owner_category TEXT,
+        owner_party_name TEXT,
+        owner_party_account TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createPartiesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $partiesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        account_number TEXT NOT NULL UNIQUE,
+        entity_id TEXT NOT NULL,
+        description TEXT NOT NULL,
+        join_date TEXT NOT NULL,
+        is_verified INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createChargesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $chargesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lower_bound INTEGER NOT NULL,
+        upper_bound INTEGER NOT NULL,
+        charge_amount REAL NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createTransactionTypesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $transactionTypesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        is_outflow INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createOwnerMovementCategoriesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ownerMovementCategoriesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _seedLedgerIfEmpty(Database db) async {
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS count FROM $ledgerTable',
+    );
+    final count = (result.first['count'] as int?) ?? 0;
+    if (count > 0) {
+      return;
+    }
+
+    final batch = db.batch();
+    for (final entry in _seedEntries) {
+      batch.insert(ledgerTable, entry);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<void> _removeLegacyDummyParties(Database db) async {
+    await db.delete(
+      partiesTable,
+      where: 'account_number IN (?, ?, ?)',
+      whereArgs: const ['0012984432', '3311981021', '8800459920'],
+    );
+  }
+
+  Future<void> _seedTransactionTypesIfEmpty(Database db) async {
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS count FROM $transactionTypesTable',
+    );
+    final count = (result.first['count'] as int?) ?? 0;
+    if (count > 0) {
+      return;
+    }
+
+    final batch = db.batch();
+    final now = DateTime.now().toIso8601String();
+    for (final type in _defaultTransactionTypes) {
+      batch.insert(transactionTypesTable, {
+        'name': type.name,
+        'is_outflow': type.isOutflow ? 1 : 0,
+        'created_at': now,
+      });
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<void> _seedOwnerMovementCategoriesIfEmpty(Database db) async {
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS count FROM $ownerMovementCategoriesTable',
+    );
+    final count = (result.first['count'] as int?) ?? 0;
+    if (count > 0) {
+      return;
+    }
+
+    final batch = db.batch();
+    final now = DateTime.now().toIso8601String();
+    for (final category in _defaultOwnerMovementCategories) {
+      batch.insert(ownerMovementCategoriesTable, {
+        'name': category,
+        'created_at': now,
+      });
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<String>> loadTransactionTypes() async {
+    final records = await loadTransactionTypeRecords();
+    return records.map((record) => record.name).toList(growable: false);
+  }
+
+  Future<List<TransactionTypeRecord>> loadTransactionTypeRecords() async {
+    final db = await database;
+    await _seedTransactionTypesIfEmpty(db);
+    final rows = await db.query(
+      transactionTypesTable,
+      columns: ['id', 'name', 'is_outflow'],
+      orderBy: 'name COLLATE NOCASE ASC, id ASC',
+    );
+    return rows
+        .map(
+          (row) => TransactionTypeRecord(
+            id: (row['id'] as num).toInt(),
+            name: (row['name'] as String).trim(),
+            isOutflow: ((row['is_outflow'] as num?) ?? 0) == 1,
+          ),
+        )
+        .where((record) => record.name.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<void> insertTransactionType(
+    String name, {
+    bool isOutflow = false,
+  }) async {
+    final normalized = name.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final db = await database;
+    await db.insert(transactionTypesTable, {
+      'name': normalized,
+      'is_outflow': isOutflow ? 1 : 0,
+      'created_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> updateTransactionType({
+    required int id,
+    required String name,
+    required bool isOutflow,
+  }) async {
+    final normalized = name.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final db = await database;
+    await db.update(
+      transactionTypesTable,
+      {'name': normalized, 'is_outflow': isOutflow ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<void> deleteTransactionType(int id) async {
+    final db = await database;
+    await db.delete(transactionTypesTable, where: 'id = ?', whereArgs: [id]);
+    await _seedTransactionTypesIfEmpty(db);
+  }
+
+  Future<List<String>> loadOwnerMovementCategories() async {
+    final db = await database;
+    await _seedOwnerMovementCategoriesIfEmpty(db);
+    final rows = await db.query(
+      ownerMovementCategoriesTable,
+      columns: ['name'],
+      orderBy: 'name COLLATE NOCASE ASC, id ASC',
+    );
+    return rows
+        .map((row) => (row['name'] as String).trim())
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<void> insertOwnerMovementCategory(String name) async {
+    final normalized = name.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final db = await database;
+    await db.insert(ownerMovementCategoriesTable, {
+      'name': normalized,
+      'created_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> updateOwnerMovementCategory({
+    required String previousName,
+    required String newName,
+  }) async {
+    final normalized = newName.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update(
+        ownerMovementCategoriesTable,
+        {'name': normalized},
+        where: 'LOWER(name) = LOWER(?)',
+        whereArgs: [previousName],
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+      await txn.update(
+        ledgerTable,
+        {'owner_category': normalized},
+        where: 'LOWER(owner_category) = LOWER(?)',
+        whereArgs: [previousName],
+      );
+    });
+  }
+
+  Future<void> deleteOwnerMovementCategory(String name) async {
+    final db = await database;
+    await db.delete(
+      ownerMovementCategoriesTable,
+      where: 'LOWER(name) = LOWER(?)',
+      whereArgs: [name],
+    );
+  }
+
+  Future<List<OwnerBorrowBalanceRecord>> loadOwnerBorrowBalances() async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT
+        SUM(CASE WHEN owner_movement_type IN ('Borrowing', 'Personal Expense') THEN amount ELSE 0 END) AS total_borrowed,
+        SUM(CASE WHEN owner_movement_type = 'Repayment' THEN amount ELSE 0 END) AS total_repaid
+      FROM $ledgerTable
+      WHERE entry_type = 'owner_movement'
+        AND owner_movement_type IN ('Borrowing', 'Personal Expense', 'Repayment')
+    ''');
+
+    if (rows.isEmpty) {
+      return const [];
+    }
+
+    final row = rows.first;
+    final totalBorrowed = (row['total_borrowed'] as num?)?.toDouble() ?? 0;
+    final totalRepaid = (row['total_repaid'] as num?)?.toDouble() ?? 0;
+
+    if (totalBorrowed == 0 && totalRepaid == 0) {
+      return const [];
+    }
+
+    return [
+      OwnerBorrowBalanceRecord(
+        partyName: 'Owner Credit',
+        partyAccount: 'SYSTEM',
+        totalBorrowed: totalBorrowed,
+        totalRepaid: totalRepaid,
+      ),
+    ];
+  }
+
+  Future<bool> _columnExists(
+    Database db,
+    String tableName,
+    String columnName,
+  ) async {
+    final result = await db.rawQuery('PRAGMA table_info($tableName)');
+    return result.any((col) => col['name'] == columnName);
+  }
+
+  Future<void> _backfillDefaultOutflowTypes(Database db) async {
+    for (final type in _defaultTransactionTypes.where(
+      (type) => type.isOutflow,
+    )) {
+      await db.update(
+        transactionTypesTable,
+        {'is_outflow': 1},
+        where: 'LOWER(name) = LOWER(?)',
+        whereArgs: [type.name],
+      );
+    }
+  }
+
+  static const List<_DefaultTransactionType> _defaultTransactionTypes = [
+    _DefaultTransactionType(name: 'Bank Deposit', isOutflow: false),
+    _DefaultTransactionType(name: 'Bank Withdrawal', isOutflow: true),
+    _DefaultTransactionType(name: 'GCash Cash In', isOutflow: false),
+    _DefaultTransactionType(name: 'GCash Cash Out', isOutflow: true),
+    _DefaultTransactionType(name: 'Bills Payment', isOutflow: true),
+    _DefaultTransactionType(name: 'Money Transfer', isOutflow: true),
+  ];
+
+  static const List<String> _defaultOwnerMovementCategories = [
+    'Bills Payment',
+    'Groceries',
+    'Shopping',
+    'Transportation',
+  ];
+
+  List<Map<String, Object>> get _seedEntries => [
+    {
+      'entry_type': 'owner_movement',
+      'title': 'Initial Capital - GCash',
+      'note': 'Owner recorded startup wallet capital.',
+      'reference': 'CAP-0001',
+      'amount': 5000.0,
+      'wallet_delta': 5000.0,
+      'on_hand_delta': 0.0,
+      'recorded_flow': 5000.0,
+      'tag': 'Owner Movement',
+      'icon_key': 'wallet',
+      'created_at': '2026-04-11T08:15:00.000',
+    },
+    {
+      'entry_type': 'owner_movement',
+      'title': 'Initial Capital - On-Hand Cash',
+      'note': 'Owner recorded startup cash drawer capital.',
+      'reference': 'CAP-0002',
+      'amount': 4000.0,
+      'wallet_delta': 0.0,
+      'on_hand_delta': 4000.0,
+      'recorded_flow': 4000.0,
+      'tag': 'Owner Movement',
+      'icon_key': 'cash',
+      'created_at': '2026-04-11T08:30:00.000',
+    },
+    {
+      'entry_type': 'transaction',
+      'title': 'GCash Cash In',
+      'note': 'Customer cash-in worth P1,000 processed from wallet float.',
+      'reference': 'TXN-1000',
+      'amount': 1000.0,
+      'wallet_delta': -1000.0,
+      'on_hand_delta': 1000.0,
+      'recorded_flow': 1000.0,
+      'tag': 'Transaction',
+      'icon_key': 'cash_in',
+      'created_at': '2026-04-13T10:05:00.000',
+    },
+    {
+      'entry_type': 'transaction',
+      'title': 'GCash Cash Out',
+      'note': 'Customer cash-out worth P300 released from on-hand cash.',
+      'reference': 'TXN-0300',
+      'amount': 300.0,
+      'wallet_delta': 300.0,
+      'on_hand_delta': -300.0,
+      'recorded_flow': 300.0,
+      'tag': 'Transaction',
+      'icon_key': 'cash_out',
+      'created_at': '2026-04-14T15:20:00.000',
+    },
+  ];
+}
+
+class TransactionTypeRecord {
+  const TransactionTypeRecord({
+    required this.id,
+    required this.name,
+    required this.isOutflow,
+  });
+
+  final int id;
+  final String name;
+  final bool isOutflow;
+}
+
+class OwnerBorrowBalanceRecord {
+  const OwnerBorrowBalanceRecord({
+    required this.partyName,
+    required this.partyAccount,
+    required this.totalBorrowed,
+    required this.totalRepaid,
+  });
+
+  final String partyName;
+  final String partyAccount;
+  final double totalBorrowed;
+  final double totalRepaid;
+
+  double get outstandingBalance => totalBorrowed - totalRepaid;
+}
+
+class _DefaultTransactionType {
+  const _DefaultTransactionType({required this.name, required this.isOutflow});
+
+  final String name;
+  final bool isOutflow;
+}
