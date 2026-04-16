@@ -97,7 +97,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Income Architecture',
+          'Wallet and Cash Balance Trend',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             color: AppColors.onSurface,
             fontWeight: FontWeight.w700,
@@ -105,7 +105,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         ),
         const SizedBox(height: 2),
         Text(
-          'Visualizing your growth trends over the last 30 days',
+          'Daily closing balances for your GCash wallet and on-hand cash',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceVariant),
@@ -234,7 +234,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
       children: [
         _legendDot(AppColors.primary, 'GCash'),
         const SizedBox(width: 16),
-        _legendDot(AppColors.secondary, 'Cash'),
+        _legendDot(AppColors.secondary, 'On-hand Cash'),
       ],
     );
   }

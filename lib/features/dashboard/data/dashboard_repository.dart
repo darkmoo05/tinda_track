@@ -9,7 +9,15 @@ class DashboardSnapshot {
   const DashboardSnapshot({
     required this.walletBalance,
     required this.onHandCash,
+    required this.businessWalletBalance,
+    required this.businessOnHandCash,
+    required this.businessUsableCash,
     required this.recordedFlow,
+    required this.businessFundingTotal,
+    required this.personalExpenseTotal,
+    required this.totalBorrowed,
+    required this.totalRepaid,
+    required this.netBorrowOutstanding,
     required this.flowTrendLabel,
     required this.flowCaption,
     required this.alertTitle,
@@ -27,7 +35,15 @@ class DashboardSnapshot {
 
   final double walletBalance;
   final double onHandCash;
+  final double businessWalletBalance;
+  final double businessOnHandCash;
+  final double businessUsableCash;
   final double recordedFlow;
+  final double businessFundingTotal;
+  final double personalExpenseTotal;
+  final double totalBorrowed;
+  final double totalRepaid;
+  final double netBorrowOutstanding;
   final String flowTrendLabel;
   final String flowCaption;
   final String alertTitle;
@@ -49,6 +65,7 @@ class DashboardActivity {
     required this.subtitle,
     required this.amount,
     required this.tag,
+    required this.scope,
     required this.icon,
     required this.iconColor,
   });
@@ -57,6 +74,7 @@ class DashboardActivity {
   final String subtitle;
   final String amount;
   final String tag;
+  final String scope;
   final IconData icon;
   final Color iconColor;
 }
@@ -84,9 +102,15 @@ class DashboardRepository {
 
     double walletBalance = 0;
     double onHandCash = 0;
-    double walletInitialCapital = 0;
-    double onHandInitialCapital = 0;
+    double businessWalletBalance = 0;
+    double businessOnHandCash = 0;
+    double walletTopUpBaseline = 0;
+    double onHandTopUpBaseline = 0;
     double chargesCollected = 0;
+    double businessFundingTotal = 0;
+    double personalExpenseTotal = 0;
+    double totalBorrowed = 0;
+    double totalRepaid = 0;
     int transactionCount = 0;
 
     final walletSpots = <FlSpot>[];
@@ -96,40 +120,102 @@ class DashboardRepository {
     final flowDates = <DateTime>[];
     final xLabels = <String>[];
     final chargesByDay = <DateTime, double>{};
+    final walletClosingByDay = <DateTime, double>{};
+    final cashClosingByDay = <DateTime, double>{};
 
-    for (var index = 0; index < rows.length; index++) {
-      final row = rows[index];
-      walletBalance += (row['wallet_delta'] as num).toDouble();
-      onHandCash += (row['on_hand_delta'] as num).toDouble();
+    for (final row in rows) {
+      final walletDelta = (row['wallet_delta'] as num).toDouble();
+      final onHandDelta = (row['on_hand_delta'] as num).toDouble();
+      walletBalance += walletDelta;
+      onHandCash += onHandDelta;
+      final createdAt = DateTime.parse(row['created_at'] as String);
+      final dayKey = DateTime(createdAt.year, createdAt.month, createdAt.day);
+      walletClosingByDay[dayKey] = walletBalance;
+      cashClosingByDay[dayKey] = onHandCash;
 
-      if (_isInitialCapitalEntry(row)) {
+      final entryType = (row['entry_type'] as String?) ?? '';
+      final ownerScope = ((row['owner_scope'] as String?) ?? 'Business')
+          .toLowerCase();
+      final isPersonalOwnerMovement =
+          entryType == 'owner_movement' && ownerScope == 'personal';
+
+      if (!isPersonalOwnerMovement) {
+        businessWalletBalance += walletDelta;
+        businessOnHandCash += onHandDelta;
+      }
+
+      if (_isTopUpBaselineEntry(row)) {
         final walletDelta = (row['wallet_delta'] as num).toDouble();
         final onHandDelta = (row['on_hand_delta'] as num).toDouble();
         if (walletDelta > 0) {
-          walletInitialCapital += walletDelta;
+          walletTopUpBaseline += walletDelta;
         }
         if (onHandDelta > 0) {
-          onHandInitialCapital += onHandDelta;
+          onHandTopUpBaseline += onHandDelta;
         }
       }
-      if ((row['entry_type'] as String) == 'transaction') {
+
+      if (entryType == 'owner_movement') {
+        final movementType = ((row['owner_movement_type'] as String?) ?? '')
+            .toLowerCase();
+        final amount = (row['amount'] as num).toDouble();
+
+        if (movementType == 'initial capital' || movementType == 'top-up') {
+          businessFundingTotal += amount;
+        }
+
+        if (ownerScope == 'personal' || movementType == 'personal expense') {
+          personalExpenseTotal += amount;
+        }
+
+        if (movementType == 'borrowing' || movementType == 'personal expense') {
+          totalBorrowed += amount;
+        }
+
+        if (movementType == 'repayment') {
+          totalRepaid += amount;
+        }
+      }
+
+      if (entryType == 'transaction') {
         final chargeAmount = _extractChargeAmount(row);
         chargesCollected += chargeAmount;
         transactionCount++;
-        final createdAt = DateTime.parse(row['created_at'] as String);
-        final dayKey = DateTime(createdAt.year, createdAt.month, createdAt.day);
         chargesByDay.update(
           dayKey,
           (current) => current + chargeAmount,
           ifAbsent: () => chargeAmount,
         );
       }
+    }
 
-      walletSpots.add(FlSpot(index.toDouble(), walletBalance / 1000));
-      cashSpots.add(FlSpot(index.toDouble(), onHandCash / 1000));
+    if (walletClosingByDay.isNotEmpty || cashClosingByDay.isNotEmpty) {
+      final sortedDays = {
+        ...walletClosingByDay.keys,
+        ...cashClosingByDay.keys,
+      }.toList()..sort();
 
-      final createdAt = DateTime.parse(row['created_at'] as String);
-      xLabels.add(_chartDateFormat.format(createdAt));
+      final firstDay = sortedDays.first;
+      final lastDay = sortedDays.last;
+      var dayCursor = firstDay;
+      var pointIndex = 0;
+      var currentWalletBalance = 0.0;
+      var currentCashBalance = 0.0;
+
+      while (!dayCursor.isAfter(lastDay)) {
+        currentWalletBalance =
+            walletClosingByDay[dayCursor] ?? currentWalletBalance;
+        currentCashBalance = cashClosingByDay[dayCursor] ?? currentCashBalance;
+
+        walletSpots.add(
+          FlSpot(pointIndex.toDouble(), currentWalletBalance / 1000),
+        );
+        cashSpots.add(FlSpot(pointIndex.toDouble(), currentCashBalance / 1000));
+        xLabels.add(_chartDateFormat.format(dayCursor));
+
+        dayCursor = dayCursor.add(const Duration(days: 1));
+        pointIndex++;
+      }
     }
 
     if (chargesByDay.isNotEmpty) {
@@ -151,15 +237,23 @@ class DashboardRepository {
     final activities = rows.reversed.map(_mapActivity).toList(growable: false);
     final alertContent = _buildAlertContent(
       walletBalance: walletBalance,
-      walletInitialCapital: walletInitialCapital,
+      walletTopUpBaseline: walletTopUpBaseline,
       onHandCash: onHandCash,
-      onHandInitialCapital: onHandInitialCapital,
+      onHandTopUpBaseline: onHandTopUpBaseline,
     );
 
     return DashboardSnapshot(
       walletBalance: walletBalance,
       onHandCash: onHandCash,
+      businessWalletBalance: businessWalletBalance,
+      businessOnHandCash: businessOnHandCash,
+      businessUsableCash: businessWalletBalance + businessOnHandCash,
       recordedFlow: chargesCollected,
+      businessFundingTotal: businessFundingTotal,
+      personalExpenseTotal: personalExpenseTotal,
+      totalBorrowed: totalBorrowed,
+      totalRepaid: totalRepaid,
+      netBorrowOutstanding: totalBorrowed - totalRepaid,
       flowTrendLabel: '$transactionCount transactions',
       flowCaption: 'Total amount collected on charges',
       alertTitle: alertContent.title,
@@ -190,23 +284,23 @@ class DashboardRepository {
 
   _DashboardAlertContent _buildAlertContent({
     required double walletBalance,
-    required double walletInitialCapital,
+    required double walletTopUpBaseline,
     required double onHandCash,
-    required double onHandInitialCapital,
+    required double onHandTopUpBaseline,
   }) {
-    final walletThreshold = walletInitialCapital * _lowBalanceRatio;
-    final onHandThreshold = onHandInitialCapital * _lowBalanceRatio;
+    final walletThreshold = walletTopUpBaseline * _lowBalanceRatio;
+    final onHandThreshold = onHandTopUpBaseline * _lowBalanceRatio;
 
     final walletLow =
-        walletInitialCapital > 0 && walletBalance <= walletThreshold;
-    final onHandLow = onHandInitialCapital > 0 && onHandCash <= onHandThreshold;
+        walletTopUpBaseline > 0 && walletBalance <= walletThreshold;
+    final onHandLow = onHandTopUpBaseline > 0 && onHandCash <= onHandThreshold;
 
     if (walletLow && onHandLow) {
       return _DashboardAlertContent(
         show: true,
         title: 'Critical Float Alert',
         message:
-            'GCash wallet (${formatCurrency(walletBalance)}) and on-hand cash (${formatCurrency(onHandCash)}) are at or below 10% of initial capital. Reload both floats immediately.',
+            'GCash wallet (${formatCurrency(walletBalance)}) and on-hand cash (${formatCurrency(onHandCash)}) are at or below 10% of your top-up baseline. Reload both floats immediately.',
         actionLabel: 'RESTOCK FUNDS',
       );
     }
@@ -216,7 +310,7 @@ class DashboardRepository {
         show: true,
         title: 'Low GCash Wallet Balance',
         message:
-            'GCash wallet is down to ${formatCurrency(walletBalance)} (10% of initial capital: ${formatCurrency(walletThreshold)}). Please load wallet funds.',
+            'GCash wallet is down to ${formatCurrency(walletBalance)} (10% of top-up baseline: ${formatCurrency(walletThreshold)}). Please load wallet funds.',
         actionLabel: 'LOAD WALLET',
       );
     }
@@ -226,7 +320,7 @@ class DashboardRepository {
         show: true,
         title: 'Low On-Hand Cash',
         message:
-            'On-hand cash is down to ${formatCurrency(onHandCash)} (10% of initial capital: ${formatCurrency(onHandThreshold)}). Add cash to keep payouts smooth.',
+            'On-hand cash is down to ${formatCurrency(onHandCash)} (10% of top-up baseline: ${formatCurrency(onHandThreshold)}). Add cash to keep payouts smooth.',
         actionLabel: 'ADD CASH',
       );
     }
@@ -239,17 +333,23 @@ class DashboardRepository {
     );
   }
 
-  bool _isInitialCapitalEntry(Map<String, Object?> row) {
+  bool _isTopUpBaselineEntry(Map<String, Object?> row) {
     if ((row['entry_type'] as String?) != 'owner_movement') {
       return false;
     }
 
+    final movementType = ((row['owner_movement_type'] as String?) ?? '')
+        .toLowerCase();
     final title = ((row['title'] as String?) ?? '').toLowerCase();
     final note = ((row['note'] as String?) ?? '').toLowerCase();
     final reference = ((row['reference'] as String?) ?? '').toLowerCase();
 
-    return title.contains('initial capital') ||
+    return movementType == 'top-up' ||
+        movementType == 'initial capital' ||
+        title.contains('top-up') ||
+        title.contains('initial capital') ||
         note.contains('startup') ||
+        reference.startsWith('top-') ||
         reference.startsWith('cap-');
   }
 
@@ -262,18 +362,42 @@ class DashboardRepository {
     final entryType = row['entry_type'] as String;
     final isOutgoing = iconKey == 'cash_out';
     final reference = row['reference'] as String;
+    final ownerPartyName = (row['owner_party_name'] as String?)?.trim() ?? '';
+    final ownerScope = (row['owner_scope'] as String?)?.trim();
     final subtitleRef = entryType == 'transaction'
         ? _resolveTransactionAccountNumber(row)
+        : ownerPartyName.isNotEmpty
+        ? '$ownerPartyName • $reference'
         : reference;
+    final scope = entryType == 'owner_movement'
+        ? ((ownerScope == null || ownerScope.isEmpty) ? 'Business' : ownerScope)
+        : 'Business';
 
     return DashboardActivity(
       title: row['title'] as String,
       subtitle: '$subtitleRef • ${_activityDateFormat.format(createdAt)}',
       amount: '${isOutgoing ? '-' : '+'}${_currencyFormat.format(amount)}',
-      tag: entryType == 'owner_movement' ? 'Owner' : row['tag'] as String,
+      tag: _activityTag(row),
+      scope: scope,
       icon: _iconFor(iconKey),
       iconColor: _colorFor(iconKey),
     );
+  }
+
+  String _activityTag(Map<String, Object?> row) {
+    final entryType = row['entry_type'] as String? ?? '';
+    if (entryType != 'owner_movement') {
+      return (row['tag'] as String?) ?? 'Business';
+    }
+
+    final movementType = ((row['owner_movement_type'] as String?) ?? '').trim();
+    final ownerScope = ((row['owner_scope'] as String?) ?? 'Business').trim();
+
+    if (movementType.isEmpty) {
+      return ownerScope;
+    }
+
+    return '$ownerScope • $movementType';
   }
 
   String _resolveTransactionAccountNumber(Map<String, Object?> row) {

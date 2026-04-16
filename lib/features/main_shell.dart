@@ -19,6 +19,16 @@ class _MainShellState extends State<MainShell> {
   bool _fabOpen = false;
   int _refreshToken = 0;
 
+  void _handleDataChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _refreshToken++;
+    });
+  }
+
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -35,17 +45,19 @@ class _MainShellState extends State<MainShell> {
       MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
     );
     if (saved == true && mounted) {
-      setState(() {
-        _refreshToken++;
-      });
+      _handleDataChanged();
     }
   }
 
-  void _openOwnerMovement() {
+  Future<void> _openOwnerMovement() async {
     setState(() => _fabOpen = false);
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const AddOwnerMovementScreen()));
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AddOwnerMovementScreen()),
+    );
+
+    if (saved == true && mounted) {
+      _handleDataChanged();
+    }
   }
 
   @override
@@ -56,7 +68,10 @@ class _MainShellState extends State<MainShell> {
           IndexedStack(
             index: _selectedIndex,
             children: [
-              DashboardScreen(key: ValueKey('dashboard-$_refreshToken')),
+              DashboardScreen(
+                key: ValueKey('dashboard-$_refreshToken'),
+                onDataChanged: _handleDataChanged,
+              ),
               ActivityHistoryScreen(key: ValueKey('history-$_refreshToken')),
               PartyManagementScreen(key: ValueKey('parties-$_refreshToken')),
               ChargesScreen(key: ValueKey('charges-$_refreshToken')),
