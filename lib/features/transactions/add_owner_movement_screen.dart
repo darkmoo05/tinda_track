@@ -39,12 +39,25 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   bool _isSaving = false;
   bool _isLoadingCategories = true;
   bool _isManagingCategories = false;
+  bool _showRequiredIndicators = false;
 
   bool get _isPersonalExpense => _movementType == 'Personal Expense';
 
   bool get _isBorrowing => _movementType == 'Borrowing';
 
   bool get _isRepayment => _movementType == 'Repayment';
+
+  bool get _isMovementTypeMissing =>
+      _showRequiredIndicators && _movementType == null;
+
+  bool get _isAmountMissing =>
+      _showRequiredIndicators &&
+      (double.tryParse(_amountController.text.trim()) ?? 0) <= 0;
+
+  bool get _isCategoryMissing =>
+      _showRequiredIndicators &&
+      _isPersonalExpense &&
+      (_selectedCategory == null || _selectedCategory!.trim().isEmpty);
 
   bool get _isInflow =>
       _movementType != null && !_isPersonalExpense && !_isBorrowing;
@@ -218,6 +231,8 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                   items: _movementTypes,
                   onChanged: _onMovementTypeChanged,
                   hintText: 'Choose Movement Type',
+                  isRequired: true,
+                  hasError: _isMovementTypeMissing,
                 ),
                 const SizedBox(height: 20),
 
@@ -247,6 +262,8 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                   label: 'Amount',
                   hint: '0.00',
                   prefixText: '₱  ',
+                  isRequired: true,
+                  hasError: _isAmountMissing,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
@@ -347,7 +364,11 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       children: [
         Row(
           children: [
-            _fieldLabel('Expense Category'),
+            _fieldLabel(
+              'Expense Category',
+              isRequired: true,
+              showErrorIndicator: _isCategoryMissing,
+            ),
             const Spacer(),
             _buildCategoryAction(
               label: 'Add',
@@ -391,7 +412,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               }
               setState(() => _selectedCategory = value);
             },
-            decoration: _inputDecoration(),
+            decoration: _inputDecoration(hasError: _isCategoryMissing),
             icon: const Icon(
               Icons.expand_more_rounded,
               color: AppColors.onSurfaceVariant,
@@ -632,16 +653,24 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     required List<String> items,
     required ValueChanged<String?> onChanged,
     String? hintText,
+    bool isRequired = false,
+    bool hasError = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _fieldLabel(label),
+        _fieldLabel(
+          label,
+          isRequired: isRequired,
+          showErrorIndicator: hasError,
+        ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           value: value,
           onChanged: onChanged,
-          decoration: _inputDecoration().copyWith(hintText: hintText),
+          decoration: _inputDecoration(
+            hasError: hasError,
+          ).copyWith(hintText: hintText),
           hint: hintText != null && value == null
               ? Text(
                   hintText,
@@ -670,21 +699,26 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     String? prefixText,
     TextInputType? keyboardType,
     int maxLines = 1,
+    bool isRequired = false,
+    bool hasError = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _fieldLabel(label),
+        _fieldLabel(
+          label,
+          isRequired: isRequired,
+          showErrorIndicator: hasError,
+        ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
           onChanged: (_) => setState(() {}),
-          decoration: _inputDecoration().copyWith(
-            hintText: hint,
-            prefixText: prefixText,
-          ),
+          decoration: _inputDecoration(
+            hasError: hasError,
+          ).copyWith(hintText: hint, prefixText: prefixText),
         ),
       ],
     );
@@ -739,6 +773,10 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   Future<void> _handleSave() async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
+
+    if (!_showRequiredIndicators) {
+      setState(() => _showRequiredIndicators = true);
+    }
 
     if (_movementType == null) {
       _showSnackBar(
@@ -1084,24 +1122,60 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       );
   }
 
-  Text _fieldLabel(String label) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: AppColors.onSurfaceVariant,
+  Widget _fieldLabel(
+    String label, {
+    bool isRequired = false,
+    bool showErrorIndicator = false,
+  }) {
+    final labelStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: showErrorIndicator ? AppColors.error : AppColors.onSurfaceVariant,
+    );
+
+    if (!isRequired) {
+      return Text(label, style: labelStyle);
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: labelStyle,
+        children: [
+          TextSpan(text: label),
+          const TextSpan(
+            text: ' *',
+            style: TextStyle(
+              color: AppColors.error,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  InputDecoration _inputDecoration() {
+  InputDecoration _inputDecoration({bool hasError = false}) {
     return InputDecoration(
       filled: true,
       fillColor: AppColors.surfaceContainerLow,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : Colors.transparent,
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : Colors.transparent,
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : AppColors.primary,
+          width: hasError ? 1.6 : 1.2,
+        ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),

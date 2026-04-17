@@ -24,6 +24,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
   bool _isLoadingTransactionTypes = true;
+  bool _showRequiredIndicators = false;
   _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
 
   String? _selectedType;
@@ -93,6 +94,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
 
   bool get _isRegisteredAccount => _matchedParty != null;
+
+  bool get _isTransactionTypeMissing =>
+      _showRequiredIndicators && _selectedTransactionType == null;
+
+  bool get _isAccountNumberMissing =>
+      _showRequiredIndicators && _accountController.text.trim().isEmpty;
+
+  bool get _isPrincipalMissing =>
+      _showRequiredIndicators &&
+      (double.tryParse(_principalController.text.trim()) ?? 0) <= 0;
 
   @override
   void initState() {
@@ -177,6 +188,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         },
                   onAddPressed: _showAddTransactionTypeDialog,
                   onManagePressed: _showManageTransactionTypesDialog,
+                  isRequired: true,
+                  hasError: _isTransactionTypeMissing,
                 ),
                 if (_selectedTransactionType != null) ...[
                   const SizedBox(height: 8),
@@ -195,6 +208,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   onSuffixPressed: _openAccountSearchPicker,
                   keyboardType: TextInputType.number,
                   onChanged: _resolvePartyFromAccount,
+                  isRequired: true,
+                  hasError: _isAccountNumberMissing,
                 ),
                 if (_hasTypedAccount && _isRegisteredAccount) ...[
                   const SizedBox(height: 8),
@@ -214,6 +229,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     decimal: true,
                   ),
                   onChanged: _onPrincipalChanged,
+                  isRequired: true,
+                  hasError: _isPrincipalMissing,
                 ),
                 const SizedBox(height: 12),
                 _buildChargeHandlingSelector(),
@@ -263,6 +280,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     ValueChanged<String?>? onChanged,
     VoidCallback? onAddPressed,
     VoidCallback? onManagePressed,
+    bool isRequired = false,
+    bool hasError = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,7 +289,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _fieldLabel(label),
+            _fieldLabel(
+              label,
+              isRequired: isRequired,
+              showErrorIndicator: hasError,
+            ),
             const Spacer(),
             if (onAddPressed != null)
               _buildTypeActionButton(
@@ -296,7 +319,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           initialValue: value,
           isExpanded: true,
           onChanged: onChanged,
-          decoration: _inputDecoration().copyWith(hintText: hintText),
+          decoration: _inputDecoration(
+            hasError: hasError,
+          ).copyWith(hintText: hintText),
           icon: const Icon(
             Icons.expand_more_rounded,
             color: AppColors.onSurfaceVariant,
@@ -680,18 +705,27 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     TextInputType? keyboardType,
     int maxLines = 1,
     ValueChanged<String>? onChanged,
+    bool isRequired = false,
+    bool hasError = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _fieldLabel(label),
+        _fieldLabel(
+          label,
+          isRequired: isRequired,
+          showErrorIndicator: hasError,
+        ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
-          onChanged: onChanged,
-          decoration: _inputDecoration().copyWith(
+          onChanged: (value) {
+            setState(() {});
+            onChanged?.call(value);
+          },
+          decoration: _inputDecoration(hasError: hasError).copyWith(
             hintText: hint,
             prefixText: prefixText,
             suffixIcon: suffixIcon != null
@@ -1223,6 +1257,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<void> _onSaveTransaction() async {
+    if (!_showRequiredIndicators) {
+      setState(() => _showRequiredIndicators = true);
+    }
+
     final accountNumber = _accountController.text.trim();
     final principal = double.tryParse(_principalController.text.trim()) ?? 0;
 
@@ -1545,24 +1583,60 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       );
   }
 
-  Text _fieldLabel(String label) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: AppColors.onSurfaceVariant,
+  Widget _fieldLabel(
+    String label, {
+    bool isRequired = false,
+    bool showErrorIndicator = false,
+  }) {
+    final labelStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: showErrorIndicator ? AppColors.error : AppColors.onSurfaceVariant,
+    );
+
+    if (!isRequired) {
+      return Text(label, style: labelStyle);
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: labelStyle,
+        children: [
+          TextSpan(text: label),
+          const TextSpan(
+            text: ' *',
+            style: TextStyle(
+              color: AppColors.error,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  InputDecoration _inputDecoration() {
+  InputDecoration _inputDecoration({bool hasError = false}) {
     return InputDecoration(
       filled: true,
       fillColor: AppColors.surfaceContainerLow,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : Colors.transparent,
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : Colors.transparent,
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : AppColors.primary,
+          width: hasError ? 1.6 : 1.2,
+        ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
