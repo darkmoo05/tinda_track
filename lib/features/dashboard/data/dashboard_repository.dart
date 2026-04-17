@@ -17,6 +17,7 @@ class DashboardSnapshot {
     required this.personalExpenseTotal,
     required this.totalBorrowed,
     required this.totalRepaid,
+    required this.ownerCreditAdjustment,
     required this.netBorrowOutstanding,
     required this.flowTrendLabel,
     required this.flowCaption,
@@ -43,6 +44,7 @@ class DashboardSnapshot {
   final double personalExpenseTotal;
   final double totalBorrowed;
   final double totalRepaid;
+  final double ownerCreditAdjustment;
   final double netBorrowOutstanding;
   final String flowTrendLabel;
   final String flowCaption;
@@ -244,17 +246,21 @@ class DashboardRepository {
       onHandTopUpBaseline: onHandTopUpBaseline,
     );
 
+    final ownerCreditAdjustment = totalRepaid - totalBorrowed;
+
     return DashboardSnapshot(
       walletBalance: walletBalance,
       onHandCash: onHandCash,
       businessWalletBalance: businessWalletBalance,
       businessOnHandCash: businessOnHandCash,
-      businessUsableCash: businessWalletBalance + businessOnHandCash,
+      businessUsableCash:
+          businessWalletBalance + businessOnHandCash + ownerCreditAdjustment,
       recordedFlow: chargesCollected,
       businessFundingTotal: businessFundingTotal,
       personalExpenseTotal: personalExpenseTotal,
       totalBorrowed: totalBorrowed,
       totalRepaid: totalRepaid,
+      ownerCreditAdjustment: ownerCreditAdjustment,
       netBorrowOutstanding: totalBorrowed - totalRepaid,
       flowTrendLabel: '$transactionCount transactions',
       flowCaption: 'Total amount collected on charges',

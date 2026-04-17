@@ -31,7 +31,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   ];
   static const List<String> _destinations = ['GCash', 'On-hand Cash'];
 
-  late String _movementType;
+  String? _movementType;
   late String _destination;
   List<String> _expenseCategories = const [];
   String? _selectedCategory;
@@ -46,7 +46,8 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   bool get _isRepayment => _movementType == 'Repayment';
 
-  bool get _isInflow => !_isPersonalExpense && !_isBorrowing;
+  bool get _isInflow =>
+      _movementType != null && !_isPersonalExpense && !_isBorrowing;
 
   String get _ownerScope => (_isPersonalExpense || _isBorrowing || _isRepayment)
       ? 'Personal'
@@ -68,6 +69,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   String get _autoDirectionLabel => _isInflow ? 'Cash In' : 'Cash Out';
 
   String get _movementSummaryLabel {
+    if (_movementType == null) {
+      return 'Movement Type Pending';
+    }
     if (_isPersonalExpense) {
       final categoryLabel = _selectedCategory ?? 'Category Pending';
       return '$_movementType • $categoryLabel';
@@ -105,12 +109,12 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     super.dispose();
   }
 
-  String _resolveInitialMovementType() {
+  String? _resolveInitialMovementType() {
     final candidate = widget.initialMovementType?.trim();
     if (candidate != null && _movementTypes.contains(candidate)) {
       return candidate;
     }
-    return _movementTypes.first;
+    return null;
   }
 
   String _resolveInitialDestination() {
@@ -213,6 +217,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                   value: _movementType,
                   items: _movementTypes,
                   onChanged: _onMovementTypeChanged,
+                  hintText: 'Choose Movement Type',
                 ),
                 const SizedBox(height: 20),
 
@@ -376,6 +381,10 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         else
           DropdownButtonFormField<String>(
             value: _selectedCategory,
+            hint: const Text(
+              'Choose Expense Category',
+              style: TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+            ),
             onChanged: (value) {
               if (value == null) {
                 return;
@@ -619,9 +628,10 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   Widget _buildDropdownField({
     required String label,
-    required String value,
+    required String? value,
     required List<String> items,
     required ValueChanged<String?> onChanged,
+    String? hintText,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,7 +641,16 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         DropdownButtonFormField<String>(
           value: value,
           onChanged: onChanged,
-          decoration: _inputDecoration(),
+          decoration: _inputDecoration().copyWith(hintText: hintText),
+          hint: hintText != null && value == null
+              ? Text(
+                  hintText,
+                  style: const TextStyle(
+                    color: AppColors.outlineVariant,
+                    fontSize: 13,
+                  ),
+                )
+              : null,
           icon: const Icon(
             Icons.expand_more_rounded,
             color: AppColors.onSurfaceVariant,
@@ -721,14 +740,31 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
 
+    if (_movementType == null) {
+      _showSnackBar(
+        messenger,
+        'Please choose a movement type before saving.',
+        isError: true,
+      );
+      return;
+    }
+
     if (amount <= 0) {
-      _showSnackBar(messenger, 'Enter an amount greater than zero.');
+      _showSnackBar(
+        messenger,
+        'Enter an amount greater than zero.',
+        isError: true,
+      );
       return;
     }
 
     if (_isPersonalExpense &&
         (_selectedCategory == null || _selectedCategory!.trim().isEmpty)) {
-      _showSnackBar(messenger, 'Select or create a personal expense category.');
+      _showSnackBar(
+        messenger,
+        'Select or create a personal expense category.',
+        isError: true,
+      );
       return;
     }
 
@@ -743,6 +779,31 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         _showSnackBar(
           messenger,
           '$movementLabel cannot be processed due to low $_destinationLabel balance. Available: ₱ ${availableBalance.toStringAsFixed(2)}.',
+          isError: true,
+        );
+        return;
+      }
+    }
+
+    if (_isRepayment) {
+      final (outstanding, totalBorrowed) =
+          await _loadOutstandingBorrowingBalance();
+      if (!mounted) {
+        return;
+      }
+      if (totalBorrowed <= 0) {
+        _showSnackBar(
+          messenger,
+          'No borrowing transaction found. Record a borrowing first before making a repayment.',
+          isError: true,
+        );
+        return;
+      }
+      if (amount > outstanding) {
+        _showSnackBar(
+          messenger,
+          'Repayment amount (₱ ${amount.toStringAsFixed(2)}) exceeds outstanding borrowing balance (₱ ${outstanding.toStringAsFixed(2)}). Adjust the amount.',
+          isError: true,
         );
         return;
       }
@@ -761,6 +822,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       _showSnackBar(
         messenger,
         'Unable to save owner movement. Please try again.',
+        isError: true,
       );
       return;
     }
@@ -827,6 +889,31 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         : 'TOP';
     final stamp = timestamp.millisecondsSinceEpoch.toString();
     return '$prefix-${stamp.substring(stamp.length - 6)}';
+  }
+
+  Future<(double outstanding, double totalBorrowed)>
+  _loadOutstandingBorrowingBalance() async {
+    final db = await _database.database;
+    final result = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE WHEN owner_movement_type = 'Borrowing' THEN amount ELSE 0 END), 0) AS total_borrowed,
+        COALESCE(SUM(CASE WHEN owner_movement_type = 'Repayment' THEN amount ELSE 0 END), 0) AS total_repaid
+      FROM ${AppDatabase.ledgerTable}
+      WHERE entry_type = 'owner_movement'
+        AND owner_movement_type IN ('Borrowing', 'Repayment')
+    ''');
+
+    if (result.isEmpty) {
+      return (0.0, 0.0);
+    }
+
+    final row = result.first;
+    final totalBorrowed = (row['total_borrowed'] as num?)?.toDouble() ?? 0.0;
+    final totalRepaid = (row['total_repaid'] as num?)?.toDouble() ?? 0.0;
+    final outstanding = (totalBorrowed - totalRepaid)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    return (outstanding, totalBorrowed);
   }
 
   Future<double> _loadSelectedAccountBalance() async {
@@ -922,7 +1009,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final normalized = _categoryNameController.text.trim();
     if (normalized.isEmpty) {
-      _showSnackBar(messenger, 'Enter a category name.');
+      _showSnackBar(messenger, 'Enter a category name.', isError: true);
       return;
     }
 
@@ -947,6 +1034,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       _showSnackBar(
         messenger,
         'Unable to save category. Check if the name already exists.',
+        isError: true,
       );
     }
   }
@@ -959,10 +1047,41 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     });
   }
 
-  void _showSnackBar(ScaffoldMessengerState? messenger, String message) {
+  void _showSnackBar(
+    ScaffoldMessengerState? messenger,
+    String message, {
+    bool isError = false,
+  }) {
     messenger
       ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                isError
+                    ? Icons.error_outline_rounded
+                    : Icons.check_circle_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
   }
 
   Text _fieldLabel(String label) {
