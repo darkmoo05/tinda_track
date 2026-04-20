@@ -36,7 +36,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: ArchitectAppBar(
-        title: 'Financial Architect',
+        title: 'PocketLedger',
         actions: [
           IconButton(
             onPressed: () {},

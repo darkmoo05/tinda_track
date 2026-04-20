@@ -34,7 +34,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const ArchitectAppBar(title: 'Financial Architect'),
+      appBar: const ArchitectAppBar(title: 'PocketLedger'),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [

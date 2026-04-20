@@ -32,7 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Scaffold(
-            appBar: ArchitectAppBar(title: 'Financial Architect'),
+            appBar: ArchitectAppBar(title: 'PocketLedger'),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -40,7 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final dashboard = snapshot.data!;
 
         return Scaffold(
-          appBar: const ArchitectAppBar(title: 'Financial Architect'),
+          appBar: const ArchitectAppBar(title: 'PocketLedger'),
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [

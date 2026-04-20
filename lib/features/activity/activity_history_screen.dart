@@ -55,19 +55,19 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       length: 2,
       child: Scaffold(
         appBar: ArchitectAppBar(
-          title: 'Financial Architect',
+          title: 'PocketLedger',
           actions: [
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.search_rounded,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
             IconButton(
               onPressed: _openLedgerReportSheet,
               icon: const Icon(
                 Icons.summarize_outlined,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            IconButton(
+              onPressed: () {},
+              icon: const Icon(
+                Icons.settings_outlined,
                 color: AppColors.onSurfaceVariant,
               ),
             ),
