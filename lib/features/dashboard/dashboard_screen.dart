@@ -32,7 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Scaffold(
-            appBar: ArchitectAppBar(title: 'Financial Architect'),
+            appBar: ArchitectAppBar(title: 'PocketLedger'),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -40,7 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final dashboard = snapshot.data!;
 
         return Scaffold(
-          appBar: const ArchitectAppBar(title: 'Financial Architect'),
+          appBar: const ArchitectAppBar(title: 'PocketLedger'),
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -254,7 +254,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Excludes personal owner expenses from available business cash.',
+            'Subtracts borrowing/personal expense and adds repayments.',
             style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
@@ -272,6 +272,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 label: 'On-hand',
                 value: _dashboardRepository.formatCurrency(
                   dashboard.businessOnHandCash,
+                ),
+              ),
+              _buildBreakdownChip(
+                label: 'Owner adj',
+                value: _dashboardRepository.formatCurrency(
+                  dashboard.ownerCreditAdjustment,
                 ),
               ),
             ],

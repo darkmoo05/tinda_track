@@ -24,16 +24,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
   bool _isLoadingTransactionTypes = true;
+  bool _showRequiredIndicators = false;
   _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
 
-  String _selectedType = 'Bank Deposit';
+  String? _selectedType;
   PartyRecord? _matchedParty;
 
   List<TransactionTypeRecord> _transactionTypes = const [];
 
   TransactionTypeRecord? get _selectedTransactionType {
+    final selectedType = _selectedType;
+    if (selectedType == null || selectedType.isEmpty) {
+      return null;
+    }
+
     for (final type in _transactionTypes) {
-      if (type.name == _selectedType) {
+      if (type.name == selectedType) {
         return type;
       }
     }
@@ -88,6 +94,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
 
   bool get _isRegisteredAccount => _matchedParty != null;
+
+  bool get _isTransactionTypeMissing =>
+      _showRequiredIndicators && _selectedTransactionType == null;
+
+  bool get _isAccountNumberMissing =>
+      _showRequiredIndicators && _accountController.text.trim().isEmpty;
+
+  bool get _isPrincipalMissing =>
+      _showRequiredIndicators &&
+      (double.tryParse(_principalController.text.trim()) ?? 0) <= 0;
 
   @override
   void initState() {
@@ -154,12 +170,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 _buildDropdownField(
                   label: 'Transaction Type',
                   value:
-                      _transactionTypes.any(
-                        (type) => type.name == _selectedType,
-                      )
+                      _selectedType != null &&
+                          _transactionTypes.any(
+                            (type) => type.name == _selectedType,
+                          )
                       ? _selectedType
                       : null,
                   items: _transactionTypes,
+                  hintText: 'Choose Transaction Type',
                   onChanged: _isLoadingTransactionTypes
                       ? null
                       : (val) {
@@ -170,6 +188,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         },
                   onAddPressed: _showAddTransactionTypeDialog,
                   onManagePressed: _showManageTransactionTypesDialog,
+                  isRequired: true,
+                  hasError: _isTransactionTypeMissing,
                 ),
                 if (_selectedTransactionType != null) ...[
                   const SizedBox(height: 8),
@@ -185,8 +205,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   label: 'Account Number',
                   hint: 'Search or enter account number',
                   suffixIcon: Icons.search_rounded,
+                  onSuffixPressed: _openAccountSearchPicker,
                   keyboardType: TextInputType.number,
                   onChanged: _resolvePartyFromAccount,
+                  isRequired: true,
+                  hasError: _isAccountNumberMissing,
                 ),
                 if (_hasTypedAccount && _isRegisteredAccount) ...[
                   const SizedBox(height: 8),
@@ -206,6 +229,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     decimal: true,
                   ),
                   onChanged: _onPrincipalChanged,
+                  isRequired: true,
+                  hasError: _isPrincipalMissing,
                 ),
                 const SizedBox(height: 12),
                 _buildChargeHandlingSelector(),
@@ -251,9 +276,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     required String label,
     required String? value,
     required List<TransactionTypeRecord> items,
+    String? hintText,
     ValueChanged<String?>? onChanged,
     VoidCallback? onAddPressed,
     VoidCallback? onManagePressed,
+    bool isRequired = false,
+    bool hasError = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,7 +289,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _fieldLabel(label),
+            _fieldLabel(
+              label,
+              isRequired: isRequired,
+              showErrorIndicator: hasError,
+            ),
             const Spacer(),
             if (onAddPressed != null)
               _buildTypeActionButton(
@@ -287,7 +319,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           initialValue: value,
           isExpanded: true,
           onChanged: onChanged,
-          decoration: _inputDecoration(),
+          decoration: _inputDecoration(
+            hasError: hasError,
+          ).copyWith(hintText: hintText),
           icon: const Icon(
             Icons.expand_more_rounded,
             color: AppColors.onSurfaceVariant,
@@ -427,16 +461,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
-    final fallbackType = loadedTypes.isNotEmpty
-        ? loadedTypes.first.name
-        : 'Bank Deposit';
     final preferred = preferSelect?.trim();
-    final nextSelected =
-        (preferred != null && loadedTypes.any((type) => type.name == preferred))
-        ? preferred
-        : (loadedTypes.any((type) => type.name == _selectedType)
-              ? _selectedType
-              : fallbackType);
+
+    String? nextSelected;
+    if (preferred != null && preferred.isNotEmpty) {
+      if (loadedTypes.any((type) => type.name == preferred)) {
+        nextSelected = preferred;
+      }
+    } else if (_selectedType != null &&
+        loadedTypes.any((type) => type.name == _selectedType)) {
+      nextSelected = _selectedType;
+    }
 
     setState(() {
       _transactionTypes = loadedTypes;
@@ -474,7 +509,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   Future<void> _showManageTransactionTypesDialog() async {
     if (_transactionTypes.isEmpty) {
-      _showMessage('No transaction types available. Add one first.');
+      _showMessage(
+        'No transaction types available. Add one first.',
+        isError: true,
+      );
       return;
     }
 
@@ -526,7 +564,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (!mounted) {
         return;
       }
-      _showMessage('Unable to update type. Name may already exist.');
+      _showMessage(
+        'Unable to update type. Name may already exist.',
+        isError: true,
+      );
       return;
     }
 
@@ -546,20 +587,92 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       barrierColor: Colors.black.withValues(alpha: 0.56),
       builder: (dialogContext) {
         return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerLowest,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text('Delete Transaction Type'),
-          content: Text('Are you sure you want to delete "${type.name}"?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+          titlePadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          title: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+            child: Column(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.error,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Delete Transaction Type',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Are you sure you want to delete "${type.name}"? This cannot be undone.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Delete'),
+          ),
+          content: const SizedBox.shrink(),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: AppColors.outlineVariant),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    icon: const Icon(
+                      Icons.delete_rounded,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                    label: const Text(
+                      'Delete',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         );
@@ -587,31 +700,82 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     required String label,
     required String hint,
     IconData? suffixIcon,
+    VoidCallback? onSuffixPressed,
     String? prefixText,
     TextInputType? keyboardType,
     int maxLines = 1,
     ValueChanged<String>? onChanged,
+    bool isRequired = false,
+    bool hasError = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _fieldLabel(label),
+        _fieldLabel(
+          label,
+          isRequired: isRequired,
+          showErrorIndicator: hasError,
+        ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
-          onChanged: onChanged,
-          decoration: _inputDecoration().copyWith(
+          onChanged: (value) {
+            setState(() {});
+            onChanged?.call(value);
+          },
+          decoration: _inputDecoration(hasError: hasError).copyWith(
             hintText: hint,
             prefixText: prefixText,
             suffixIcon: suffixIcon != null
-                ? Icon(suffixIcon, color: AppColors.onSurfaceVariant, size: 20)
+                ? (onSuffixPressed != null
+                      ? IconButton(
+                          onPressed: onSuffixPressed,
+                          tooltip: 'Search contacts',
+                          icon: Icon(
+                            suffixIcon,
+                            color: AppColors.onSurfaceVariant,
+                            size: 20,
+                          ),
+                        )
+                      : Icon(
+                          suffixIcon,
+                          color: AppColors.onSurfaceVariant,
+                          size: 20,
+                        ))
                 : null,
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _openAccountSearchPicker() async {
+    await _partyRepository.ensureLoaded();
+    if (!mounted) {
+      return;
+    }
+
+    final selectedParty = await showModalBottomSheet<PartyRecord>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) => _PartyContactPickerSheet(
+        parties: _partyRepository.parties.value,
+        initialQuery: _accountController.text.trim(),
+      ),
+    );
+
+    if (!mounted || selectedParty == null) {
+      return;
+    }
+
+    _accountController.text = selectedParty.accountNumber;
+    await _resolvePartyFromAccount(selectedParty.accountNumber);
   }
 
   Widget _buildPartyFoundBanner(String name) {
@@ -989,24 +1153,84 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     _missingRangeAlertVisible = true;
     final goToCharges = await showDialog<bool>(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.56),
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Missing Charge Range',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-        ),
-        content: const Text(
-          'The entered principal amount does not match any configured charge range. Please create a new charges range first.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+        backgroundColor: AppColors.surfaceContainerLowest,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        title: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+          child: Column(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.payments_outlined,
+                  color: AppColors.primary,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Missing Charge Range',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'The entered principal amount does not match any configured charge range. Please create a new charges range first.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            icon: const Icon(Icons.payments_outlined, size: 18),
-            label: const Text('Go to Charges'),
+        ),
+        content: const SizedBox.shrink(),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: AppColors.outlineVariant),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  icon: const Icon(Icons.payments_outlined, size: 16),
+                  label: const Text('Go to Charges'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1033,22 +1257,38 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<void> _onSaveTransaction() async {
+    if (!_showRequiredIndicators) {
+      setState(() => _showRequiredIndicators = true);
+    }
+
     final accountNumber = _accountController.text.trim();
     final principal = double.tryParse(_principalController.text.trim()) ?? 0;
 
+    if (_selectedTransactionType == null) {
+      _showMessage(
+        'Please choose a transaction type before saving.',
+        isError: true,
+      );
+      return;
+    }
+
     if (accountNumber.isEmpty) {
-      _showMessage('Account number is required before saving.');
+      _showMessage('Account number is required before saving.', isError: true);
       return;
     }
 
     if (principal <= 0) {
-      _showMessage('Principal amount is required before saving.');
+      _showMessage(
+        'Principal amount is required before saving.',
+        isError: true,
+      );
       return;
     }
 
     if (_matchedChargeBracket == null) {
       _showMessage(
         'No charge range found for this principal amount. Create a new range first.',
+        isError: true,
       );
       _showMissingChargeRangeAlert();
       return;
@@ -1057,6 +1297,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (_amountToSend <= 0) {
       _showMessage(
         'Amount to send must be greater than zero. Adjust entered amount or charge handling.',
+        isError: true,
+      );
+      return;
+    }
+
+    final isOutflow = _selectedTransactionType?.isOutflow ?? false;
+    final (walletBalance, onHandBalance) = await _loadCurrentBalances();
+    if (!mounted) {
+      return;
+    }
+
+    final sourceLabel = isOutflow ? 'On-hand Cash' : 'GCash Wallet';
+    final available = isOutflow ? onHandBalance : walletBalance;
+    if (principal > available) {
+      _showMessage(
+        'Insufficient $sourceLabel balance. Available: ₱ ${available.toStringAsFixed(2)}',
+        isError: true,
       );
       return;
     }
@@ -1070,6 +1327,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _showSnackBar(
         messenger,
         'Party is not registered yet. Register details first.',
+        isError: true,
       );
       final registered = await _openPartyRegistrationPopup(
         prefilledAccountNumber: accountNumber,
@@ -1090,6 +1348,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         _showSnackBar(
           messenger,
           'Unable to verify registration. Please try again.',
+          isError: true,
         );
         return;
       }
@@ -1100,7 +1359,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final saved = await _saveTransactionRecord();
     if (!saved) {
       if (!mounted) return;
-      _showSnackBar(messenger, 'Unable to save transaction. Please try again.');
+      _showSnackBar(
+        messenger,
+        'Unable to save transaction. Please try again.',
+        isError: true,
+      );
       return;
     }
 
@@ -1121,6 +1384,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return false;
     }
 
+    final selectedType = _selectedType;
+    if (selectedType == null || selectedType.isEmpty) {
+      return false;
+    }
+
     final isOutflow = _selectedTransactionType?.isOutflow ?? false;
     final walletDelta = isOutflow ? principal : -principal;
     final onHandDelta = isOutflow ? -principal : totalCollected;
@@ -1136,7 +1404,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     try {
       await db.insert(AppDatabase.ledgerTable, {
         'entry_type': 'transaction',
-        'title': _selectedType,
+        'title': selectedType,
         'note': persistedNote,
         'reference': reference,
         'amount': totalCollected,
@@ -1153,10 +1421,61 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
-  void _showSnackBar(ScaffoldMessengerState? messenger, String message) {
+  Future<(double walletBalance, double onHandBalance)>
+  _loadCurrentBalances() async {
+    final db = await _database.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
+        COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
+      FROM ${AppDatabase.ledgerTable}
+    ''');
+
+    if (rows.isEmpty) {
+      return (0.0, 0.0);
+    }
+
+    final row = rows.first;
+    final walletBalance = (row['wallet_balance'] as num?)?.toDouble() ?? 0.0;
+    final onHandBalance = (row['on_hand_balance'] as num?)?.toDouble() ?? 0.0;
+    return (walletBalance, onHandBalance);
+  }
+
+  void _showSnackBar(
+    ScaffoldMessengerState? messenger,
+    String message, {
+    bool isError = false,
+  }) {
     messenger
       ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                isError
+                    ? Icons.error_outline_rounded
+                    : Icons.check_circle_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
   }
 
   Future<bool> _openPartyRegistrationPopup({
@@ -1222,7 +1541,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  void _showMessage(String message) {
+  void _showMessage(String message, {bool isError = false}) {
     if (!mounted) {
       return;
     }
@@ -1234,27 +1553,90 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                isError
+                    ? Icons.error_outline_rounded
+                    : Icons.check_circle_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
   }
 
-  Text _fieldLabel(String label) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: AppColors.onSurfaceVariant,
+  Widget _fieldLabel(
+    String label, {
+    bool isRequired = false,
+    bool showErrorIndicator = false,
+  }) {
+    final labelStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: showErrorIndicator ? AppColors.error : AppColors.onSurfaceVariant,
+    );
+
+    if (!isRequired) {
+      return Text(label, style: labelStyle);
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: labelStyle,
+        children: [
+          TextSpan(text: label),
+          const TextSpan(
+            text: ' *',
+            style: TextStyle(
+              color: AppColors.error,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  InputDecoration _inputDecoration() {
+  InputDecoration _inputDecoration({bool hasError = false}) {
     return InputDecoration(
       filled: true,
       fillColor: AppColors.surfaceContainerLow,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : Colors.transparent,
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : Colors.transparent,
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(
+          color: hasError ? AppColors.error : AppColors.primary,
+          width: hasError ? 1.6 : 1.2,
+        ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
@@ -1330,12 +1712,51 @@ class _UpsertTransactionTypeDialogState
   Widget build(BuildContext context) {
     final isEditing = widget.initialName != null;
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(isEditing ? 'Edit Transaction Type' : 'Add Transaction Type'),
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      titlePadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      title: Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.06),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.category_outlined,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                isEditing ? 'Edit Transaction Type' : 'Add Transaction Type',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 16),
           TextField(
             controller: _controller,
             autofocus: true,
@@ -1381,16 +1802,39 @@ class _UpsertTransactionTypeDialogState
               ],
             ),
           ),
+          const SizedBox(height: 4),
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _onSave,
-          child: Text(isEditing ? 'Update' : 'Save'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: const BorderSide(color: AppColors.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: _onSave,
+                child: Text(isEditing ? 'Update' : 'Save'),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1404,13 +1848,49 @@ class _ManageTransactionTypesDialog extends StatelessWidget {
   });
 
   final List<TransactionTypeRecord> types;
-  final String selectedTypeName;
+  final String? selectedTypeName;
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('Manage Transaction Types'),
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      titlePadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      title: Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.06),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.tune_rounded,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Manage Transaction Types',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
       content: SizedBox(
         width: 420,
         child: ListView.separated(
@@ -1481,9 +1961,19 @@ class _ManageTransactionTypesDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              side: const BorderSide(color: AppColors.outlineVariant),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
         ),
       ],
     );
@@ -1504,6 +1994,213 @@ class _TypeActionPayload {
 
   final _TypeAction action;
   final TransactionTypeRecord type;
+}
+
+class _PartyContactPickerSheet extends StatefulWidget {
+  const _PartyContactPickerSheet({
+    required this.parties,
+    required this.initialQuery,
+  });
+
+  final List<PartyRecord> parties;
+  final String initialQuery;
+
+  @override
+  State<_PartyContactPickerSheet> createState() =>
+      _PartyContactPickerSheetState();
+}
+
+class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController(text: widget.initialQuery);
+    _searchController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<PartyRecord> get _filteredParties {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) {
+      return widget.parties;
+    }
+
+    return widget.parties
+        .where((party) {
+          final name = party.name.toLowerCase();
+          final account = party.accountNumber.toLowerCase();
+          return name.contains(query) || account.contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filteredParties;
+    final maxHeight = MediaQuery.of(context).size.height * 0.78;
+
+    return SafeArea(
+      child: SizedBox(
+        height: maxHeight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.outlineVariant.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Select Registered Contact',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search name or account number',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  filled: true,
+                  fillColor: AppColors.surfaceContainerLow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: widget.parties.isEmpty
+                    ? const _PartyPickerEmptyState(
+                        title: 'No contacts found',
+                        subtitle:
+                            'Register a party first, then use search to pick an account.',
+                      )
+                    : (filtered.isEmpty
+                          ? const _PartyPickerEmptyState(
+                              title: 'No matching contact',
+                              subtitle:
+                                  'Try searching with a different name or account number.',
+                            )
+                          : ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const Divider(
+                                height: 1,
+                                color: AppColors.outlineVariant,
+                              ),
+                              itemBuilder: (context, index) {
+                                final party = filtered[index];
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 4,
+                                  ),
+                                  leading: CircleAvatar(
+                                    backgroundColor: AppColors.primary
+                                        .withValues(alpha: 0.15),
+                                    child: const Icon(
+                                      Icons.person_rounded,
+                                      color: AppColors.primary,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    party.name,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    'Account: ${party.accountNumber}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: party.isVerified
+                                      ? const Icon(
+                                          Icons.verified_rounded,
+                                          color: AppColors.secondary,
+                                          size: 18,
+                                        )
+                                      : null,
+                                  onTap: () => Navigator.of(context).pop(party),
+                                );
+                              },
+                            )),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PartyPickerEmptyState extends StatelessWidget {
+  const _PartyPickerEmptyState({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.manage_search_rounded,
+              size: 32,
+              color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.9),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1598,18 +2295,51 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      titlePadding: EdgeInsets.zero,
       contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      title: const Text(
-        'Party Registration',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      title: Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+        decoration: BoxDecoration(
+          color: AppColors.secondary.withValues(alpha: 0.06),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.secondary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.person_add_alt_1_rounded,
+                color: AppColors.secondary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Party Registration',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 12),
           const Text(
             'Define a new financial entity before recording this transaction.',
             style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
@@ -1641,20 +2371,52 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton.icon(
-          onPressed: _isSaving ? null : _onRegister,
-          icon: _isSaving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.person_add_alt_1_rounded, size: 18),
-          label: Text(_isSaving ? 'Saving…' : 'Register Party'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: const BorderSide(color: AppColors.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: _isSaving
+                    ? null
+                    : () => Navigator.of(context).pop(null),
+                child: const Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.secondary,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: _isSaving ? null : _onRegister,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.person_add_alt_1_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                label: Text(_isSaving ? 'Saving…' : 'Register Party'),
+              ),
+            ),
+          ],
         ),
       ],
     );

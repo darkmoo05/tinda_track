@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:excel/excel.dart' as ex;
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
 
 import '../../core/app_theme.dart';
 import '../../core/data/app_database.dart';
@@ -47,12 +55,12 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       length: 2,
       child: Scaffold(
         appBar: ArchitectAppBar(
-          title: 'Financial Architect',
+          title: 'PocketLedger',
           actions: [
             IconButton(
-              onPressed: () {},
+              onPressed: _openLedgerReportSheet,
               icon: const Icon(
-                Icons.search_rounded,
+                Icons.summarize_outlined,
                 color: AppColors.onSurfaceVariant,
               ),
             ),
@@ -110,7 +118,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ),
       child: TabBar(
         labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.onSurfaceVariant.withOpacity(0.5),
+        unselectedLabelColor: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
         indicatorColor: AppColors.primary,
         indicatorWeight: 3,
         labelStyle: const TextStyle(
@@ -213,15 +221,25 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Widget _buildHeader() {
-    return const Row(
+    return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
+        const Text(
           'Movements',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
             color: AppColors.onSurface,
+          ),
+        ),
+        FilledButton.icon(
+          onPressed: _openLedgerReportSheet,
+          icon: const Icon(Icons.assessment_outlined, size: 18),
+          label: const Text('Reports'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
         ),
       ],
@@ -702,6 +720,674 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         .toList(growable: false);
   }
 
+  Future<void> _openLedgerReportSheet() async {
+    final now = DateTime.now();
+    DateTime beginDate = DateTime(now.year, now.month, 1);
+    DateTime endDate = DateTime(now.year, now.month, now.day);
+    _ReportFileType selectedType = _ReportFileType.pdf;
+
+    final request = await showModalBottomSheet<_LedgerReportRequest>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> pickBeginDate() async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: beginDate,
+                firstDate: DateTime(now.year - 10),
+                lastDate: DateTime(now.year + 10),
+                helpText: 'Select Beginning Date',
+              );
+              if (picked == null) {
+                return;
+              }
+              setSheetState(() {
+                beginDate = DateTime(picked.year, picked.month, picked.day);
+                if (endDate.isBefore(beginDate)) {
+                  endDate = beginDate;
+                }
+              });
+            }
+
+            Future<void> pickEndDate() async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: endDate,
+                firstDate: DateTime(now.year - 10),
+                lastDate: DateTime(now.year + 10),
+                helpText: 'Select End Date',
+              );
+              if (picked == null) {
+                return;
+              }
+              setSheetState(() {
+                endDate = DateTime(picked.year, picked.month, picked.day);
+                if (endDate.isBefore(beginDate)) {
+                  beginDate = endDate;
+                }
+              });
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 18,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: const [
+                        Icon(
+                          Icons.assessment_outlined,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'General Ledger Report',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Pick a beginning and end date, then choose PDF or Excel file output.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDatePickerTile(
+                      label: 'Beginning Date',
+                      value: _fullDateFormat.format(beginDate),
+                      onTap: pickBeginDate,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildDatePickerTile(
+                      label: 'End Date',
+                      value: _fullDateFormat.format(endDate),
+                      onTap: pickEndDate,
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'File Format',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('PDF'),
+                          selected: selectedType == _ReportFileType.pdf,
+                          onSelected: (_) => setSheetState(() {
+                            selectedType = _ReportFileType.pdf;
+                          }),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Excel'),
+                          selected: selectedType == _ReportFileType.excel,
+                          onSelected: (_) => setSheetState(() {
+                            selectedType = _ReportFileType.excel;
+                          }),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              side: const BorderSide(
+                                color: AppColors.outlineVariant,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: () {
+                              Navigator.of(sheetContext).pop(
+                                _LedgerReportRequest(
+                                  beginDate: beginDate,
+                                  endDate: endDate,
+                                  fileType: selectedType,
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.download_rounded, size: 16),
+                            label: const Text('Generate'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (request == null || !mounted) {
+      return;
+    }
+
+    if (request.endDate.isBefore(request.beginDate)) {
+      _showSnack(
+        'End date must be the same or later than beginning date.',
+        isError: true,
+      );
+      return;
+    }
+
+    await _generateGeneralLedgerReport(request);
+  }
+
+  Widget _buildDatePickerTile({
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: AppColors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.calendar_month_rounded,
+                color: AppColors.primary,
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateGeneralLedgerReport(
+    _LedgerReportRequest request,
+  ) async {
+    _showSnack('Preparing report...');
+
+    try {
+      final entries = await _loadLedgerEntriesForRange(
+        request.beginDate,
+        request.endDate,
+      );
+
+      if (entries.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+        _showSnack('No ledger records found for the selected date range.');
+        return;
+      }
+
+      final reportsDir = await _resolveSaveDirectory();
+      if (reportsDir == null) {
+        _showSnack('Report generation canceled. No folder selected.');
+        return;
+      }
+
+      _showSnack('Generating general ledger report...');
+
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final filePath = path.join(
+        reportsDir.path,
+        request.fileType == _ReportFileType.pdf
+            ? 'general_ledger_$timestamp.pdf'
+            : 'general_ledger_$timestamp.xlsx',
+      );
+
+      if (request.fileType == _ReportFileType.pdf) {
+        final bytes = await _buildPdfReport(
+          entries: entries,
+          beginDate: request.beginDate,
+          endDate: request.endDate,
+          totals: _calculateLedgerTotals(entries),
+        );
+        await File(filePath).writeAsBytes(bytes, flush: true);
+      } else {
+        final bytes = _buildExcelReport(
+          entries: entries,
+          beginDate: request.beginDate,
+          endDate: request.endDate,
+          totals: _calculateLedgerTotals(entries),
+        );
+        await File(filePath).writeAsBytes(bytes, flush: true);
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      _showSnack('Report generated successfully. Saved to $filePath');
+
+      if (!_supportsShareSheet) {
+        return;
+      }
+
+      try {
+        await Share.shareXFiles(
+          [XFile(filePath)],
+          text:
+              'General Ledger Report (${_fullDateFormat.format(request.beginDate)} - ${_fullDateFormat.format(request.endDate)})',
+        );
+      } catch (shareError, shareStack) {
+        debugPrint(
+          'Share failed for generated report: $shareError\n$shareStack',
+        );
+        _showSnack(
+          'Report generated, but sharing is unavailable on this device. File is saved locally.',
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Report generation failed: $error\n$stackTrace');
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Failed to generate report. Please try again.', isError: true);
+    }
+  }
+
+  Future<Directory?> _resolveSaveDirectory() async {
+    try {
+      final fallbackDir = await _resolveReportsDirectory();
+      final selectedPath = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Choose folder to save General Ledger report',
+        initialDirectory: fallbackDir.path,
+      );
+
+      if (selectedPath == null || selectedPath.trim().isEmpty) {
+        return null;
+      }
+
+      final selectedDir = Directory(selectedPath);
+      if (!await selectedDir.exists()) {
+        await selectedDir.create(recursive: true);
+      }
+      return selectedDir;
+    } catch (error, stackTrace) {
+      debugPrint('Directory picker failed: $error\n$stackTrace');
+      // Fall back to the app reports folder when directory picker is unavailable.
+      return _resolveReportsDirectory();
+    }
+  }
+
+  bool get _supportsShareSheet => Platform.isAndroid || Platform.isIOS;
+
+  Future<Directory> _resolveReportsDirectory() async {
+    final root = await getApplicationDocumentsDirectory();
+    final reportDir = Directory(path.join(root.path, 'reports'));
+    if (!await reportDir.exists()) {
+      await reportDir.create(recursive: true);
+    }
+    return reportDir;
+  }
+
+  Future<List<_LedgerExportRow>> _loadLedgerEntriesForRange(
+    DateTime beginDate,
+    DateTime endDate,
+  ) async {
+    final start = DateTime(beginDate.year, beginDate.month, beginDate.day);
+    final end = DateTime(
+      endDate.year,
+      endDate.month,
+      endDate.day,
+      23,
+      59,
+      59,
+      999,
+    );
+
+    final db = await _database.database;
+    final rows = await db.query(
+      AppDatabase.ledgerTable,
+      where: 'created_at >= ? AND created_at <= ?',
+      whereArgs: [start.toIso8601String(), end.toIso8601String()],
+      orderBy: 'created_at ASC, id ASC',
+    );
+
+    double runningBalance = 0;
+    return rows
+        .map((row) {
+          final createdAt = DateTime.parse(row['created_at'] as String);
+          final iconKey = row['icon_key'] as String;
+          final amount = (row['amount'] as num).toDouble();
+          final isOutflow = iconKey == 'cash_out';
+          final inflow = isOutflow ? 0.0 : amount;
+          final outflow = isOutflow ? amount : 0.0;
+          runningBalance += inflow - outflow;
+
+          return _LedgerExportRow(
+            createdAt: createdAt,
+            entryType: row['entry_type'] as String,
+            title: row['title'] as String,
+            tag: row['tag'] as String,
+            reference: (row['reference'] as String?) ?? '',
+            notes: (row['note'] as String?) ?? '',
+            inflow: inflow,
+            outflow: outflow,
+            runningBalance: runningBalance,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  Future<List<int>> _buildPdfReport({
+    required List<_LedgerExportRow> entries,
+    required DateTime beginDate,
+    required DateTime endDate,
+    required _LedgerTotals totals,
+  }) async {
+    final pdf = pw.Document();
+    final timestamp = DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now());
+    final dateFormat = DateFormat('dd MMM yyyy HH:mm');
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) {
+          return [
+            pw.Text(
+              'General Ledger Report',
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Period: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
+              style: const pw.TextStyle(fontSize: 11),
+            ),
+            pw.Text(
+              'Generated: $timestamp',
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.SizedBox(height: 12),
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+                fontSize: 9,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.blue700,
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellAlignment: pw.Alignment.centerLeft,
+              headers: const [
+                'Date/Time',
+                'Title',
+                'Tag',
+                'Reference',
+                'Notes',
+                'Inflow',
+                'Outflow',
+                'Running Balance',
+              ],
+              data: entries
+                  .map(
+                    (entry) => [
+                      dateFormat.format(entry.createdAt),
+                      _pdfSafeText(entry.title),
+                      _pdfSafeText(entry.tag),
+                      _pdfSafeText(entry.reference),
+                      _pdfSafeText(entry.notes),
+                      entry.inflow > 0 ? _reportCurrency(entry.inflow) : '',
+                      entry.outflow > 0 ? _reportCurrency(entry.outflow) : '',
+                      _reportCurrency(entry.runningBalance),
+                    ],
+                  )
+                  .toList(growable: false),
+            ),
+            pw.SizedBox(height: 12),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                border: pw.Border.all(color: PdfColors.grey400),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Total Inflow: ${_reportCurrency(totals.totalInflow)}',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    'Total Outflow: ${_reportCurrency(totals.totalOutflow)}',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    'Net: ${_reportCurrency(totals.net)}',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  List<int> _buildExcelReport({
+    required List<_LedgerExportRow> entries,
+    required DateTime beginDate,
+    required DateTime endDate,
+    required _LedgerTotals totals,
+  }) {
+    final excel = ex.Excel.createExcel();
+    final sheet = excel['General Ledger'];
+    final dateFormat = DateFormat('dd MMM yyyy HH:mm');
+
+    sheet.appendRow([
+      ex.TextCellValue('General Ledger Report'),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+    ]);
+    sheet.appendRow([
+      ex.TextCellValue(
+        'Period: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
+      ),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+    ]);
+    sheet.appendRow([
+      ex.TextCellValue(
+        'Generated: ${DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now())}',
+      ),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+    ]);
+    sheet.appendRow([
+      ex.TextCellValue('Date/Time'),
+      ex.TextCellValue('Title'),
+      ex.TextCellValue('Tag'),
+      ex.TextCellValue('Reference'),
+      ex.TextCellValue('Notes'),
+      ex.TextCellValue('Inflow'),
+      ex.TextCellValue('Outflow'),
+      ex.TextCellValue('Running Balance'),
+    ]);
+
+    for (final entry in entries) {
+      sheet.appendRow([
+        ex.TextCellValue(dateFormat.format(entry.createdAt)),
+        ex.TextCellValue(entry.title),
+        ex.TextCellValue(entry.tag),
+        ex.TextCellValue(entry.reference),
+        ex.TextCellValue(entry.notes),
+        ex.TextCellValue(entry.inflow > 0 ? _reportCurrency(entry.inflow) : ''),
+        ex.TextCellValue(
+          entry.outflow > 0 ? _reportCurrency(entry.outflow) : '',
+        ),
+        ex.TextCellValue(_reportCurrency(entry.runningBalance)),
+      ]);
+    }
+
+    sheet.appendRow([
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue('TOTALS'),
+      ex.TextCellValue(_reportCurrency(totals.totalInflow)),
+      ex.TextCellValue(_reportCurrency(totals.totalOutflow)),
+      ex.TextCellValue(_reportCurrency(totals.net)),
+    ]);
+
+    final bytes = excel.encode();
+    if (bytes == null) {
+      throw Exception('Unable to encode excel bytes.');
+    }
+    return bytes;
+  }
+
+  _LedgerTotals _calculateLedgerTotals(List<_LedgerExportRow> entries) {
+    double totalInflow = 0;
+    double totalOutflow = 0;
+
+    for (final entry in entries) {
+      totalInflow += entry.inflow;
+      totalOutflow += entry.outflow;
+    }
+
+    return _LedgerTotals(
+      totalInflow: totalInflow,
+      totalOutflow: totalOutflow,
+      net: totalInflow - totalOutflow,
+    );
+  }
+
+  String _reportCurrency(double amount) {
+    return 'PHP ${amount.toStringAsFixed(2)}';
+  }
+
+  String _pdfSafeText(String value) {
+    return value
+        .replaceAll('₱', 'PHP ')
+        .replaceAll(RegExp(r'[\u2018\u2019\u201C\u201D]'), '"')
+        .replaceAll(RegExp(r'[^\x20-\x7E]'), ' ')
+        .trim();
+  }
+
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      return;
+    }
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   String _resolveTransactionAccountNumber(String reference, String note) {
     final numericRef = reference.replaceAll(RegExp(r'[^0-9]'), '');
     if (numericRef.isNotEmpty) {
@@ -785,4 +1471,54 @@ class _HistoryRow {
   final String tag;
   final String iconKey;
   final DateTime createdAt;
+}
+
+enum _ReportFileType { pdf, excel }
+
+class _LedgerReportRequest {
+  const _LedgerReportRequest({
+    required this.beginDate,
+    required this.endDate,
+    required this.fileType,
+  });
+
+  final DateTime beginDate;
+  final DateTime endDate;
+  final _ReportFileType fileType;
+}
+
+class _LedgerExportRow {
+  const _LedgerExportRow({
+    required this.createdAt,
+    required this.entryType,
+    required this.title,
+    required this.tag,
+    required this.reference,
+    required this.notes,
+    required this.inflow,
+    required this.outflow,
+    required this.runningBalance,
+  });
+
+  final DateTime createdAt;
+  final String entryType;
+  final String title;
+  final String tag;
+  final String reference;
+  final String notes;
+  final double inflow;
+  final double outflow;
+  final double runningBalance;
+}
+
+class _LedgerTotals {
+  const _LedgerTotals({
+    required this.totalInflow,
+    required this.totalOutflow,
+    required this.net,
+  });
+
+  final double totalInflow;
+  final double totalOutflow;
+  final double net;
 }

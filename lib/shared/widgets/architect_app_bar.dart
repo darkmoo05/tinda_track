@@ -5,11 +5,7 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
 
-  const ArchitectAppBar({
-    super.key,
-    required this.title,
-    this.actions,
-  });
+  const ArchitectAppBar({super.key, required this.title, this.actions});
 
   @override
   Widget build(BuildContext context) {
@@ -42,17 +38,18 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         ],
       ),
-      actions: actions ?? [
-        IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.search_rounded, color: AppColors.onSurfaceVariant),
-        ),
-        IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.account_circle_outlined, color: AppColors.onSurfaceVariant),
-        ),
-        const SizedBox(width: 8),
-      ],
+      actions:
+          actions ??
+          [
+            IconButton(
+              onPressed: () {},
+              icon: const Icon(
+                Icons.settings_outlined,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
     );
   }
 

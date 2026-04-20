@@ -36,7 +36,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: ArchitectAppBar(
-        title: 'Financial Architect',
+        title: 'PocketLedger',
         actions: [
           IconButton(
             onPressed: () {},
@@ -215,21 +215,22 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
 
   List<PartyRecord> _applySearch(List<PartyRecord> parties) {
     final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) {
-      return parties;
-    }
+    final filtered = query.isEmpty
+        ? List<PartyRecord>.of(parties)
+        : parties
+              .where((party) {
+                final searchable = [
+                  party.name,
+                  party.entityId,
+                  party.accountNumber,
+                  party.description,
+                ].join(' ').toLowerCase();
+                return searchable.contains(query);
+              })
+              .toList(growable: false);
 
-    return parties
-        .where((party) {
-          final searchable = [
-            party.name,
-            party.entityId,
-            party.accountNumber,
-            party.description,
-          ].join(' ').toLowerCase();
-          return searchable.contains(query);
-        })
-        .toList(growable: false);
+    filtered.sort((a, b) => b.id.compareTo(a.id));
+    return filtered;
   }
 
   Future<void> _onAddParty() async {
@@ -253,23 +254,90 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete Party',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Are you sure you want to delete "${party.name}"? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+        backgroundColor: AppColors.surfaceContainerLowest,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        title: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+          child: Column(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.person_remove_rounded,
+                  color: AppColors.error,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Delete Party',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Are you sure you want to delete "${party.name}"? This action cannot be undone.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+        ),
+        content: const SizedBox.shrink(),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: AppColors.outlineVariant),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  icon: const Icon(
+                    Icons.delete_rounded,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  label: const Text(
+                    'Delete',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -365,18 +433,49 @@ class _EditPartyDialogState extends State<_EditPartyDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      titlePadding: EdgeInsets.zero,
       contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      title: const Text(
-        'Edit Party',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      title: Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.06),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.edit_rounded,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Edit Party',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ],
+        ),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 12),
           const Text(
             'Update the party details below.',
             style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
@@ -408,20 +507,45 @@ class _EditPartyDialogState extends State<_EditPartyDialog> {
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton.icon(
-          onPressed: _isSaving ? null : _onSave,
-          icon: _isSaving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.save_outlined, size: 18),
-          label: Text(_isSaving ? 'Saving…' : 'Save Changes'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: const BorderSide(color: AppColors.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: _isSaving ? null : _onSave,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save_outlined, size: 16),
+                label: Text(_isSaving ? 'Saving…' : 'Save Changes'),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -544,18 +668,49 @@ class _AddPartyDialogState extends State<_AddPartyDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      titlePadding: EdgeInsets.zero,
       contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      title: const Text(
-        'Add Party',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      title: Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+        decoration: BoxDecoration(
+          color: AppColors.secondary.withValues(alpha: 0.06),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.secondary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.person_add_alt_1_rounded,
+                color: AppColors.secondary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Add Party',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ],
+        ),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 12),
           const Text(
             'Create a new party record for Active Entities.',
             style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
@@ -587,20 +742,50 @@ class _AddPartyDialogState extends State<_AddPartyDialog> {
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton.icon(
-          onPressed: _isSaving ? null : _onAdd,
-          icon: _isSaving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.person_add_alt_1_rounded, size: 18),
-          label: Text(_isSaving ? 'Saving…' : 'Add Party'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: const BorderSide(color: AppColors.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.secondary,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: _isSaving ? null : _onAdd,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.person_add_alt_1_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                label: Text(_isSaving ? 'Saving…' : 'Add Party'),
+              ),
+            ),
+          ],
         ),
       ],
     );

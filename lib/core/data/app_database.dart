@@ -127,7 +127,6 @@ class AppDatabase {
           }
         },
         onOpen: (db) async {
-          await _seedLedgerIfEmpty(db);
           await _seedTransactionTypesIfEmpty(db);
           await _seedOwnerMovementCategoriesIfEmpty(db);
           await _backfillDefaultOutflowTypes(db);
@@ -229,22 +228,6 @@ class AppDatabase {
         created_at TEXT NOT NULL
       )
     ''');
-  }
-
-  Future<void> _seedLedgerIfEmpty(Database db) async {
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) AS count FROM $ledgerTable',
-    );
-    final count = (result.first['count'] as int?) ?? 0;
-    if (count > 0) {
-      return;
-    }
-
-    final batch = db.batch();
-    for (final entry in _seedEntries) {
-      batch.insert(ledgerTable, entry);
-    }
-    await batch.commit(noResult: true);
   }
 
   Future<void> _removeLegacyDummyParties(Database db) async {
@@ -496,61 +479,6 @@ class AppDatabase {
     'Groceries',
     'Shopping',
     'Transportation',
-  ];
-
-  List<Map<String, Object>> get _seedEntries => [
-    {
-      'entry_type': 'owner_movement',
-      'title': 'Initial Capital - GCash',
-      'note': 'Owner recorded startup wallet capital.',
-      'reference': 'CAP-0001',
-      'amount': 5000.0,
-      'wallet_delta': 5000.0,
-      'on_hand_delta': 0.0,
-      'recorded_flow': 5000.0,
-      'tag': 'Owner Movement',
-      'icon_key': 'wallet',
-      'created_at': '2026-04-11T08:15:00.000',
-    },
-    {
-      'entry_type': 'owner_movement',
-      'title': 'Initial Capital - On-Hand Cash',
-      'note': 'Owner recorded startup cash drawer capital.',
-      'reference': 'CAP-0002',
-      'amount': 4000.0,
-      'wallet_delta': 0.0,
-      'on_hand_delta': 4000.0,
-      'recorded_flow': 4000.0,
-      'tag': 'Owner Movement',
-      'icon_key': 'cash',
-      'created_at': '2026-04-11T08:30:00.000',
-    },
-    {
-      'entry_type': 'transaction',
-      'title': 'GCash Cash In',
-      'note': 'Customer cash-in worth P1,000 processed from wallet float.',
-      'reference': 'TXN-1000',
-      'amount': 1000.0,
-      'wallet_delta': -1000.0,
-      'on_hand_delta': 1000.0,
-      'recorded_flow': 1000.0,
-      'tag': 'Transaction',
-      'icon_key': 'cash_in',
-      'created_at': '2026-04-13T10:05:00.000',
-    },
-    {
-      'entry_type': 'transaction',
-      'title': 'GCash Cash Out',
-      'note': 'Customer cash-out worth P300 released from on-hand cash.',
-      'reference': 'TXN-0300',
-      'amount': 300.0,
-      'wallet_delta': 300.0,
-      'on_hand_delta': -300.0,
-      'recorded_flow': 300.0,
-      'tag': 'Transaction',
-      'icon_key': 'cash_out',
-      'created_at': '2026-04-14T15:20:00.000',
-    },
   ];
 }
 
