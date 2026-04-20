@@ -58,6 +58,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 label: 'GCash Wallet Balance',
               ),
+              const SizedBox(height: 16),
+              ArchitectBalanceHero(
+                balance: _dashboardRepository.formatCurrency(
+                  dashboard.mayaWalletBalance,
+                ),
+                label: 'Maya Wallet Balance',
+                backgroundColor: AppColors.secondary,
+                glowColor: AppColors.secondary,
+              ),
               const SizedBox(height: 24),
               _buildOnHandCashCard(context, dashboard),
               const SizedBox(height: 24),
@@ -81,9 +90,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 24),
               IncomeArchitectureCard(
                 walletSpots: dashboard.walletSpots,
+                mayaSpots: dashboard.mayaSpots,
                 cashSpots: dashboard.cashSpots,
                 xLabels: dashboard.xLabels,
                 walletTotal: dashboard.walletBalance,
+                mayaTotal: dashboard.mayaWalletBalance,
                 onHandTotal: dashboard.onHandCash,
               ),
               const SizedBox(height: 32),
@@ -263,9 +274,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             runSpacing: 8,
             children: [
               _buildBreakdownChip(
-                label: 'Wallet',
+                label: 'Gcash',
                 value: _dashboardRepository.formatCurrency(
                   dashboard.businessWalletBalance,
+                ),
+              ),
+              _buildBreakdownChip(
+                label: 'Maya',
+                value: _dashboardRepository.formatCurrency(
+                  dashboard.businessMayaWalletBalance,
                 ),
               ),
               _buildBreakdownChip(
@@ -275,7 +292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               _buildBreakdownChip(
-                label: 'Owner adj',
+                label: 'Owner Borrowed',
                 value: _dashboardRepository.formatCurrency(
                   dashboard.ownerCreditAdjustment,
                 ),

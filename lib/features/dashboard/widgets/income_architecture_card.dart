@@ -6,16 +6,20 @@ class IncomeArchitectureCard extends StatefulWidget {
   const IncomeArchitectureCard({
     super.key,
     this.walletSpots,
+    this.mayaSpots,
     this.cashSpots,
     this.xLabels,
     this.walletTotal,
+    this.mayaTotal,
     this.onHandTotal,
   });
 
   final List<FlSpot>? walletSpots;
+  final List<FlSpot>? mayaSpots;
   final List<FlSpot>? cashSpots;
   final List<String>? xLabels;
   final double? walletTotal;
+  final double? mayaTotal;
   final double? onHandTotal;
 
   @override
@@ -43,6 +47,16 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     FlSpot(5, 3.42),
   ];
 
+  // Maya trend data points
+  final List<FlSpot> _mayaSpots = const [
+    FlSpot(0, 1.2),
+    FlSpot(1, 1.4),
+    FlSpot(2, 1.1),
+    FlSpot(3, 1.6),
+    FlSpot(4, 1.5),
+    FlSpot(5, 1.8),
+  ];
+
   final List<String> _xLabels = const [
     '1 Oct',
     '7 Oct',
@@ -55,11 +69,13 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
   @override
   Widget build(BuildContext context) {
     final walletSpots = widget.walletSpots ?? _gcashSpots;
+    final mayaSpots = widget.mayaSpots ?? _mayaSpots;
     final cashSpots = widget.cashSpots ?? _cashSpots;
     final xLabels = widget.xLabels ?? _xLabels;
     final walletTotal = widget.walletTotal ?? _resolveLatestTotal(walletSpots);
+    final mayaTotal = widget.mayaTotal ?? _resolveLatestTotal(mayaSpots);
     final onHandTotal = widget.onHandTotal ?? _resolveLatestTotal(cashSpots);
-    final combinedTotal = walletTotal + onHandTotal;
+    final combinedTotal = walletTotal + mayaTotal + onHandTotal;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -79,13 +95,21 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         children: [
           _buildHeader(context),
           const SizedBox(height: 14),
-          _buildTotalsRow(context, walletTotal, onHandTotal, combinedTotal),
+          _buildTotalsRow(
+            context,
+            walletTotal,
+            mayaTotal,
+            onHandTotal,
+            combinedTotal,
+          ),
           const SizedBox(height: 16),
           _buildLegend(),
           const SizedBox(height: 20),
           SizedBox(
             height: 160,
-            child: LineChart(_buildChartData(walletSpots, cashSpots, xLabels)),
+            child: LineChart(
+              _buildChartData(walletSpots, mayaSpots, cashSpots, xLabels),
+            ),
           ),
         ],
       ),
@@ -105,7 +129,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         ),
         const SizedBox(height: 2),
         Text(
-          'Daily closing balances for your GCash wallet and on-hand cash',
+          'Daily closing balances for GCash, Maya, and on-hand cash',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceVariant),
@@ -124,15 +148,19 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
   Widget _buildTotalsRow(
     BuildContext context,
     double walletTotal,
+    double mayaTotal,
     double onHandTotal,
     double combinedTotal,
   ) {
     final textTheme = Theme.of(context).textTheme;
     return Column(
       children: [
-        Row(
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
           children: [
-            Expanded(
+            SizedBox(
+              width: 170,
               child: _amountPill(
                 label: 'GCash Wallet',
                 value: walletTotal,
@@ -140,12 +168,21 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
                 textTheme: textTheme,
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
+            SizedBox(
+              width: 170,
+              child: _amountPill(
+                label: 'Maya Wallet',
+                value: mayaTotal,
+                color: AppColors.secondary,
+                textTheme: textTheme,
+              ),
+            ),
+            SizedBox(
+              width: 170,
               child: _amountPill(
                 label: 'On-hand Cash',
                 value: onHandTotal,
-                color: AppColors.secondary,
+                color: const Color(0xFF8E6C00),
                 textTheme: textTheme,
               ),
             ),
@@ -234,7 +271,9 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
       children: [
         _legendDot(AppColors.primary, 'GCash'),
         const SizedBox(width: 16),
-        _legendDot(AppColors.secondary, 'On-hand Cash'),
+        _legendDot(AppColors.secondary, 'Maya'),
+        const SizedBox(width: 16),
+        _legendDot(const Color(0xFF8E6C00), 'On-hand Cash'),
       ],
     );
   }
@@ -262,12 +301,14 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
 
   LineChartData _buildChartData(
     List<FlSpot> walletSpots,
+    List<FlSpot> mayaSpots,
     List<FlSpot> cashSpots,
     List<String> xLabels,
   ) {
     final maxX = xLabels.isEmpty ? 0.0 : (xLabels.length - 1).toDouble();
     final maxYValue = [
       ...walletSpots.map((spot) => spot.y),
+      ...mayaSpots.map((spot) => spot.y),
       ...cashSpots.map((spot) => spot.y),
       1.0,
     ].reduce((value, element) => value > element ? value : element);
@@ -348,9 +389,9 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
             ),
           ),
         ),
-        // Cash line — secondary green
+        // Maya line — secondary green
         LineChartBarData(
-          spots: cashSpots,
+          spots: mayaSpots,
           isCurved: true,
           color: AppColors.secondary,
           barWidth: 2.5,
@@ -377,6 +418,35 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
             ),
           ),
         ),
+        // Cash line — amber
+        LineChartBarData(
+          spots: cashSpots,
+          isCurved: true,
+          color: const Color(0xFF8E6C00),
+          barWidth: 2.5,
+          isStrokeCapRound: true,
+          dotData: FlDotData(
+            show: true,
+            getDotPainter: (spot, touchedSpotIndex, barData, spotIndex) =>
+                FlDotCirclePainter(
+                  radius: 3,
+                  color: const Color(0xFF8E6C00),
+                  strokeWidth: 1.5,
+                  strokeColor: Colors.white,
+                ),
+          ),
+          belowBarData: BarAreaData(
+            show: true,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFF8E6C00).withValues(alpha: 0.12),
+                const Color(0xFF8E6C00).withValues(alpha: 0.0),
+              ],
+            ),
+          ),
+        ),
       ],
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
@@ -384,13 +454,15 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
           tooltipRoundedRadius: 8,
           getTooltipItems: (touchedSpots) {
             return touchedSpots.map((spot) {
-              final isGcash = spot.barIndex == 0;
+              final tooltipColor = switch (spot.barIndex) {
+                0 => AppColors.primaryContainer,
+                1 => AppColors.secondaryContainer,
+                _ => const Color(0xFFF8E287),
+              };
               return LineTooltipItem(
                 '₱ ${(spot.y * 1000).toStringAsFixed(0)}',
                 TextStyle(
-                  color: isGcash
-                      ? AppColors.primaryContainer
-                      : AppColors.secondaryContainer,
+                  color: tooltipColor,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),

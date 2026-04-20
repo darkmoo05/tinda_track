@@ -35,7 +35,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
   late Future<List<_HistoryRow>> _historyFuture;
   String _searchQuery = '';
-  DateTime? _selectedDateFilter;
+  DateTime? _beginDateFilter;
+  DateTime? _endDateFilter;
+  String? _selectedWalletFilter;
 
   @override
   void initState() {
@@ -302,19 +304,19 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             ),
             const SizedBox(width: 12),
             Material(
-              color: _selectedDateFilter == null
+              color: _beginDateFilter == null && _endDateFilter == null
                   ? const Color(0xFFEEEEF0)
                   : AppColors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
-                onTap: _pickDateFilter,
+                onTap: _pickBeginDateFilter,
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   child: Icon(
                     Icons.calendar_month_rounded,
                     size: 24,
-                    color: _selectedDateFilter == null
+                    color: _beginDateFilter == null && _endDateFilter == null
                         ? AppColors.primary
                         : AppColors.primary,
                   ),
@@ -323,42 +325,167 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             ),
           ],
         ),
-        if (_selectedDateFilter != null) ...[
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildWalletFilterCard(
+                label: 'GCash',
+                icon: Icons.account_balance_wallet_outlined,
+                color: AppColors.primary,
+                walletKey: 'gcash',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildWalletFilterCard(
+                label: 'Maya',
+                icon: Icons.wallet_rounded,
+                color: AppColors.secondary,
+                walletKey: 'maya',
+              ),
+            ),
+          ],
+        ),
+        if (_beginDateFilter != null || _endDateFilter != null) ...[
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              Chip(
-                label: Text(
-                  'Date: ${_fullDateFormat.format(_selectedDateFilter!)}',
+              if (_beginDateFilter != null)
+                Chip(
+                  label: Text(
+                    'Begin: ${_fullDateFormat.format(_beginDateFilter!)}',
+                  ),
+                  labelStyle: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                  side: BorderSide.none,
+                  deleteIcon: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  onDeleted: () {
+                    setState(() {
+                      _beginDateFilter = null;
+                    });
+                  },
                 ),
-                labelStyle: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
+              if (_endDateFilter != null)
+                Chip(
+                  label: Text(
+                    'End: ${_fullDateFormat.format(_endDateFilter!)}',
+                  ),
+                  labelStyle: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                  side: BorderSide.none,
+                  deleteIcon: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  onDeleted: () {
+                    setState(() {
+                      _endDateFilter = null;
+                    });
+                  },
                 ),
-                backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                side: BorderSide.none,
-                deleteIcon: const Icon(
-                  Icons.close_rounded,
-                  size: 18,
-                  color: AppColors.primary,
-                ),
-                onDeleted: () {
-                  setState(() {
-                    _selectedDateFilter = null;
-                  });
-                },
-              ),
             ],
           ),
         ],
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickBeginDateFilter,
+                icon: const Icon(Icons.event_available_rounded, size: 16),
+                label: Text(
+                  _beginDateFilter == null
+                      ? 'Beginning Date'
+                      : _fullDateFormat.format(_beginDateFilter!),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickEndDateFilter,
+                icon: const Icon(Icons.event_rounded, size: 16),
+                label: Text(
+                  _endDateFilter == null
+                      ? 'End Date'
+                      : _fullDateFormat.format(_endDateFilter!),
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 
+  Widget _buildWalletFilterCard({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required String walletKey,
+  }) {
+    final isSelected = _selectedWalletFilter == walletKey;
+
+    return Material(
+      color: isSelected
+          ? color.withValues(alpha: 0.14)
+          : AppColors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          setState(() {
+            _selectedWalletFilter = isSelected ? null : walletKey;
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected ? color : AppColors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? color : AppColors.onSurface,
+                  ),
+                ),
+              ),
+              if (isSelected)
+                Icon(Icons.check_circle_rounded, size: 18, color: color),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   List<_HistoryRow> _filterItems(List<_HistoryRow> items) {
-    if (_searchQuery.isEmpty && _selectedDateFilter == null) {
+    if (_searchQuery.isEmpty &&
+        _beginDateFilter == null &&
+        _endDateFilter == null &&
+        _selectedWalletFilter == null) {
       return items;
     }
 
@@ -370,48 +497,105 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             item.reference,
             item.rawReference,
             item.accountNumber ?? '',
+            item.walletAccount,
             item.note,
           ];
 
           final matchesSearch =
               _searchQuery.isEmpty ||
               fields.any((field) => field.toLowerCase().contains(_searchQuery));
-          final matchesDate =
-              _selectedDateFilter == null ||
-              _isSameDate(item.createdAt, _selectedDateFilter!);
+          final itemDate = DateTime(
+            item.createdAt.year,
+            item.createdAt.month,
+            item.createdAt.day,
+          );
+          final matchesBeginDate =
+              _beginDateFilter == null || !itemDate.isBefore(_beginDateFilter!);
+          final matchesEndDate =
+              _endDateFilter == null || !itemDate.isAfter(_endDateFilter!);
+          final isTransaction = item.entryType == 'transaction';
+          final isMayaTransaction = _isMayaTransaction(item);
+          final matchesWallet =
+              _selectedWalletFilter == null ||
+              !isTransaction ||
+              (_selectedWalletFilter == 'maya' && isMayaTransaction) ||
+              (_selectedWalletFilter == 'gcash' && !isMayaTransaction);
 
-          return matchesSearch && matchesDate;
+          return matchesSearch &&
+              matchesBeginDate &&
+              matchesEndDate &&
+              matchesWallet;
         })
         .toList(growable: false);
   }
 
-  Future<void> _pickDateFilter() async {
+  Future<void> _pickBeginDateFilter() async {
     final now = DateTime.now();
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _selectedDateFilter ?? now,
+      initialDate: _beginDateFilter ?? _endDateFilter ?? now,
       firstDate: DateTime(now.year - 5),
       lastDate: DateTime(now.year + 5),
-      helpText: 'Filter Transactions By Date',
+      helpText: 'Filter Begin Date',
     );
 
     if (pickedDate == null) {
       return;
     }
 
+    final normalized = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+    );
+
     setState(() {
-      _selectedDateFilter = DateTime(
-        pickedDate.year,
-        pickedDate.month,
-        pickedDate.day,
-      );
+      _beginDateFilter = normalized;
+      if (_endDateFilter != null && _endDateFilter!.isBefore(normalized)) {
+        _endDateFilter = normalized;
+      }
     });
   }
 
-  bool _isSameDate(DateTime left, DateTime right) {
-    return left.year == right.year &&
-        left.month == right.month &&
-        left.day == right.day;
+  Future<void> _pickEndDateFilter() async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _endDateFilter ?? _beginDateFilter ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 5),
+      helpText: 'Filter End Date',
+    );
+
+    if (pickedDate == null) {
+      return;
+    }
+
+    final normalized = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+    );
+
+    setState(() {
+      _endDateFilter = normalized;
+      if (_beginDateFilter != null && _beginDateFilter!.isAfter(normalized)) {
+        _beginDateFilter = normalized;
+      }
+    });
+  }
+
+  bool _isMayaTransaction(_HistoryRow item) {
+    if (item.entryType != 'transaction') {
+      return false;
+    }
+
+    final walletLabel = item.walletAccount.trim().toLowerCase();
+    if (walletLabel.contains('maya')) {
+      return true;
+    }
+
+    return item.iconKey.startsWith('maya_');
   }
 
   List<Widget> _groupItemsByDate(List<_HistoryRow> items) {
@@ -425,7 +609,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         grouped.add(ArchitectDateHeader(label: dateLabel));
       }
 
-      final isOutgoing = item.iconKey == 'cash_out';
+      final isOutgoing =
+          item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
       grouped.add(
         ArchitectActivityTile(
           title: item.title,
@@ -445,7 +630,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Future<void> _showTransactionDetails(_HistoryRow item) async {
-    final isOutgoing = item.iconKey == 'cash_out';
+    final isOutgoing =
+        item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
     final accentColor = isOutgoing ? AppColors.error : AppColors.secondary;
     final amountText =
         '${isOutgoing ? '-' : '+'} ${_currencyFormat.format(item.amount)}';
@@ -458,6 +644,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         item.rawReference.trim().isNotEmpty &&
         item.rawReference.trim() != (item.accountNumber ?? '').trim();
     final hasAccountNumber = (item.accountNumber ?? '').trim().isNotEmpty;
+    final hasWalletAccount = item.walletAccount.trim().isNotEmpty;
     final hasNotes = item.note.trim().isNotEmpty;
 
     await showDialog<void>(
@@ -546,6 +733,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                         children: [
                           _buildDetailRow('Title', item.title),
                           _buildDetailRow('Category', item.tag),
+                          if (hasWalletAccount)
+                            _buildDetailRow(
+                              'Wallet Account',
+                              item.walletAccount,
+                            ),
                           if (hasDistinctReferenceId)
                             _buildDetailRow('Reference ID', item.rawReference),
                           if (hasAccountNumber)
@@ -697,6 +889,17 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         .map((row) {
           final entryType = row['entry_type'] as String;
           final reference = row['reference'] as String;
+          final walletAccount = (row['wallet_account'] as String?) ?? '';
+          final rawIconKey = row['icon_key'] as String;
+          final iconKey = walletAccount == 'Maya Wallet'
+              ? (rawIconKey == 'cash_in'
+                    ? 'maya_cash_in'
+                    : rawIconKey == 'cash_out'
+                    ? 'maya_cash_out'
+                    : rawIconKey == 'wallet'
+                    ? 'maya_wallet'
+                    : rawIconKey)
+              : rawIconKey;
           final displayReference = entryType == 'transaction'
               ? _resolveTransactionAccountNumber(
                   reference,
@@ -710,10 +913,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             reference: displayReference,
             rawReference: reference,
             accountNumber: entryType == 'transaction' ? displayReference : null,
+            walletAccount: walletAccount,
             note: (row['note'] as String?) ?? '',
             amount: (row['amount'] as num).toDouble(),
             tag: row['tag'] as String,
-            iconKey: row['icon_key'] as String,
+            iconKey: iconKey,
             createdAt: DateTime.parse(row['created_at'] as String),
           );
         })
@@ -1420,11 +1624,17 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     switch (iconKey) {
       case 'wallet':
         return Icons.account_balance_wallet_outlined;
+      case 'maya_wallet':
+        return Icons.wallet_rounded;
       case 'cash':
         return Icons.payments_outlined;
       case 'cash_in':
         return Icons.call_made_rounded;
+      case 'maya_cash_in':
+        return Icons.call_made_rounded;
       case 'cash_out':
+        return Icons.call_received_rounded;
+      case 'maya_cash_out':
         return Icons.call_received_rounded;
       default:
         return Icons.receipt_long_rounded;
@@ -1435,12 +1645,18 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     switch (iconKey) {
       case 'wallet':
         return AppColors.primary;
+      case 'maya_wallet':
+        return AppColors.secondary;
       case 'cash':
         return AppColors.secondary;
       case 'cash_in':
         return AppColors.secondary;
+      case 'maya_cash_in':
+        return AppColors.secondary;
       case 'cash_out':
         return AppColors.error;
+      case 'maya_cash_out':
+        return AppColors.secondary;
       default:
         return AppColors.onSurfaceVariant;
     }
@@ -1453,6 +1669,7 @@ class _HistoryRow {
     required this.title,
     required this.reference,
     required this.rawReference,
+    required this.walletAccount,
     required this.note,
     required this.amount,
     required this.tag,
@@ -1465,6 +1682,7 @@ class _HistoryRow {
   final String title;
   final String reference;
   final String rawReference;
+  final String walletAccount;
   final String note;
   final String? accountNumber;
   final double amount;
