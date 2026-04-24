@@ -8,8 +8,10 @@ import '../../../core/data/app_database.dart';
 class DashboardSnapshot {
   const DashboardSnapshot({
     required this.walletBalance,
+    required this.mayaWalletBalance,
     required this.onHandCash,
     required this.businessWalletBalance,
+    required this.businessMayaWalletBalance,
     required this.businessOnHandCash,
     required this.businessUsableCash,
     required this.recordedFlow,
@@ -27,6 +29,7 @@ class DashboardSnapshot {
     required this.showAlertCard,
     required this.activities,
     required this.walletSpots,
+    required this.mayaSpots,
     required this.cashSpots,
     required this.flowSpots,
     required this.flowLabels,
@@ -35,8 +38,10 @@ class DashboardSnapshot {
   });
 
   final double walletBalance;
+  final double mayaWalletBalance;
   final double onHandCash;
   final double businessWalletBalance;
+  final double businessMayaWalletBalance;
   final double businessOnHandCash;
   final double businessUsableCash;
   final double recordedFlow;
@@ -54,6 +59,7 @@ class DashboardSnapshot {
   final bool showAlertCard;
   final List<DashboardActivity> activities;
   final List<FlSpot> walletSpots;
+  final List<FlSpot> mayaSpots;
   final List<FlSpot> cashSpots;
   final List<FlSpot> flowSpots;
   final List<String> flowLabels;
@@ -105,10 +111,13 @@ class DashboardRepository {
     );
 
     double walletBalance = 0;
+    double mayaWalletBalance = 0;
     double onHandCash = 0;
     double businessWalletBalance = 0;
+    double businessMayaWalletBalance = 0;
     double businessOnHandCash = 0;
     double walletTopUpBaseline = 0;
+    double mayaWalletTopUpBaseline = 0;
     double onHandTopUpBaseline = 0;
     double chargesCollected = 0;
     double businessFundingTotal = 0;
@@ -118,6 +127,7 @@ class DashboardRepository {
     int transactionCount = 0;
 
     final walletSpots = <FlSpot>[];
+    final mayaSpots = <FlSpot>[];
     final cashSpots = <FlSpot>[];
     final flowSpots = <FlSpot>[];
     final flowLabels = <String>[];
@@ -125,16 +135,21 @@ class DashboardRepository {
     final xLabels = <String>[];
     final chargesByDay = <DateTime, double>{};
     final walletClosingByDay = <DateTime, double>{};
+    final mayaWalletClosingByDay = <DateTime, double>{};
     final cashClosingByDay = <DateTime, double>{};
 
     for (final row in rows) {
       final walletDelta = (row['wallet_delta'] as num).toDouble();
+      final mayaWalletDelta =
+          (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0.0;
       final onHandDelta = (row['on_hand_delta'] as num).toDouble();
       walletBalance += walletDelta;
+      mayaWalletBalance += mayaWalletDelta;
       onHandCash += onHandDelta;
       final createdAt = DateTime.parse(row['created_at'] as String);
       final dayKey = DateTime(createdAt.year, createdAt.month, createdAt.day);
       walletClosingByDay[dayKey] = walletBalance;
+      mayaWalletClosingByDay[dayKey] = mayaWalletBalance;
       cashClosingByDay[dayKey] = onHandCash;
 
       final entryType = (row['entry_type'] as String?) ?? '';
@@ -145,6 +160,7 @@ class DashboardRepository {
 
       if (!isPersonalOwnerMovement) {
         businessWalletBalance += walletDelta;
+        businessMayaWalletBalance += mayaWalletDelta;
         businessOnHandCash += onHandDelta;
       }
 
@@ -153,6 +169,9 @@ class DashboardRepository {
         final onHandDelta = (row['on_hand_delta'] as num).toDouble();
         if (walletDelta > 0) {
           walletTopUpBaseline += walletDelta;
+        }
+        if (mayaWalletDelta > 0) {
+          mayaWalletTopUpBaseline += mayaWalletDelta;
         }
         if (onHandDelta > 0) {
           onHandTopUpBaseline += onHandDelta;
@@ -193,9 +212,12 @@ class DashboardRepository {
       }
     }
 
-    if (walletClosingByDay.isNotEmpty || cashClosingByDay.isNotEmpty) {
+    if (walletClosingByDay.isNotEmpty ||
+        mayaWalletClosingByDay.isNotEmpty ||
+        cashClosingByDay.isNotEmpty) {
       final sortedDays = {
         ...walletClosingByDay.keys,
+        ...mayaWalletClosingByDay.keys,
         ...cashClosingByDay.keys,
       }.toList()..sort();
 
@@ -204,15 +226,21 @@ class DashboardRepository {
       var dayCursor = firstDay;
       var pointIndex = 0;
       var currentWalletBalance = 0.0;
+      var currentMayaWalletBalance = 0.0;
       var currentCashBalance = 0.0;
 
       while (!dayCursor.isAfter(lastDay)) {
         currentWalletBalance =
             walletClosingByDay[dayCursor] ?? currentWalletBalance;
+        currentMayaWalletBalance =
+            mayaWalletClosingByDay[dayCursor] ?? currentMayaWalletBalance;
         currentCashBalance = cashClosingByDay[dayCursor] ?? currentCashBalance;
 
         walletSpots.add(
           FlSpot(pointIndex.toDouble(), currentWalletBalance / 1000),
+        );
+        mayaSpots.add(
+          FlSpot(pointIndex.toDouble(), currentMayaWalletBalance / 1000),
         );
         cashSpots.add(FlSpot(pointIndex.toDouble(), currentCashBalance / 1000));
         xLabels.add(_chartDateFormat.format(dayCursor));
@@ -241,7 +269,9 @@ class DashboardRepository {
     final activities = rows.reversed.map(_mapActivity).toList(growable: false);
     final alertContent = _buildAlertContent(
       walletBalance: walletBalance,
+      mayaWalletBalance: mayaWalletBalance,
       walletTopUpBaseline: walletTopUpBaseline,
+      mayaWalletTopUpBaseline: mayaWalletTopUpBaseline,
       onHandCash: onHandCash,
       onHandTopUpBaseline: onHandTopUpBaseline,
     );
@@ -250,11 +280,16 @@ class DashboardRepository {
 
     return DashboardSnapshot(
       walletBalance: walletBalance,
+      mayaWalletBalance: mayaWalletBalance,
       onHandCash: onHandCash,
       businessWalletBalance: businessWalletBalance,
+      businessMayaWalletBalance: businessMayaWalletBalance,
       businessOnHandCash: businessOnHandCash,
       businessUsableCash:
-          businessWalletBalance + businessOnHandCash + ownerCreditAdjustment,
+          businessWalletBalance +
+          businessMayaWalletBalance +
+          businessOnHandCash +
+          ownerCreditAdjustment,
       recordedFlow: chargesCollected,
       businessFundingTotal: businessFundingTotal,
       personalExpenseTotal: personalExpenseTotal,
@@ -270,6 +305,7 @@ class DashboardRepository {
       showAlertCard: alertContent.show,
       activities: activities,
       walletSpots: walletSpots,
+      mayaSpots: mayaSpots,
       cashSpots: cashSpots,
       flowSpots: flowSpots,
       flowLabels: flowLabels,
@@ -292,15 +328,20 @@ class DashboardRepository {
 
   _DashboardAlertContent _buildAlertContent({
     required double walletBalance,
+    required double mayaWalletBalance,
     required double walletTopUpBaseline,
+    required double mayaWalletTopUpBaseline,
     required double onHandCash,
     required double onHandTopUpBaseline,
   }) {
-    final walletThreshold = walletTopUpBaseline * _lowBalanceRatio;
+    final walletThreshold =
+        (walletTopUpBaseline + mayaWalletTopUpBaseline) * _lowBalanceRatio;
     final onHandThreshold = onHandTopUpBaseline * _lowBalanceRatio;
+    final totalWalletBalance = walletBalance + mayaWalletBalance;
 
     final walletLow =
-        walletTopUpBaseline > 0 && walletBalance <= walletThreshold;
+        (walletTopUpBaseline + mayaWalletTopUpBaseline) > 0 &&
+        totalWalletBalance <= walletThreshold;
     final onHandLow = onHandTopUpBaseline > 0 && onHandCash <= onHandThreshold;
 
     if (walletLow && onHandLow) {
@@ -308,7 +349,7 @@ class DashboardRepository {
         show: true,
         title: 'Critical Float Alert',
         message:
-            'GCash wallet (${formatCurrency(walletBalance)}) and on-hand cash (${formatCurrency(onHandCash)}) are at or below 10% of your top-up baseline. Reload both floats immediately.',
+            'Digital wallets (${formatCurrency(totalWalletBalance)}) and on-hand cash (${formatCurrency(onHandCash)}) are at or below 10% of your top-up baseline. Reload both floats immediately.',
         actionLabel: 'RESTOCK FUNDS',
       );
     }
@@ -316,9 +357,9 @@ class DashboardRepository {
     if (walletLow) {
       return _DashboardAlertContent(
         show: true,
-        title: 'Low GCash Wallet Balance',
+        title: 'Low Wallet Balance',
         message:
-            'GCash wallet is down to ${formatCurrency(walletBalance)} (10% of top-up baseline: ${formatCurrency(walletThreshold)}). Please load wallet funds.',
+            'GCash + Maya wallets are down to ${formatCurrency(totalWalletBalance)} (10% of top-up baseline: ${formatCurrency(walletThreshold)}). Please load wallet funds.',
         actionLabel: 'LOAD WALLET',
       );
     }
@@ -370,6 +411,7 @@ class DashboardRepository {
     final entryType = row['entry_type'] as String;
     final isOutgoing = iconKey == 'cash_out';
     final reference = row['reference'] as String;
+    final walletAccount = (row['wallet_account'] as String?)?.trim();
     final ownerPartyName = (row['owner_party_name'] as String?)?.trim() ?? '';
     final ownerScope = (row['owner_scope'] as String?)?.trim();
     final subtitleRef = entryType == 'transaction'
@@ -383,7 +425,8 @@ class DashboardRepository {
 
     return DashboardActivity(
       title: row['title'] as String,
-      subtitle: '$subtitleRef • ${_activityDateFormat.format(createdAt)}',
+      subtitle:
+          '${walletAccount != null && walletAccount.isNotEmpty ? '$walletAccount • ' : ''}$subtitleRef • ${_activityDateFormat.format(createdAt)}',
       amount: '${isOutgoing ? '-' : '+'}${_currencyFormat.format(amount)}',
       tag: _activityTag(row),
       scope: scope,
@@ -432,6 +475,8 @@ class DashboardRepository {
     switch (iconKey) {
       case 'wallet':
         return Icons.account_balance_wallet_outlined;
+      case 'maya_wallet':
+        return Icons.wallet_rounded;
       case 'cash':
         return Icons.payments_outlined;
       case 'cash_in':
@@ -447,6 +492,8 @@ class DashboardRepository {
     switch (iconKey) {
       case 'wallet':
         return AppColors.primary;
+      case 'maya_wallet':
+        return AppColors.secondary;
       case 'cash':
         return AppColors.secondary;
       case 'cash_in':

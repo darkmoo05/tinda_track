@@ -4,11 +4,15 @@ import '../../../core/app_theme.dart';
 class ArchitectBalanceHero extends StatelessWidget {
   final String balance;
   final String label;
+  final Color backgroundColor;
+  final Color glowColor;
 
   const ArchitectBalanceHero({
     super.key,
     required this.balance,
     required this.label,
+    this.backgroundColor = AppColors.primary,
+    this.glowColor = AppColors.primary,
   });
 
   @override
@@ -16,11 +20,11 @@ class ArchitectBalanceHero extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
+            color: glowColor.withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),

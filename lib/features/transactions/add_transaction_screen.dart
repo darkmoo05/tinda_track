@@ -7,6 +7,10 @@ import '../parties/data/party_repository.dart';
 
 enum _ChargeHandlingMode { addOnTop, deductFromEnteredAmount }
 
+enum _WalletSelection { gcash, maya }
+
+enum _FlowDirection { inflow, outflow }
+
 class AddTransactionScreen extends StatefulWidget {
   const AddTransactionScreen({super.key});
 
@@ -26,11 +30,25 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _isLoadingTransactionTypes = true;
   bool _showRequiredIndicators = false;
   _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+  _WalletSelection _selectedWallet = _WalletSelection.gcash;
+  _FlowDirection _selectedFlowDirection = _FlowDirection.inflow;
 
   String? _selectedType;
   PartyRecord? _matchedParty;
 
   List<TransactionTypeRecord> _transactionTypes = const [];
+
+  void _applyTypeSelection(String? typeName) {
+    _selectedType = typeName;
+    final selectedRecord = _selectedTransactionType;
+    if (selectedRecord == null) {
+      return;
+    }
+
+    _selectedFlowDirection = selectedRecord.isOutflow
+        ? _FlowDirection.outflow
+        : _FlowDirection.inflow;
+  }
 
   TransactionTypeRecord? get _selectedTransactionType {
     final selectedType = _selectedType;
@@ -95,15 +113,41 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   bool get _isRegisteredAccount => _matchedParty != null;
 
-  bool get _isTransactionTypeMissing =>
-      _showRequiredIndicators && _selectedTransactionType == null;
-
   bool get _isAccountNumberMissing =>
       _showRequiredIndicators && _accountController.text.trim().isEmpty;
 
   bool get _isPrincipalMissing =>
       _showRequiredIndicators &&
       (double.tryParse(_principalController.text.trim()) ?? 0) <= 0;
+
+  bool get _isTypeMissing =>
+      _showRequiredIndicators &&
+      (_selectedType == null || _selectedType!.trim().isEmpty);
+
+  bool get _isOutflowSelection =>
+      _selectedFlowDirection == _FlowDirection.outflow;
+
+  String get _selectedWalletAccount {
+    return _selectedWallet == _WalletSelection.maya ? 'Maya Wallet' : 'GCash';
+  }
+
+  Color get _selectedWalletColor {
+    return _selectedWalletAccount == 'Maya Wallet'
+        ? AppColors.secondary
+        : AppColors.primary;
+  }
+
+  String get _selectedFlowLabel {
+    return _isOutflowSelection ? 'Outflow from Wallet' : 'Inflow to Wallet';
+  }
+
+  String get _defaultTransactionTitle {
+    final walletLabel = _selectedWallet == _WalletSelection.maya
+        ? 'Maya'
+        : 'GCash';
+    final flowLabel = _isOutflowSelection ? 'Cash Out' : 'Cash In';
+    return '$walletLabel $flowLabel';
+  }
 
   @override
   void initState() {
@@ -181,24 +225,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   onChanged: _isLoadingTransactionTypes
                       ? null
                       : (val) {
-                          if (val == null) {
-                            return;
-                          }
-                          setState(() => _selectedType = val);
+                          setState(() {
+                            _applyTypeSelection(val);
+                          });
                         },
                   onAddPressed: _showAddTransactionTypeDialog,
                   onManagePressed: _showManageTransactionTypesDialog,
                   isRequired: true,
-                  hasError: _isTransactionTypeMissing,
+                  hasError: _isTypeMissing,
                 ),
-                if (_selectedTransactionType != null) ...[
-                  const SizedBox(height: 8),
-                  _buildFlowTypeHint(_selectedTransactionType!.isOutflow),
-                ],
                 if (_isLoadingTransactionTypes) ...[
                   const SizedBox(height: 8),
                   const LinearProgressIndicator(minHeight: 2),
                 ],
+                const SizedBox(height: 16),
+                _buildWalletSelector(),
+                const SizedBox(height: 16),
+                _buildFlowSelector(),
                 const SizedBox(height: 16),
                 _buildTextField(
                   controller: _accountController,
@@ -428,26 +471,189 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Widget _buildFlowTypeHint(bool isOutflow) {
-    return Row(
+  Widget _buildWalletSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          isOutflow ? Icons.trending_down_rounded : Icons.trending_up_rounded,
-          size: 14,
-          color: isOutflow ? AppColors.error : AppColors.secondary,
+        _fieldLabel('Wallet Account', isRequired: true),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSelectionCard(
+                label: 'GCash',
+                subtitle: 'Route balance through GCash',
+                icon: Icons.account_balance_wallet_outlined,
+                color: AppColors.primary,
+                selected: _selectedWallet == _WalletSelection.gcash,
+                onTap: () {
+                  setState(() {
+                    _selectedWallet = _WalletSelection.gcash;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildSelectionCard(
+                label: 'Maya',
+                subtitle: 'Route balance through Maya',
+                icon: Icons.wallet_rounded,
+                color: AppColors.secondary,
+                selected: _selectedWallet == _WalletSelection.maya,
+                onTap: () {
+                  setState(() {
+                    _selectedWallet = _WalletSelection.maya;
+                  });
+                },
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 6),
-        Text(
-          isOutflow
-              ? 'This type is marked as Outflow.'
-              : 'This type is marked as Inflow.',
-          style: TextStyle(
-            fontSize: 11,
-            color: isOutflow ? AppColors.error : AppColors.secondary,
-            fontWeight: FontWeight.w700,
+      ],
+    );
+  }
+
+  Widget _buildFlowSelector() {
+    final accentColor = _isOutflowSelection
+        ? AppColors.error
+        : AppColors.secondary;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fieldLabel('Flow Direction', isRequired: true),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSelectionCard(
+                label: 'Inflow',
+                subtitle: 'Money goes into the wallet',
+                icon: Icons.call_made_rounded,
+                color: AppColors.secondary,
+                selected: _selectedFlowDirection == _FlowDirection.inflow,
+                onTap: () {
+                  setState(() {
+                    _selectedFlowDirection = _FlowDirection.inflow;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildSelectionCard(
+                label: 'Outflow',
+                subtitle: 'Money goes out from the wallet',
+                icon: Icons.call_received_rounded,
+                color: AppColors.error,
+                selected: _selectedFlowDirection == _FlowDirection.outflow,
+                onTap: () {
+                  setState(() {
+                    _selectedFlowDirection = _FlowDirection.outflow;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: accentColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: accentColor.withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _isOutflowSelection
+                    ? Icons.trending_down_rounded
+                    : Icons.trending_up_rounded,
+                size: 16,
+                color: accentColor,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Selected flow: $_selectedFlowLabel',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: accentColor,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSelectionCard({
+    required String label,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: selected
+          ? color.withValues(alpha: 0.12)
+          : AppColors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected
+                  ? color.withValues(alpha: 0.45)
+                  : AppColors.outlineVariant.withValues(alpha: 0.45),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: selected ? color : AppColors.onSurfaceVariant,
+                  ),
+                  const Spacer(),
+                  if (selected)
+                    Icon(Icons.check_circle_rounded, size: 18, color: color),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: selected ? color : AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -475,7 +681,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     setState(() {
       _transactionTypes = loadedTypes;
-      _selectedType = nextSelected;
+      _applyTypeSelection(nextSelected);
       _isLoadingTransactionTypes = false;
     });
   }
@@ -504,7 +710,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (!mounted) {
       return;
     }
-    _showMessage('Transaction type added: ${createdType.name.trim()}');
+    _showMessage(
+      'Transaction type added: ${createdType.name.trim()} (${createdType.isOutflow ? 'Outflow' : 'Inflow'})',
+    );
   }
 
   Future<void> _showManageTransactionTypesDialog() async {
@@ -891,6 +1099,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 : 'Charge Deducted From Amount',
           ),
           const SizedBox(height: 4),
+          _buildPreviewRow('Wallet', _selectedWalletAccount),
+          const SizedBox(height: 4),
+          _buildPreviewRow('Flow', _selectedFlowLabel),
+          const SizedBox(height: 4),
           _buildPreviewRow('Charge Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
           if (_matchedChargeBracket != null) ...[
             const SizedBox(height: 4),
@@ -901,8 +1113,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ],
           const SizedBox(height: 4),
           _buildHighlightedPreviewRow(
-            'Amount Sent to GCash',
+            _isOutflowSelection
+                ? 'Amount Received from ${_selectedWalletAccount == 'Maya Wallet' ? 'Maya' : 'GCash'}'
+                : 'Amount Sent to ${_selectedWalletAccount == 'Maya Wallet' ? 'Maya' : 'GCash'}',
             '₱ ${_amountToSend.toStringAsFixed(2)}',
+            _selectedWalletColor,
           ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -999,41 +1214,41 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Widget _buildHighlightedPreviewRow(String label, String value) {
+  Widget _buildHighlightedPreviewRow(String label, String value, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.28)),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.account_balance_wallet_rounded,
                 size: 14,
-                color: AppColors.primary,
+                color: color,
               ),
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+                  color: color,
                 ),
               ),
             ],
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: AppColors.primary,
+              color: color,
             ),
           ),
         ],
@@ -1241,9 +1456,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ChargesScreen()));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ChargesScreen(launchedFromTransaction: true),
+      ),
+    );
 
     if (!mounted) {
       return;
@@ -1264,9 +1481,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final accountNumber = _accountController.text.trim();
     final principal = double.tryParse(_principalController.text.trim()) ?? 0;
 
-    if (_selectedTransactionType == null) {
+    if (_selectedType == null || _selectedType!.trim().isEmpty) {
       _showMessage(
-        'Please choose a transaction type before saving.',
+        'Transaction type is required before saving.',
         isError: true,
       );
       return;
@@ -1302,14 +1519,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
-    final isOutflow = _selectedTransactionType?.isOutflow ?? false;
-    final (walletBalance, onHandBalance) = await _loadCurrentBalances();
+    final isOutflow = _isOutflowSelection;
+    final (gcashBalance, mayaWalletBalance, onHandBalance) =
+        await _loadCurrentBalances();
     if (!mounted) {
       return;
     }
 
-    final sourceLabel = isOutflow ? 'On-hand Cash' : 'GCash Wallet';
-    final available = isOutflow ? onHandBalance : walletBalance;
+    final selectedWalletAccount = _selectedWalletAccount;
+    final selectedWalletBalance = selectedWalletAccount == 'Maya Wallet'
+        ? mayaWalletBalance
+        : gcashBalance;
+    final sourceLabel = isOutflow ? 'On-hand Cash' : selectedWalletAccount;
+    final available = isOutflow ? onHandBalance : selectedWalletBalance;
     if (principal > available) {
       _showMessage(
         'Insufficient $sourceLabel balance. Available: ₱ ${available.toStringAsFixed(2)}',
@@ -1384,61 +1606,76 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return false;
     }
 
-    final selectedType = _selectedType;
-    if (selectedType == null || selectedType.isEmpty) {
-      return false;
-    }
-
-    final isOutflow = _selectedTransactionType?.isOutflow ?? false;
-    final walletDelta = isOutflow ? principal : -principal;
+    final selectedType = _selectedType?.trim();
+    final isOutflow = _isOutflowSelection;
+    final walletAccount = _selectedWalletAccount;
+    final usesMayaWallet = walletAccount == 'Maya Wallet';
+    final walletDelta = usesMayaWallet
+        ? 0.0
+        : (isOutflow ? principal : -principal);
+    final mayaWalletDelta = usesMayaWallet
+        ? (isOutflow ? principal : -principal)
+        : 0.0;
     final onHandDelta = isOutflow ? -principal : totalCollected;
     final now = DateTime.now();
     final reference = accountNumber;
     final iconKey = isOutflow ? 'cash_out' : 'cash_in';
+    final title = (selectedType != null && selectedType.isNotEmpty)
+        ? selectedType
+        : _defaultTransactionTitle;
     final noteBase = notes.isEmpty
         ? 'Account $accountNumber • ${_matchedParty!.name}'
         : notes;
-    final persistedNote = '$noteBase • Charge ₱${chargeFee.toStringAsFixed(2)}';
+    final persistedNote =
+        '$noteBase • $_selectedFlowLabel • Charge ₱${chargeFee.toStringAsFixed(2)}';
 
     final db = await _database.database;
     try {
+      await _database.ensureWalletSchema(db);
       await db.insert(AppDatabase.ledgerTable, {
         'entry_type': 'transaction',
-        'title': selectedType,
+        'title': title,
         'note': persistedNote,
         'reference': reference,
         'amount': totalCollected,
         'wallet_delta': walletDelta,
+        'maya_wallet_delta': mayaWalletDelta,
         'on_hand_delta': onHandDelta,
         'recorded_flow': totalCollected,
         'tag': 'Transaction',
         'icon_key': iconKey,
+        'wallet_account': walletAccount,
         'created_at': now.toIso8601String(),
       });
       return true;
-    } on Exception {
+    } on Exception catch (error, stackTrace) {
+      debugPrint('Failed to save transaction record: $error\n$stackTrace');
       return false;
     }
   }
 
-  Future<(double walletBalance, double onHandBalance)>
+  Future<(double walletBalance, double mayaWalletBalance, double onHandBalance)>
   _loadCurrentBalances() async {
     final db = await _database.database;
+    await _database.ensureWalletSchema(db);
     final rows = await db.rawQuery('''
       SELECT
         COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
+        COALESCE(SUM(maya_wallet_delta), 0) AS maya_wallet_balance,
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ${AppDatabase.ledgerTable}
     ''');
 
     if (rows.isEmpty) {
-      return (0.0, 0.0);
+      return (0.0, 0.0, 0.0);
     }
 
     final row = rows.first;
     final walletBalance = (row['wallet_balance'] as num?)?.toDouble() ?? 0.0;
+    final mayaWalletBalance =
+        (row['maya_wallet_balance'] as num?)?.toDouble() ?? 0.0;
     final onHandBalance = (row['on_hand_balance'] as num?)?.toDouble() ?? 0.0;
-    return (walletBalance, onHandBalance);
+    return (walletBalance, mayaWalletBalance, onHandBalance);
   }
 
   void _showSnackBar(
@@ -1666,6 +1903,8 @@ class _UpsertTransactionTypeDialogState
   late bool _isOutflow;
   String? _errorText;
 
+  bool get _isEditing => widget.initialName != null;
+
   @override
   void initState() {
     super.initState();
@@ -1708,9 +1947,81 @@ class _UpsertTransactionTypeDialogState
     ).pop(_TransactionTypeDraft(name: raw, isOutflow: _isOutflow));
   }
 
+  void _setOutflow(bool value) {
+    setState(() {
+      _isOutflow = value;
+    });
+  }
+
+  Widget _buildFlowOption({
+    required String label,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Material(
+        color: selected
+            ? color.withValues(alpha: 0.12)
+            : AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected
+                    ? color.withValues(alpha: 0.45)
+                    : AppColors.outlineVariant.withValues(alpha: 0.45),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      icon,
+                      size: 18,
+                      color: selected ? color : AppColors.onSurfaceVariant,
+                    ),
+                    const Spacer(),
+                    if (selected)
+                      Icon(Icons.check_circle_rounded, size: 18, color: color),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? color : AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isEditing = widget.initialName != null;
     return AlertDialog(
       backgroundColor: AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -1741,7 +2052,7 @@ class _UpsertTransactionTypeDialogState
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                isEditing ? 'Edit Transaction Type' : 'Add Transaction Type',
+                _isEditing ? 'Edit Transaction Type' : 'Add Transaction Type',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -1773,33 +2084,45 @@ class _UpsertTransactionTypeDialogState
             ),
           ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(10),
+          const Text(
+            'Flow Behavior',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurfaceVariant,
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _isOutflow ? 'Mark as Outflow' : 'Mark as Inflow',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: _isOutflow ? AppColors.error : AppColors.secondary,
-                    ),
-                  ),
-                ),
-                Switch(
-                  value: _isOutflow,
-                  onChanged: (value) {
-                    setState(() {
-                      _isOutflow = value;
-                    });
-                  },
-                ),
-              ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildFlowOption(
+                label: 'Inflow',
+                subtitle: 'Selecting this type sets the transaction to inflow.',
+                icon: Icons.call_made_rounded,
+                color: AppColors.secondary,
+                selected: !_isOutflow,
+                onTap: () => _setOutflow(false),
+              ),
+              const SizedBox(width: 10),
+              _buildFlowOption(
+                label: 'Outflow',
+                subtitle:
+                    'Selecting this type sets the transaction to outflow.',
+                icon: Icons.call_received_rounded,
+                color: AppColors.error,
+                selected: _isOutflow,
+                onTap: () => _setOutflow(true),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _isOutflow
+                ? 'This type will switch the form to outflow when selected.'
+                : 'This type will switch the form to inflow when selected.',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceVariant.withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 4),
@@ -1831,7 +2154,7 @@ class _UpsertTransactionTypeDialogState
                   ),
                 ),
                 onPressed: _onSave,
-                child: Text(isEditing ? 'Update' : 'Save'),
+                child: Text(_isEditing ? 'Update' : 'Save'),
               ),
             ),
           ],

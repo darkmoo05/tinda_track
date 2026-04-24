@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/app_side_drawer.dart';
 import 'data/party_repository.dart';
 import 'widgets/search_input.dart';
 import 'widgets/party_health_card.dart';
@@ -16,6 +17,7 @@ class PartyManagementScreen extends StatefulWidget {
 }
 
 class _PartyManagementScreenState extends State<PartyManagementScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final PartyRepository _partyRepository = PartyRepository.instance;
   Timer? _searchDebounce;
   String _searchQuery = '';
@@ -35,18 +37,11 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: const AppSideDrawer(),
       appBar: ArchitectAppBar(
         title: 'PocketLedger',
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.settings_outlined,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
+        onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       body: ListView(
         padding: const EdgeInsets.all(24),

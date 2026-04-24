@@ -33,14 +33,13 @@ class AppDatabase {
     _database = await databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 7,
+        version: 9,
         onCreate: (db, version) async {
           await _createLedgerTable(db);
           await _createPartiesTable(db);
           await _createChargesTable(db);
           await _createTransactionTypesTable(db);
           await _createOwnerMovementCategoriesTable(db);
-          await _seedTransactionTypesIfEmpty(db);
           await _seedOwnerMovementCategoriesIfEmpty(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
@@ -52,7 +51,6 @@ class AppDatabase {
           }
           if (oldVersion < 4) {
             await _createTransactionTypesTable(db);
-            await _seedTransactionTypesIfEmpty(db);
           }
           if (oldVersion < 5) {
             final columnExists = await _columnExists(
@@ -125,9 +123,63 @@ class AppDatabase {
               );
             }
           }
+          if (oldVersion < 8) {
+            final hasMayaWalletDeltaColumn = await _columnExists(
+              db,
+              ledgerTable,
+              'maya_wallet_delta',
+            );
+            final hasWalletAccountColumn = await _columnExists(
+              db,
+              ledgerTable,
+              'wallet_account',
+            );
+
+            if (!hasMayaWalletDeltaColumn) {
+              await db.execute(
+                'ALTER TABLE $ledgerTable ADD COLUMN maya_wallet_delta REAL NOT NULL DEFAULT 0',
+              );
+            }
+            if (!hasWalletAccountColumn) {
+              await db.execute(
+                "ALTER TABLE $ledgerTable ADD COLUMN wallet_account TEXT NOT NULL DEFAULT ''",
+              );
+            }
+
+            await db.execute('''
+              UPDATE $ledgerTable
+              SET wallet_account = CASE
+                WHEN maya_wallet_delta != 0 THEN 'Maya Wallet'
+                WHEN wallet_delta != 0 THEN 'GCash'
+                WHEN on_hand_delta != 0 THEN 'On-hand Cash'
+                ELSE wallet_account
+              END
+              WHERE wallet_account = ''
+            ''');
+          }
+          if (oldVersion < 9) {
+            // Remove previously seeded default types so users manage their own.
+            const defaultNames = [
+              'Bank Deposit',
+              'Bank Withdrawal',
+              'GCash Cash In',
+              'GCash Cash Out',
+              'Maya Cash In',
+              'Maya Cash Out',
+              'Bills Payment',
+              'Money Transfer',
+            ];
+            for (final name in defaultNames) {
+              await db.delete(
+                transactionTypesTable,
+                where: 'LOWER(name) = LOWER(?)',
+                whereArgs: [name],
+              );
+            }
+          }
         },
         onOpen: (db) async {
-          await _seedTransactionTypesIfEmpty(db);
+          await ensureWalletSchema(db);
           await _seedOwnerMovementCategoriesIfEmpty(db);
           await _backfillDefaultOutflowTypes(db);
           await _removeLegacyDummyParties(db);
@@ -170,10 +222,12 @@ class AppDatabase {
         reference TEXT NOT NULL,
         amount REAL NOT NULL,
         wallet_delta REAL NOT NULL,
+        maya_wallet_delta REAL NOT NULL DEFAULT 0,
         on_hand_delta REAL NOT NULL,
         recorded_flow REAL NOT NULL,
         tag TEXT NOT NULL,
         icon_key TEXT NOT NULL,
+        wallet_account TEXT NOT NULL DEFAULT '',
         owner_scope TEXT NOT NULL DEFAULT 'Business',
         owner_movement_type TEXT,
         owner_category TEXT,
@@ -239,14 +293,6 @@ class AppDatabase {
   }
 
   Future<void> _seedTransactionTypesIfEmpty(Database db) async {
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) AS count FROM $transactionTypesTable',
-    );
-    final count = (result.first['count'] as int?) ?? 0;
-    if (count > 0) {
-      return;
-    }
-
     final batch = db.batch();
     final now = DateTime.now().toIso8601String();
     for (final type in _defaultTransactionTypes) {
@@ -254,7 +300,7 @@ class AppDatabase {
         'name': type.name,
         'is_outflow': type.isOutflow ? 1 : 0,
         'created_at': now,
-      });
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await batch.commit(noResult: true);
   }
@@ -286,7 +332,6 @@ class AppDatabase {
 
   Future<List<TransactionTypeRecord>> loadTransactionTypeRecords() async {
     final db = await database;
-    await _seedTransactionTypesIfEmpty(db);
     final rows = await db.query(
       transactionTypesTable,
       columns: ['id', 'name', 'is_outflow'],
@@ -344,7 +389,6 @@ class AppDatabase {
   Future<void> deleteTransactionType(int id) async {
     final db = await database;
     await db.delete(transactionTypesTable, where: 'id = ?', whereArgs: [id]);
-    await _seedTransactionTypesIfEmpty(db);
   }
 
   Future<List<String>> loadOwnerMovementCategories() async {
@@ -452,6 +496,46 @@ class AppDatabase {
     return result.any((col) => col['name'] == columnName);
   }
 
+  Future<void> ensureWalletSchemaUpToDate() async {
+    final db = await database;
+    await ensureWalletSchema(db);
+  }
+
+  Future<void> ensureWalletSchema(Database db) async {
+    final hasMayaWalletDeltaColumn = await _columnExists(
+      db,
+      ledgerTable,
+      'maya_wallet_delta',
+    );
+    if (!hasMayaWalletDeltaColumn) {
+      await db.execute(
+        'ALTER TABLE $ledgerTable ADD COLUMN maya_wallet_delta REAL NOT NULL DEFAULT 0',
+      );
+    }
+
+    final hasWalletAccountColumn = await _columnExists(
+      db,
+      ledgerTable,
+      'wallet_account',
+    );
+    if (!hasWalletAccountColumn) {
+      await db.execute(
+        "ALTER TABLE $ledgerTable ADD COLUMN wallet_account TEXT NOT NULL DEFAULT ''",
+      );
+    }
+
+    await db.execute('''
+      UPDATE $ledgerTable
+      SET wallet_account = CASE
+        WHEN maya_wallet_delta != 0 THEN 'Maya Wallet'
+        WHEN wallet_delta != 0 THEN 'GCash'
+        WHEN on_hand_delta != 0 THEN 'On-hand Cash'
+        ELSE wallet_account
+      END
+      WHERE wallet_account = ''
+    ''');
+  }
+
   Future<void> _backfillDefaultOutflowTypes(Database db) async {
     for (final type in _defaultTransactionTypes.where(
       (type) => type.isOutflow,
@@ -465,14 +549,7 @@ class AppDatabase {
     }
   }
 
-  static const List<_DefaultTransactionType> _defaultTransactionTypes = [
-    _DefaultTransactionType(name: 'Bank Deposit', isOutflow: false),
-    _DefaultTransactionType(name: 'Bank Withdrawal', isOutflow: true),
-    _DefaultTransactionType(name: 'GCash Cash In', isOutflow: false),
-    _DefaultTransactionType(name: 'GCash Cash Out', isOutflow: true),
-    _DefaultTransactionType(name: 'Bills Payment', isOutflow: true),
-    _DefaultTransactionType(name: 'Money Transfer', isOutflow: true),
-  ];
+  static const List<_DefaultTransactionType> _defaultTransactionTypes = [];
 
   static const List<String> _defaultOwnerMovementCategories = [
     'Bills Payment',

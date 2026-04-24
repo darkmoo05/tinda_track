@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/app_side_drawer.dart';
 import 'data/dashboard_repository.dart';
 import 'widgets/activity_item.dart';
 import 'widgets/alert_card.dart';
@@ -22,6 +23,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DashboardRepository _dashboardRepository = DashboardRepository();
   _DashboardActivityFilter _activityFilter = _DashboardActivityFilter.all;
 
@@ -31,8 +33,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       future: _dashboardRepository.loadSnapshot(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Scaffold(
-            appBar: ArchitectAppBar(title: 'PocketLedger'),
+          return Scaffold(
+            key: _scaffoldKey,
+            drawer: const AppSideDrawer(),
+            appBar: ArchitectAppBar(
+              title: 'PocketLedger',
+              onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -40,7 +47,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final dashboard = snapshot.data!;
 
         return Scaffold(
-          appBar: const ArchitectAppBar(title: 'PocketLedger'),
+          key: _scaffoldKey,
+          drawer: const AppSideDrawer(),
+          appBar: ArchitectAppBar(
+            title: 'PocketLedger',
+            onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -51,18 +63,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   actionLabel: dashboard.alertActionLabel,
                   onAction: () => _onAlertAction(dashboard.alertActionLabel),
                 ),
-              if (dashboard.showAlertCard) const SizedBox(height: 24),
+              if (dashboard.showAlertCard) const SizedBox(height: 16),
               ArchitectBalanceHero(
                 balance: _dashboardRepository.formatCurrency(
                   dashboard.walletBalance,
                 ),
                 label: 'GCash Wallet Balance',
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              ArchitectBalanceHero(
+                balance: _dashboardRepository.formatCurrency(
+                  dashboard.mayaWalletBalance,
+                ),
+                label: 'Maya Wallet Balance',
+                backgroundColor: AppColors.secondary,
+                glowColor: AppColors.secondary,
+              ),
+              const SizedBox(height: 16),
               _buildOnHandCashCard(context, dashboard),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _buildBusinessUsableCashCard(context, dashboard),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               ArchitectAnalyticsCard(
                 title: 'Charges\nCollected',
                 value: _dashboardRepository.formatCurrency(
@@ -74,23 +95,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 xLabels: dashboard.flowLabels,
                 dates: dashboard.flowDates,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _buildOwnerMovementSplit(context, dashboard),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _buildBorrowingRepaymentCard(context, dashboard),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               IncomeArchitectureCard(
                 walletSpots: dashboard.walletSpots,
+                mayaSpots: dashboard.mayaSpots,
                 cashSpots: dashboard.cashSpots,
                 xLabels: dashboard.xLabels,
-                walletTotal: dashboard.walletBalance,
-                onHandTotal: dashboard.onHandCash,
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
               _buildRecentActivityHeader(context),
               const SizedBox(height: 16),
               _buildActivityTabs(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _buildRecentActivityList(dashboard),
               const SizedBox(height: 100),
             ],
@@ -137,17 +157,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: _minimalCardDecoration(),
       child: Row(
         children: [
           Container(
@@ -206,9 +216,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildRecentActivityHeader(BuildContext context) {
     return Text(
       'Recent Activities',
-      style: Theme.of(
-        context,
-      ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+        color: AppColors.onSurface,
+      ),
     );
   }
 
@@ -218,17 +229,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: _minimalCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -263,9 +264,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             runSpacing: 8,
             children: [
               _buildBreakdownChip(
-                label: 'Wallet',
+                label: 'Gcash',
                 value: _dashboardRepository.formatCurrency(
                   dashboard.businessWalletBalance,
+                ),
+              ),
+              _buildBreakdownChip(
+                label: 'Maya',
+                value: _dashboardRepository.formatCurrency(
+                  dashboard.businessMayaWalletBalance,
                 ),
               ),
               _buildBreakdownChip(
@@ -275,7 +282,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               _buildBreakdownChip(
-                label: 'Owner adj',
+                label: 'Owner Borrowed',
                 value: _dashboardRepository.formatCurrency(
                   dashboard.ownerCreditAdjustment,
                 ),
@@ -349,21 +356,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.primary : Colors.transparent,
+          color: isActive ? AppColors.primary : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive
-                ? AppColors.primary
-                : AppColors.surfaceContainerHigh,
-          ),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w700,
             color: isActive ? Colors.white : AppColors.onSurfaceVariant,
           ),
         ),
@@ -401,10 +403,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: _minimalCardDecoration(),
         child: const Text(
           'No activities match the selected filter yet.',
           style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
@@ -437,9 +436,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         Text(
           'Owner Movement Split',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -481,17 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: _minimalCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -551,17 +541,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       constraints: const BoxConstraints(minWidth: 260, maxWidth: 360),
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+        decoration: _minimalCardDecoration(),
         child: Row(
           children: [
             Container(
@@ -607,6 +587,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  BoxDecoration _minimalCardDecoration() {
+    return BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: AppColors.surfaceContainerHigh),
     );
   }
 }

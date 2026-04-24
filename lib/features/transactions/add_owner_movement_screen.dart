@@ -29,7 +29,11 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     'Borrowing',
     'Repayment',
   ];
-  static const List<String> _destinations = ['GCash', 'On-hand Cash'];
+  static const List<String> _destinations = [
+    'GCash',
+    'Maya Wallet',
+    'On-hand Cash',
+  ];
 
   String? _movementType;
   late String _destination;
@@ -68,6 +72,10 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   String get _destinationLabel =>
       _destination == 'On-hand Cash' ? 'On-Hand Cash' : _destination;
+
+  bool get _usesGcash => _destination == 'GCash';
+
+  bool get _usesMayaWallet => _destination == 'Maya Wallet';
 
   String get _accountLabel {
     if (_isBorrowing) {
@@ -875,7 +883,8 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     final reference = referenceInput.isNotEmpty
         ? referenceInput
         : _buildAutoReference(now);
-    final walletDelta = _destination == 'GCash'
+    final walletDelta = _usesGcash ? (_isInflow ? amount : -amount) : 0.0;
+    final mayaWalletDelta = _usesMayaWallet
         ? (_isInflow ? amount : -amount)
         : 0.0;
     final onHandDelta = _destination == 'On-hand Cash'
@@ -888,11 +897,16 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         ? '$_movementType - $_destinationLabel'
         : '$_movementType - $_destinationLabel';
     final iconKey = _isInflow
-        ? (_destination == 'GCash' ? 'wallet' : 'cash')
+        ? (_usesGcash
+              ? 'wallet'
+              : _usesMayaWallet
+              ? 'maya_wallet'
+              : 'cash')
         : 'cash_out';
 
     final db = await _database.database;
     try {
+      await _database.ensureWalletSchema(db);
       await db.insert(AppDatabase.ledgerTable, {
         'entry_type': 'owner_movement',
         'title': title,
@@ -900,10 +914,12 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         'reference': reference,
         'amount': amount,
         'wallet_delta': walletDelta,
+        'maya_wallet_delta': mayaWalletDelta,
         'on_hand_delta': onHandDelta,
         'recorded_flow': amount,
         'tag': (_isBorrowing || _isRepayment) ? _movementType : _ownerScope,
         'icon_key': iconKey,
+        'wallet_account': _destination,
         'owner_scope': _ownerScope,
         'owner_movement_type': _movementType,
         'owner_category': _isPersonalExpense ? _selectedCategory : null,
@@ -956,9 +972,11 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   Future<double> _loadSelectedAccountBalance() async {
     final db = await _database.database;
+    await _database.ensureWalletSchema(db);
     final result = await db.rawQuery('''
       SELECT
         COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
+        COALESCE(SUM(maya_wallet_delta), 0) AS maya_wallet_balance,
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ${AppDatabase.ledgerTable}
     ''');
@@ -969,9 +987,17 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
     final row = result.first;
     final walletBalance = (row['wallet_balance'] as num?)?.toDouble() ?? 0;
+    final mayaWalletBalance =
+        (row['maya_wallet_balance'] as num?)?.toDouble() ?? 0;
     final onHandBalance = (row['on_hand_balance'] as num?)?.toDouble() ?? 0;
 
-    return _destination == 'GCash' ? walletBalance : onHandBalance;
+    if (_usesGcash) {
+      return walletBalance;
+    }
+    if (_usesMayaWallet) {
+      return mayaWalletBalance;
+    }
+    return onHandBalance;
   }
 
   String get _defaultNote {
