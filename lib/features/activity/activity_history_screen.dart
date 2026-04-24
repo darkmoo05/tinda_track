@@ -12,6 +12,7 @@ import 'dart:io';
 import '../../core/app_theme.dart';
 import '../../core/data/app_database.dart';
 import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/app_side_drawer.dart';
 import 'widgets/activity_tile.dart';
 import 'widgets/date_header.dart';
 
@@ -23,6 +24,7 @@ class ActivityHistoryScreen extends StatefulWidget {
 }
 
 class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final AppDatabase _database = AppDatabase.instance;
   final TextEditingController _searchController = TextEditingController();
   final NumberFormat _currencyFormat = NumberFormat.currency(
@@ -56,25 +58,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
+        key: _scaffoldKey,
+        drawer: const AppSideDrawer(),
         appBar: ArchitectAppBar(
           title: 'PocketLedger',
-          actions: [
-            IconButton(
-              onPressed: _openLedgerReportSheet,
-              icon: const Icon(
-                Icons.summarize_outlined,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.settings_outlined,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
+          onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         body: FutureBuilder<List<_HistoryRow>>(
           future: _historyFuture,

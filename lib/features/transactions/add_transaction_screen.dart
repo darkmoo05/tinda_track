@@ -1456,9 +1456,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ChargesScreen()));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ChargesScreen(launchedFromTransaction: true),
+      ),
+    );
 
     if (!mounted) {
       return;

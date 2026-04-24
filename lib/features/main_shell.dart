@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import '../core/app_theme.dart';
 import 'dashboard/dashboard_screen.dart';
@@ -30,6 +32,11 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _onItemTapped(int index) {
+    if (_fabOpen) {
+      setState(() => _fabOpen = false);
+      return;
+    }
+
     setState(() {
       _selectedIndex = index;
     });
@@ -82,7 +89,14 @@ class _MainShellState extends State<MainShell> {
               child: GestureDetector(
                 onTap: _toggleFab,
                 behavior: HitTestBehavior.opaque,
-                child: Container(color: Colors.black.withOpacity(0.06)),
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                    child: Container(
+                      color: AppColors.onSurface.withOpacity(0.12),
+                    ),
+                  ),
+                ),
               ),
             ),
             Positioned(
@@ -158,44 +172,56 @@ class _MainShellState extends State<MainShell> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: color,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLowest.withOpacity(0.98),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withOpacity(0.24), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.onSurface.withOpacity(0.10),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 12),
-          FloatingActionButton.small(
-            heroTag: label,
-            onPressed: onTap,
-            backgroundColor: color,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: Colors.white, size: 20),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                Icons.arrow_forward_rounded,
+                size: 16,
+                color: color.withOpacity(0.90),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/app_side_drawer.dart';
 import 'data/dashboard_repository.dart';
 import 'widgets/activity_item.dart';
 import 'widgets/alert_card.dart';
@@ -22,6 +23,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DashboardRepository _dashboardRepository = DashboardRepository();
   _DashboardActivityFilter _activityFilter = _DashboardActivityFilter.all;
 
@@ -31,8 +33,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       future: _dashboardRepository.loadSnapshot(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Scaffold(
-            appBar: ArchitectAppBar(title: 'PocketLedger'),
+          return Scaffold(
+            key: _scaffoldKey,
+            drawer: const AppSideDrawer(),
+            appBar: ArchitectAppBar(
+              title: 'PocketLedger',
+              onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -40,7 +47,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final dashboard = snapshot.data!;
 
         return Scaffold(
-          appBar: const ArchitectAppBar(title: 'PocketLedger'),
+          key: _scaffoldKey,
+          drawer: const AppSideDrawer(),
+          appBar: ArchitectAppBar(
+            title: 'PocketLedger',
+            onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [

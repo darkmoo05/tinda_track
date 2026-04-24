@@ -4,8 +4,14 @@ import '../../core/app_theme.dart';
 class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
+  final VoidCallback? onSettingsPressed;
 
-  const ArchitectAppBar({super.key, required this.title, this.actions});
+  const ArchitectAppBar({
+    super.key,
+    required this.title,
+    this.actions,
+    this.onSettingsPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,15 +22,14 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: AppColors.primary,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.account_balance_rounded,
-              color: Colors.white,
-              size: 20,
+            child: ClipOval(
+              child: Image.asset('tinda_tract_icon.png', fit: BoxFit.cover),
             ),
           ),
           const SizedBox(width: 12),
@@ -41,14 +46,21 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
       actions:
           actions ??
           [
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.settings_outlined,
-                color: AppColors.onSurfaceVariant,
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton.filledTonal(
+                tooltip: 'Open menu',
+                onPressed: onSettingsPressed ?? () {},
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surfaceContainerLow,
+                ),
+                icon: const Icon(
+                  Icons.settings_outlined,
+                  color: AppColors.onSurfaceVariant,
+                  size: 20,
+                ),
               ),
             ),
-            const SizedBox(width: 8),
           ],
     );
   }

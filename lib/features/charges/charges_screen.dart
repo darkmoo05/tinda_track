@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/app_side_drawer.dart';
 import 'data/charge_repository.dart';
 
 class ChargesScreen extends StatefulWidget {
-  const ChargesScreen({super.key});
+  const ChargesScreen({super.key, this.launchedFromTransaction = false});
+
+  final bool launchedFromTransaction;
 
   @override
   State<ChargesScreen> createState() => _ChargesScreenState();
 }
 
 class _ChargesScreenState extends State<ChargesScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _lowerBoundController = TextEditingController();
   final _upperBoundController = TextEditingController();
   final _chargeAmountController = TextEditingController();
@@ -34,7 +38,46 @@ class _ChargesScreenState extends State<ChargesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const ArchitectAppBar(title: 'PocketLedger'),
+      key: _scaffoldKey,
+      drawer: const AppSideDrawer(),
+      appBar: ArchitectAppBar(
+        title: 'PocketLedger',
+        onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        actions: [
+          if (widget.launchedFromTransaction)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton.filledTonal(
+                tooltip: 'Back to transaction',
+                onPressed: () => Navigator.of(context).pop(),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surfaceContainerLow,
+                ),
+                icon: const Icon(
+                  Icons.arrow_back_rounded,
+                  color: AppColors.onSurfaceVariant,
+                  size: 20,
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton.filledTonal(
+                tooltip: 'Open menu',
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surfaceContainerLow,
+                ),
+                icon: const Icon(
+                  Icons.settings_outlined,
+                  color: AppColors.onSurfaceVariant,
+                  size: 20,
+                ),
+              ),
+            ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -51,6 +94,25 @@ class _ChargesScreenState extends State<ChargesScreen> {
           const SizedBox(height: 100),
         ],
       ),
+      bottomNavigationBar: widget.launchedFromTransaction
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                  label: const Text('BACK TO TRANSACTION'),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
