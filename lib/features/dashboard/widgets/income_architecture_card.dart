@@ -9,18 +9,12 @@ class IncomeArchitectureCard extends StatefulWidget {
     this.mayaSpots,
     this.cashSpots,
     this.xLabels,
-    this.walletTotal,
-    this.mayaTotal,
-    this.onHandTotal,
   });
 
   final List<FlSpot>? walletSpots;
   final List<FlSpot>? mayaSpots;
   final List<FlSpot>? cashSpots;
   final List<String>? xLabels;
-  final double? walletTotal;
-  final double? mayaTotal;
-  final double? onHandTotal;
 
   @override
   State<IncomeArchitectureCard> createState() => _IncomeArchitectureCardState();
@@ -72,10 +66,6 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     final mayaSpots = widget.mayaSpots ?? _mayaSpots;
     final cashSpots = widget.cashSpots ?? _cashSpots;
     final xLabels = widget.xLabels ?? _xLabels;
-    final walletTotal = widget.walletTotal ?? _resolveLatestTotal(walletSpots);
-    final mayaTotal = widget.mayaTotal ?? _resolveLatestTotal(mayaSpots);
-    final onHandTotal = widget.onHandTotal ?? _resolveLatestTotal(cashSpots);
-    final combinedTotal = walletTotal + mayaTotal + onHandTotal;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -94,14 +84,6 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(context),
-          const SizedBox(height: 14),
-          _buildTotalsRow(
-            context,
-            walletTotal,
-            mayaTotal,
-            onHandTotal,
-            combinedTotal,
-          ),
           const SizedBox(height: 16),
           _buildLegend(),
           const SizedBox(height: 20),
@@ -135,134 +117,6 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
           ).textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceVariant),
         ),
       ],
-    );
-  }
-
-  double _resolveLatestTotal(List<FlSpot> spots) {
-    if (spots.isEmpty) {
-      return 0;
-    }
-    return spots.last.y * 1000;
-  }
-
-  Widget _buildTotalsRow(
-    BuildContext context,
-    double walletTotal,
-    double mayaTotal,
-    double onHandTotal,
-    double combinedTotal,
-  ) {
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      children: [
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            SizedBox(
-              width: 170,
-              child: _amountPill(
-                label: 'GCash Wallet',
-                value: walletTotal,
-                color: AppColors.primary,
-                textTheme: textTheme,
-              ),
-            ),
-            SizedBox(
-              width: 170,
-              child: _amountPill(
-                label: 'Maya Wallet',
-                value: mayaTotal,
-                color: AppColors.secondary,
-                textTheme: textTheme,
-              ),
-            ),
-            SizedBox(
-              width: 170,
-              child: _amountPill(
-                label: 'On-hand Cash',
-                value: onHandTotal,
-                color: const Color(0xFF8E6C00),
-                textTheme: textTheme,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: AppColors.outlineVariant.withValues(alpha: 0.5),
-            ),
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.account_balance_wallet_rounded,
-                size: 18,
-                color: AppColors.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Total Cash Position',
-                  style: textTheme.labelMedium?.copyWith(
-                    color: AppColors.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Text(
-                '₱ ${combinedTotal.toStringAsFixed(2)}',
-                style: textTheme.titleSmall?.copyWith(
-                  color: AppColors.onSurface,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _amountPill({
-    required String label,
-    required double value,
-    required Color color,
-    required TextTheme textTheme,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: textTheme.labelSmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '₱ ${value.toStringAsFixed(2)}',
-            style: textTheme.titleSmall?.copyWith(
-              color: AppColors.onSurface,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
