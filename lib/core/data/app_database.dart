@@ -33,7 +33,7 @@ class AppDatabase {
     _database = await databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 11,
+        version: 12,
         onCreate: (db, version) async {
           await _createLedgerTable(db);
           await _createPartiesTable(db);
@@ -223,6 +223,26 @@ class AppDatabase {
               'ALTER TABLE transaction_types_new RENAME TO $transactionTypesTable',
             );
           }
+          if (oldVersion < 12) {
+            for (final table in [
+              ledgerTable,
+              partiesTable,
+              chargesTable,
+              transactionTypesTable,
+              ownerMovementCategoriesTable,
+            ]) {
+              final hasSyncId = await _columnExists(db, table, 'sync_id');
+              final hasSyncedAt = await _columnExists(db, table, 'synced_at');
+              if (!hasSyncId) {
+                await db.execute('ALTER TABLE $table ADD COLUMN sync_id TEXT');
+              }
+              if (!hasSyncedAt) {
+                await db.execute(
+                  'ALTER TABLE $table ADD COLUMN synced_at INTEGER',
+                );
+              }
+            }
+          }
         },
         onOpen: (db) async {
           await ensureWalletSchema(db);
@@ -280,7 +300,9 @@ class AppDatabase {
         owner_category TEXT,
         owner_party_name TEXT,
         owner_party_account TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        sync_id TEXT,
+        synced_at INTEGER
       )
     ''');
   }
@@ -294,7 +316,9 @@ class AppDatabase {
         entity_id TEXT NOT NULL,
         description TEXT NOT NULL,
         join_date TEXT NOT NULL,
-        is_verified INTEGER NOT NULL
+        is_verified INTEGER NOT NULL,
+        sync_id TEXT,
+        synced_at INTEGER
       )
     ''');
   }
@@ -305,7 +329,9 @@ class AppDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         lower_bound INTEGER NOT NULL,
         upper_bound INTEGER NOT NULL,
-        charge_amount REAL NOT NULL
+        charge_amount REAL NOT NULL,
+        sync_id TEXT,
+        synced_at INTEGER
       )
     ''');
   }
@@ -318,6 +344,8 @@ class AppDatabase {
         is_outflow INTEGER NOT NULL DEFAULT 0,
         wallet_account TEXT NOT NULL DEFAULT 'GCash',
         created_at TEXT NOT NULL,
+        sync_id TEXT,
+        synced_at INTEGER,
         UNIQUE(name, is_outflow, wallet_account)
       )
     ''');
@@ -328,7 +356,9 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS $ownerMovementCategoriesTable (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        sync_id TEXT,
+        synced_at INTEGER
       )
     ''');
   }
