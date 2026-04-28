@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/app_theme.dart';
 
+enum _TimePeriod { week, month, year }
+
 class IncomeArchitectureCard extends StatefulWidget {
   const IncomeArchitectureCard({
     super.key,
@@ -60,6 +62,181 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     'Today',
   ];
 
+  late _TimePeriod _selectedPeriod;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedPeriod = _TimePeriod.month;
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  (List<FlSpot>, List<FlSpot>, List<FlSpot>, List<String>) _filterDataByPeriod(
+    List<FlSpot> walletSpots,
+    List<FlSpot> mayaSpots,
+    List<FlSpot> cashSpots,
+    List<String> xLabels,
+  ) {
+    if (walletSpots.isEmpty || xLabels.isEmpty) {
+      return (walletSpots, mayaSpots, cashSpots, xLabels);
+    }
+
+    final dataLength = xLabels.length;
+
+    switch (_selectedPeriod) {
+      case _TimePeriod.week:
+        // Show last 7 days
+        final startIdx = (dataLength - 7).clamp(0, dataLength);
+        final endIdx = dataLength;
+        return _sliceData(
+          walletSpots,
+          mayaSpots,
+          cashSpots,
+          xLabels,
+          startIdx,
+          endIdx,
+        );
+      case _TimePeriod.month:
+        // Show all data (default to month view)
+        return (walletSpots, mayaSpots, cashSpots, xLabels);
+      case _TimePeriod.year:
+        // Aggregate data to show weekly averages for the year
+        return _aggregateToWeekly(walletSpots, mayaSpots, cashSpots, xLabels);
+    }
+  }
+
+  (List<FlSpot>, List<FlSpot>, List<FlSpot>, List<String>) _sliceData(
+    List<FlSpot> walletSpots,
+    List<FlSpot> mayaSpots,
+    List<FlSpot> cashSpots,
+    List<String> xLabels,
+    int startIdx,
+    int endIdx,
+  ) {
+    return (
+      walletSpots.skip(startIdx).take(endIdx - startIdx).toList(),
+      mayaSpots.skip(startIdx).take(endIdx - startIdx).toList(),
+      cashSpots.skip(startIdx).take(endIdx - startIdx).toList(),
+      xLabels.skip(startIdx).take(endIdx - startIdx).toList(),
+    );
+  }
+
+  (List<FlSpot>, List<FlSpot>, List<FlSpot>, List<String>) _aggregateToWeekly(
+    List<FlSpot> walletSpots,
+    List<FlSpot> mayaSpots,
+    List<FlSpot> cashSpots,
+    List<String> xLabels,
+  ) {
+    final weeklyWallet = <FlSpot>[];
+    final weeklyMaya = <FlSpot>[];
+    final weeklyCash = <FlSpot>[];
+    final weeklyLabels = <String>[];
+
+    for (int i = 0; i < walletSpots.length; i += 7) {
+      final weekEnd = (i + 7).clamp(0, walletSpots.length);
+      final walletWeek = walletSpots.sublist(i, weekEnd);
+      final mayaWeek = mayaSpots.sublist(i, weekEnd);
+      final cashWeek = cashSpots.sublist(i, weekEnd);
+
+      if (walletWeek.isNotEmpty) {
+        final avgWallet =
+            walletWeek.map((s) => s.y).reduce((a, b) => a + b) /
+            walletWeek.length;
+        final avgMaya =
+            mayaWeek.map((s) => s.y).reduce((a, b) => a + b) / mayaWeek.length;
+        final avgCash =
+            cashWeek.map((s) => s.y).reduce((a, b) => a + b) / cashWeek.length;
+
+        final newIndex = weeklyWallet.length.toDouble();
+        weeklyWallet.add(FlSpot(newIndex, avgWallet));
+        weeklyMaya.add(FlSpot(newIndex, avgMaya));
+        weeklyCash.add(FlSpot(newIndex, avgCash));
+        weeklyLabels.add('W${(i ~/ 7) + 1}');
+      }
+    }
+
+    return (weeklyWallet, weeklyMaya, weeklyCash, weeklyLabels);
+  }
+
+  Widget _buildTimePeriodFilter() {
+    return Row(
+      children: [
+        _buildPeriodButton('Week', _TimePeriod.week),
+        const SizedBox(width: 8),
+        _buildPeriodButton('Month', _TimePeriod.month),
+        const SizedBox(width: 8),
+        _buildPeriodButton('Year', _TimePeriod.year),
+      ],
+    );
+  }
+
+  Widget _buildPeriodButton(String label, _TimePeriod period) {
+    final isSelected = _selectedPeriod == period;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (selected) {
+          if (selected) {
+            setState(() {
+              _selectedPeriod = period;
+              // Auto-scroll to start when period changes
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (_scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                }
+              });
+            });
+          }
+        },
+        backgroundColor: Colors.transparent,
+        selectedColor: AppColors.primary.withValues(alpha: 0.3),
+        side: BorderSide(
+          color: isSelected ? AppColors.primary : AppColors.outlineVariant,
+          width: isSelected ? 2 : 1,
+        ),
+        labelStyle: TextStyle(
+          color: isSelected ? AppColors.primary : AppColors.onSurfaceVariant,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScrollableChart(
+    List<FlSpot> walletSpots,
+    List<FlSpot> mayaSpots,
+    List<FlSpot> cashSpots,
+    List<String> xLabels,
+  ) {
+    // Calculate minimum chart width based on data points
+    final minChartWidth = (xLabels.length * 50.0).clamp(280.0, double.infinity);
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      controller: _scrollController,
+      clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        width: minChartWidth,
+        height: 240,
+        child: LineChart(
+          _buildChartData(walletSpots, mayaSpots, cashSpots, xLabels),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final walletSpots = widget.walletSpots ?? _gcashSpots;
@@ -67,33 +244,54 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     final cashSpots = widget.cashSpots ?? _cashSpots;
     final xLabels = widget.xLabels ?? _xLabels;
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(context),
-          const SizedBox(height: 16),
-          _buildLegend(),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 160,
-            child: LineChart(
-              _buildChartData(walletSpots, mayaSpots, cashSpots, xLabels),
+    // Filter data based on selected time period
+    final (
+      filteredWalletSpots,
+      filteredMayaSpots,
+      filteredCashSpots,
+      filteredXLabels,
+    ) = _filterDataByPeriod(
+      walletSpots,
+      mayaSpots,
+      cashSpots,
+      xLabels,
+    );
+
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 16,
+              spreadRadius: 2,
+              offset: const Offset(0, 6),
             ),
-          ),
-        ],
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context),
+            const SizedBox(height: 12),
+            _buildTimePeriodFilter(),
+            const SizedBox(height: 16),
+            _buildLegend(),
+            const SizedBox(height: 20),
+            _buildScrollableChart(
+              filteredWalletSpots,
+              filteredMayaSpots,
+              filteredCashSpots,
+              filteredXLabels,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -168,6 +366,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     ].reduce((value, element) => value > element ? value : element);
 
     return LineChartData(
+      clipData: FlClipData.all(),
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
@@ -218,6 +417,8 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         LineChartBarData(
           spots: walletSpots,
           isCurved: true,
+          preventCurveOverShooting: true,
+          preventCurveOvershootingThreshold: 8,
           color: AppColors.primary,
           barWidth: 2.5,
           isStrokeCapRound: true,
@@ -247,6 +448,8 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         LineChartBarData(
           spots: mayaSpots,
           isCurved: true,
+          preventCurveOverShooting: true,
+          preventCurveOvershootingThreshold: 8,
           color: AppColors.secondary,
           barWidth: 2.5,
           isStrokeCapRound: true,
@@ -276,6 +479,8 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         LineChartBarData(
           spots: cashSpots,
           isCurved: true,
+          preventCurveOverShooting: true,
+          preventCurveOvershootingThreshold: 8,
           color: const Color(0xFF8E6C00),
           barWidth: 2.5,
           isStrokeCapRound: true,
@@ -303,9 +508,18 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         ),
       ],
       lineTouchData: LineTouchData(
+        enabled: true,
+        handleBuiltInTouches: true,
         touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (_) => AppColors.onSurface,
+          getTooltipColor: (_) => AppColors.onSurface.withValues(alpha: 0.95),
           tooltipRoundedRadius: 8,
+          tooltipPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
+          ),
+          fitInsideHorizontally: true,
+          fitInsideVertically: true,
+          showOnTopOfTheChartBoxArea: true,
           getTooltipItems: (touchedSpots) {
             return touchedSpots.map((spot) {
               final tooltipColor = switch (spot.barIndex) {
@@ -318,7 +532,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
                 TextStyle(
                   color: tooltipColor,
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 13,
                 ),
               );
             }).toList();

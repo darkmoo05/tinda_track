@@ -420,9 +420,9 @@ class _ChargesScreenState extends State<ChargesScreen> {
   }
 
   Future<void> _addBracket() async {
-    final lowerBound = int.tryParse(_lowerBoundController.text.trim());
-    final upperBound = int.tryParse(_upperBoundController.text.trim());
-    final chargeAmount = double.tryParse(_chargeAmountController.text.trim());
+    final lowerBound = _parseIntInput(_lowerBoundController.text);
+    final upperBound = _parseIntInput(_upperBoundController.text);
+    final chargeAmount = _parseDoubleInput(_chargeAmountController.text);
 
     if (lowerBound == null || upperBound == null || chargeAmount == null) {
       _showMessage(
@@ -451,6 +451,16 @@ class _ChargesScreenState extends State<ChargesScreen> {
     _upperBoundController.clear();
     _chargeAmountController.clear();
     _showMessage('Charge bracket added.');
+  }
+
+  int? _parseIntInput(String raw) {
+    final normalized = raw.replaceAll(',', '').trim();
+    return int.tryParse(normalized);
+  }
+
+  double? _parseDoubleInput(String raw) {
+    final normalized = raw.replaceAll(',', '').trim();
+    return double.tryParse(normalized);
   }
 
   Future<void> _editBracket(ChargeBracketRecord bracket) async {
@@ -645,9 +655,9 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
   }
 
   Future<void> _onSave() async {
-    final lowerBound = int.tryParse(_lowerBoundController.text.trim());
-    final upperBound = int.tryParse(_upperBoundController.text.trim());
-    final chargeAmount = double.tryParse(_chargeAmountController.text.trim());
+    final lowerBound = _parseIntInput(_lowerBoundController.text);
+    final upperBound = _parseIntInput(_upperBoundController.text);
+    final chargeAmount = _parseDoubleInput(_chargeAmountController.text);
 
     if (lowerBound == null || upperBound == null || chargeAmount == null) {
       setState(() {
@@ -681,6 +691,16 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
     }
 
     Navigator.of(context).pop();
+  }
+
+  int? _parseIntInput(String raw) {
+    final normalized = raw.replaceAll(',', '').trim();
+    return int.tryParse(normalized);
+  }
+
+  double? _parseDoubleInput(String raw) {
+    final normalized = raw.replaceAll(',', '').trim();
+    return double.tryParse(normalized);
   }
 
   @override
