@@ -84,6 +84,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 16),
               _buildBusinessUsableCashCard(context, dashboard),
               const SizedBox(height: 16),
+              // Wallet and Cash Balance Trend - High Priority
+              IncomeArchitectureCard(
+                walletSpots: dashboard.walletSpots,
+                mayaSpots: dashboard.mayaSpots,
+                cashSpots: dashboard.cashSpots,
+                xLabels: dashboard.xLabels,
+              ),
+              const SizedBox(height: 16),
               ArchitectAnalyticsCard(
                 title: 'Charges\nCollected',
                 value: _dashboardRepository.formatCurrency(
@@ -96,16 +104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 dates: dashboard.flowDates,
               ),
               const SizedBox(height: 16),
-              _buildOwnerMovementSplit(context, dashboard),
-              const SizedBox(height: 16),
               _buildBorrowingRepaymentCard(context, dashboard),
-              const SizedBox(height: 16),
-              IncomeArchitectureCard(
-                walletSpots: dashboard.walletSpots,
-                mayaSpots: dashboard.mayaSpots,
-                cashSpots: dashboard.cashSpots,
-                xLabels: dashboard.xLabels,
-              ),
               const SizedBox(height: 24),
               _buildRecentActivityHeader(context),
               const SizedBox(height: 16),
@@ -123,10 +122,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _onAlertAction(String actionLabel) async {
     AddOwnerMovementScreen? screen;
 
-    if (actionLabel == 'LOAD WALLET') {
+    if (actionLabel == 'LOAD WALLET' || actionLabel == 'LOAD GCASH WALLET') {
       screen = const AddOwnerMovementScreen(
         initialMovementType: 'Top-up',
         initialDestination: 'GCash',
+      );
+    } else if (actionLabel == 'LOAD MAYA WALLET') {
+      screen = const AddOwnerMovementScreen(
+        initialMovementType: 'Top-up',
+        initialDestination: 'Maya Wallet',
       );
     } else if (actionLabel == 'ADD CASH') {
       screen = const AddOwnerMovementScreen(
@@ -424,49 +428,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           )
           .toList(),
-    );
-  }
-
-  Widget _buildOwnerMovementSplit(
-    BuildContext context,
-    DashboardSnapshot dashboard,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Owner Movement Split',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _buildSplitCard(
-              title: 'Business Funding',
-              subtitle: 'Top-up baseline and refills',
-              value: _dashboardRepository.formatCurrency(
-                dashboard.businessFundingTotal,
-              ),
-              accentColor: AppColors.secondary,
-              icon: Icons.trending_up_rounded,
-            ),
-            _buildSplitCard(
-              title: 'Personal Draws',
-              subtitle: 'Owner expenses outside business use',
-              value: _dashboardRepository.formatCurrency(
-                dashboard.personalExpenseTotal,
-              ),
-              accentColor: AppColors.error,
-              icon: Icons.person_off_rounded,
-            ),
-          ],
-        ),
-      ],
     );
   }
 

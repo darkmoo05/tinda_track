@@ -86,8 +86,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 Expanded(
                   child: TabBarView(
                     children: [
-                      _buildHistoryList(transactions),
-                      _buildHistoryList(ownerMovements),
+                      _buildHistoryList(transactions, showWalletFilters: true),
+                      _buildHistoryList(
+                        ownerMovements,
+                        showWalletFilters: false,
+                      ),
                     ],
                   ),
                 ),
@@ -124,8 +127,14 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     );
   }
 
-  Widget _buildHistoryList(List<_HistoryRow> items) {
-    final filteredItems = _filterItems(items);
+  Widget _buildHistoryList(
+    List<_HistoryRow> items, {
+    required bool showWalletFilters,
+  }) {
+    final filteredItems = _filterItems(
+      items,
+      applyWalletFilter: showWalletFilters,
+    );
 
     if (items.isNotEmpty && filteredItems.isEmpty) {
       return ListView(
@@ -133,7 +142,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         children: [
           _buildHeader(),
           const SizedBox(height: 20),
-          _buildSearchAndFilter(),
+          _buildSearchAndFilter(showWalletFilters: showWalletFilters),
           const SizedBox(height: 20),
           _buildEmptyState(
             title: 'No matching transactions',
@@ -151,7 +160,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         children: [
           _buildHeader(),
           const SizedBox(height: 20),
-          _buildSearchAndFilter(),
+          _buildSearchAndFilter(showWalletFilters: showWalletFilters),
           const SizedBox(height: 20),
           _buildEmptyState(
             title: 'No history yet',
@@ -168,7 +177,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       children: [
         _buildHeader(),
         const SizedBox(height: 20),
-        _buildSearchAndFilter(),
+        _buildSearchAndFilter(showWalletFilters: showWalletFilters),
         ..._groupItemsByDate(filteredItems),
         const SizedBox(height: 100),
       ],
@@ -236,7 +245,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     );
   }
 
-  Widget _buildSearchAndFilter() {
+  Widget _buildSearchAndFilter({required bool showWalletFilters}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -314,27 +323,28 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildWalletFilterCard(
-                label: 'GCash',
-                icon: Icons.account_balance_wallet_outlined,
-                color: AppColors.primary,
-                walletKey: 'gcash',
+        if (showWalletFilters)
+          Row(
+            children: [
+              Expanded(
+                child: _buildWalletFilterCard(
+                  label: 'GCash',
+                  icon: Icons.account_balance_wallet_outlined,
+                  color: AppColors.primary,
+                  walletKey: 'gcash',
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildWalletFilterCard(
-                label: 'Maya',
-                icon: Icons.wallet_rounded,
-                color: AppColors.secondary,
-                walletKey: 'maya',
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildWalletFilterCard(
+                  label: 'Maya',
+                  icon: Icons.wallet_rounded,
+                  color: AppColors.secondary,
+                  walletKey: 'maya',
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         if (_beginDateFilter != null || _endDateFilter != null) ...[
           const SizedBox(height: 12),
           Wrap(
@@ -469,7 +479,10 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     );
   }
 
-  List<_HistoryRow> _filterItems(List<_HistoryRow> items) {
+  List<_HistoryRow> _filterItems(
+    List<_HistoryRow> items, {
+    required bool applyWalletFilter,
+  }) {
     if (_searchQuery.isEmpty &&
         _beginDateFilter == null &&
         _endDateFilter == null &&
@@ -504,6 +517,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           final isTransaction = item.entryType == 'transaction';
           final isMayaTransaction = _isMayaTransaction(item);
           final matchesWallet =
+              !applyWalletFilter ||
               _selectedWalletFilter == null ||
               !isTransaction ||
               (_selectedWalletFilter == 'maya' && isMayaTransaction) ||
@@ -1311,22 +1325,33 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return rows
         .map((row) {
           final createdAt = DateTime.parse(row['created_at'] as String);
+          final entryType = row['entry_type'] as String;
+          final notes = (row['note'] as String?) ?? '';
           final iconKey = row['icon_key'] as String;
           final amount = (row['amount'] as num).toDouble();
           final isOutflow = iconKey == 'cash_out';
           final inflow = isOutflow ? 0.0 : amount;
           final outflow = isOutflow ? amount : 0.0;
+          final chargeAmount = entryType == 'transaction'
+              ? _extractChargeAmountFromNote(notes)
+              : 0.0;
           runningBalance += inflow - outflow;
 
           return _LedgerExportRow(
             createdAt: createdAt,
-            entryType: row['entry_type'] as String,
+            entryType: entryType,
             title: row['title'] as String,
             tag: row['tag'] as String,
             reference: (row['reference'] as String?) ?? '',
-            notes: (row['note'] as String?) ?? '',
+            notes: notes,
             inflow: inflow,
             outflow: outflow,
+            chargeAmount: chargeAmount,
+            chargeBreakdown: _buildChargeBreakdown(
+              amount: amount,
+              chargeAmount: chargeAmount,
+              entryType: entryType,
+            ),
             runningBalance: runningBalance,
           );
         })
@@ -1350,7 +1375,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         build: (context) {
           return [
             pw.Text(
-              'General Ledger Report',
+              'Transaction History Report',
               style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 4),
@@ -1375,25 +1400,37 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
               cellStyle: const pw.TextStyle(fontSize: 8),
               cellAlignment: pw.Alignment.centerLeft,
               headers: const [
-                'Date/Time',
-                'Title',
-                'Tag',
-                'Reference',
-                'Notes',
-                'Inflow',
-                'Outflow',
-                'Running Balance',
+                'Date & Time',
+                'Type',
+                'Description',
+                'Category',
+                'Reference No.',
+                'Remarks',
+                'Money In',
+                'Money Out',
+                'Service Fee',
+                'Fee Details',
+                'Balance',
               ],
               data: entries
                   .map(
                     (entry) => [
                       dateFormat.format(entry.createdAt),
+                      _pdfSafeText(
+                        entry.entryType == 'owner_movement'
+                            ? 'Owner Movement'
+                            : 'Transaction',
+                      ),
                       _pdfSafeText(entry.title),
                       _pdfSafeText(entry.tag),
                       _pdfSafeText(entry.reference),
                       _pdfSafeText(entry.notes),
                       entry.inflow > 0 ? _reportCurrency(entry.inflow) : '',
                       entry.outflow > 0 ? _reportCurrency(entry.outflow) : '',
+                      entry.chargeAmount > 0
+                          ? _reportCurrency(entry.chargeAmount)
+                          : '',
+                      _pdfSafeText(entry.chargeBreakdown),
                       _reportCurrency(entry.runningBalance),
                     ],
                   )
@@ -1410,21 +1447,28 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    'Total Inflow: ${_reportCurrency(totals.totalInflow)}',
+                    'Total Money In: ${_reportCurrency(totals.totalInflow)}',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                   pw.Text(
-                    'Total Outflow: ${_reportCurrency(totals.totalOutflow)}',
+                    'Total Money Out: ${_reportCurrency(totals.totalOutflow)}',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                   pw.Text(
-                    'Net: ${_reportCurrency(totals.net)}',
+                    'Net Balance: ${_reportCurrency(totals.net)}',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    'Total Fees Paid: ${_reportCurrency(totals.totalCharges)}',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
@@ -1448,11 +1492,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     required _LedgerTotals totals,
   }) {
     final excel = ex.Excel.createExcel();
-    final sheet = excel['General Ledger'];
+    final sheet = excel['Transaction History'];
     final dateFormat = DateFormat('dd MMM yyyy HH:mm');
 
     sheet.appendRow([
-      ex.TextCellValue('General Ledger Report'),
+      ex.TextCellValue('Transaction History Report'),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
@@ -1474,6 +1520,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
     ]);
     sheet.appendRow([
       ex.TextCellValue(
@@ -1487,21 +1535,31 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
     ]);
     sheet.appendRow([
-      ex.TextCellValue('Date/Time'),
-      ex.TextCellValue('Title'),
-      ex.TextCellValue('Tag'),
-      ex.TextCellValue('Reference'),
-      ex.TextCellValue('Notes'),
-      ex.TextCellValue('Inflow'),
-      ex.TextCellValue('Outflow'),
-      ex.TextCellValue('Running Balance'),
+      ex.TextCellValue('Date & Time'),
+      ex.TextCellValue('Type'),
+      ex.TextCellValue('Description'),
+      ex.TextCellValue('Category'),
+      ex.TextCellValue('Reference No.'),
+      ex.TextCellValue('Remarks'),
+      ex.TextCellValue('Money In'),
+      ex.TextCellValue('Money Out'),
+      ex.TextCellValue('Service Fee'),
+      ex.TextCellValue('Fee Details'),
+      ex.TextCellValue('Balance'),
     ]);
 
     for (final entry in entries) {
       sheet.appendRow([
         ex.TextCellValue(dateFormat.format(entry.createdAt)),
+        ex.TextCellValue(
+          entry.entryType == 'owner_movement'
+              ? 'Owner Movement'
+              : 'Transaction',
+        ),
         ex.TextCellValue(entry.title),
         ex.TextCellValue(entry.tag),
         ex.TextCellValue(entry.reference),
@@ -1510,6 +1568,10 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         ex.TextCellValue(
           entry.outflow > 0 ? _reportCurrency(entry.outflow) : '',
         ),
+        ex.TextCellValue(
+          entry.chargeAmount > 0 ? _reportCurrency(entry.chargeAmount) : '',
+        ),
+        ex.TextCellValue(entry.chargeBreakdown),
         ex.TextCellValue(_reportCurrency(entry.runningBalance)),
       ]);
     }
@@ -1523,6 +1585,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue('TOTALS'),
       ex.TextCellValue(_reportCurrency(totals.totalInflow)),
       ex.TextCellValue(_reportCurrency(totals.totalOutflow)),
+      ex.TextCellValue(_reportCurrency(totals.totalCharges)),
+      ex.TextCellValue(''),
       ex.TextCellValue(_reportCurrency(totals.net)),
     ]);
 
@@ -1536,17 +1600,45 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   _LedgerTotals _calculateLedgerTotals(List<_LedgerExportRow> entries) {
     double totalInflow = 0;
     double totalOutflow = 0;
+    double totalCharges = 0;
 
     for (final entry in entries) {
       totalInflow += entry.inflow;
       totalOutflow += entry.outflow;
+      totalCharges += entry.chargeAmount;
     }
 
     return _LedgerTotals(
       totalInflow: totalInflow,
       totalOutflow: totalOutflow,
+      totalCharges: totalCharges,
       net: totalInflow - totalOutflow,
     );
+  }
+
+  double _extractChargeAmountFromNote(String note) {
+    final match = RegExp(
+      r'Charge\s*(?:₱|PHP)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)',
+      caseSensitive: false,
+    ).firstMatch(note);
+    if (match == null || match.groupCount < 1) {
+      return 0;
+    }
+
+    final rawAmount = (match.group(1) ?? '').replaceAll(',', '');
+    return double.tryParse(rawAmount) ?? 0;
+  }
+
+  String _buildChargeBreakdown({
+    required double amount,
+    required double chargeAmount,
+    required String entryType,
+  }) {
+    if (entryType != 'transaction' || chargeAmount <= 0) {
+      return '';
+    }
+
+    return 'Recorded: ${_reportCurrency(amount)} | Charge: ${_reportCurrency(chargeAmount)}';
   }
 
   String _reportCurrency(double amount) {
@@ -1703,6 +1795,8 @@ class _LedgerExportRow {
     required this.notes,
     required this.inflow,
     required this.outflow,
+    required this.chargeAmount,
+    required this.chargeBreakdown,
     required this.runningBalance,
   });
 
@@ -1714,6 +1808,8 @@ class _LedgerExportRow {
   final String notes;
   final double inflow;
   final double outflow;
+  final double chargeAmount;
+  final String chargeBreakdown;
   final double runningBalance;
 }
 
@@ -1721,10 +1817,12 @@ class _LedgerTotals {
   const _LedgerTotals({
     required this.totalInflow,
     required this.totalOutflow,
+    required this.totalCharges,
     required this.net,
   });
 
   final double totalInflow;
   final double totalOutflow;
+  final double totalCharges;
   final double net;
 }

@@ -334,33 +334,58 @@ class DashboardRepository {
     required double onHandCash,
     required double onHandTopUpBaseline,
   }) {
-    final walletThreshold =
-        (walletTopUpBaseline + mayaWalletTopUpBaseline) * _lowBalanceRatio;
+    final gcashThreshold = walletTopUpBaseline * _lowBalanceRatio;
+    final mayaThreshold = mayaWalletTopUpBaseline * _lowBalanceRatio;
     final onHandThreshold = onHandTopUpBaseline * _lowBalanceRatio;
-    final totalWalletBalance = walletBalance + mayaWalletBalance;
 
-    final walletLow =
-        (walletTopUpBaseline + mayaWalletTopUpBaseline) > 0 &&
-        totalWalletBalance <= walletThreshold;
+    final gcashLow = walletTopUpBaseline > 0 && walletBalance <= gcashThreshold;
+    final mayaLow =
+        mayaWalletTopUpBaseline > 0 && mayaWalletBalance <= mayaThreshold;
+    final walletLow = gcashLow || mayaLow;
     final onHandLow = onHandTopUpBaseline > 0 && onHandCash <= onHandThreshold;
+    final lowWalletMessages = <String>[
+      if (gcashLow)
+        _buildWalletAlertLine(
+          walletName: 'GCash',
+          balance: walletBalance,
+          threshold: gcashThreshold,
+          baseline: walletTopUpBaseline,
+        ),
+      if (mayaLow)
+        _buildWalletAlertLine(
+          walletName: 'Maya',
+          balance: mayaWalletBalance,
+          threshold: mayaThreshold,
+          baseline: mayaWalletTopUpBaseline,
+        ),
+    ];
 
     if (walletLow && onHandLow) {
+      final onHandTopUpNeeded =
+          (onHandTopUpBaseline - onHandCash).clamp(0, double.infinity)
+              as double;
+
       return _DashboardAlertContent(
         show: true,
         title: 'Critical Float Alert',
         message:
-            'Digital wallets (${formatCurrency(totalWalletBalance)}) and on-hand cash (${formatCurrency(onHandCash)}) are at or below 10% of your top-up baseline. Reload both floats immediately.',
+            '${lowWalletMessages.join('\n')}\nOn-hand Cash: ${formatCurrency(onHandCash)} available, minimum float ${formatCurrency(onHandThreshold)} from baseline ${formatCurrency(onHandTopUpBaseline)}. Add ${formatCurrency(onHandTopUpNeeded)} to restore float.',
         actionLabel: 'RESTOCK FUNDS',
       );
     }
 
     if (walletLow) {
+      final actionLabel = switch ((gcashLow, mayaLow)) {
+        (true, false) => 'LOAD GCASH WALLET',
+        (false, true) => 'LOAD MAYA WALLET',
+        _ => 'LOAD WALLET',
+      };
+
       return _DashboardAlertContent(
         show: true,
         title: 'Low Wallet Balance',
-        message:
-            'GCash + Maya wallets are down to ${formatCurrency(totalWalletBalance)} (10% of top-up baseline: ${formatCurrency(walletThreshold)}). Please load wallet funds.',
-        actionLabel: 'LOAD WALLET',
+        message: lowWalletMessages.join('\n'),
+        actionLabel: actionLabel,
       );
     }
 
@@ -380,6 +405,17 @@ class DashboardRepository {
       message: '',
       actionLabel: '',
     );
+  }
+
+  String _buildWalletAlertLine({
+    required String walletName,
+    required double balance,
+    required double threshold,
+    required double baseline,
+  }) {
+    final topUpNeeded =
+        (baseline - balance).clamp(0, double.infinity) as double;
+    return '$walletName: ${formatCurrency(balance)} available, minimum float ${formatCurrency(threshold)} from baseline ${formatCurrency(baseline)}. Top up ${formatCurrency(topUpNeeded)} to restore the baseline.';
   }
 
   bool _isTopUpBaselineEntry(Map<String, Object?> row) {

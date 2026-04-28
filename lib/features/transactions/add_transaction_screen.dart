@@ -33,31 +33,35 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   _WalletSelection _selectedWallet = _WalletSelection.gcash;
   _FlowDirection _selectedFlowDirection = _FlowDirection.inflow;
 
-  String? _selectedType;
+  int? _selectedTypeId;
   PartyRecord? _matchedParty;
 
   List<TransactionTypeRecord> _transactionTypes = const [];
 
-  void _applyTypeSelection(String? typeName) {
-    _selectedType = typeName;
+  void _applyTypeSelection(int? typeId) {
+    _selectedTypeId = typeId;
     final selectedRecord = _selectedTransactionType;
     if (selectedRecord == null) {
       return;
     }
 
+    _selectedWallet =
+        selectedRecord.walletAccount.toLowerCase().contains('maya')
+        ? _WalletSelection.maya
+        : _WalletSelection.gcash;
     _selectedFlowDirection = selectedRecord.isOutflow
         ? _FlowDirection.outflow
         : _FlowDirection.inflow;
   }
 
   TransactionTypeRecord? get _selectedTransactionType {
-    final selectedType = _selectedType;
-    if (selectedType == null || selectedType.isEmpty) {
+    final selectedTypeId = _selectedTypeId;
+    if (selectedTypeId == null) {
       return null;
     }
 
     for (final type in _transactionTypes) {
-      if (type.name == selectedType) {
+      if (type.id == selectedTypeId) {
         return type;
       }
     }
@@ -121,8 +125,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       (double.tryParse(_principalController.text.trim()) ?? 0) <= 0;
 
   bool get _isTypeMissing =>
-      _showRequiredIndicators &&
-      (_selectedType == null || _selectedType!.trim().isEmpty);
+      _showRequiredIndicators && _selectedTransactionType == null;
 
   bool get _isOutflowSelection =>
       _selectedFlowDirection == _FlowDirection.outflow;
@@ -214,11 +217,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 _buildDropdownField(
                   label: 'Transaction Type',
                   value:
-                      _selectedType != null &&
+                      _selectedTypeId != null &&
                           _transactionTypes.any(
-                            (type) => type.name == _selectedType,
+                            (type) => type.id == _selectedTypeId,
                           )
-                      ? _selectedType
+                      ? _selectedTypeId
                       : null,
                   items: _transactionTypes,
                   hintText: 'Choose Transaction Type',
@@ -239,9 +242,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   const LinearProgressIndicator(minHeight: 2),
                 ],
                 const SizedBox(height: 16),
-                _buildWalletSelector(),
-                const SizedBox(height: 16),
-                _buildFlowSelector(),
+                _buildTypeProfilePreview(),
                 const SizedBox(height: 16),
                 _buildTextField(
                   controller: _accountController,
@@ -317,10 +318,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   Widget _buildDropdownField({
     required String label,
-    required String? value,
+    required int? value,
     required List<TransactionTypeRecord> items,
     String? hintText,
-    ValueChanged<String?>? onChanged,
+    ValueChanged<int?>? onChanged,
     VoidCallback? onAddPressed,
     VoidCallback? onManagePressed,
     bool isRequired = false,
@@ -358,7 +359,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ],
         ),
         const SizedBox(height: 2),
-        DropdownButtonFormField<String>(
+        DropdownButtonFormField<int>(
           initialValue: value,
           isExpanded: true,
           onChanged: onChanged,
@@ -386,7 +387,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           items: items
               .map(
                 (t) => DropdownMenuItem(
-                  value: t.name,
+                  value: t.id,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -418,6 +419,32 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                             color: t.isOutflow
                                 ? AppColors.error
                                 : AppColors.secondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: t.walletAccount.toLowerCase().contains('maya')
+                              ? AppColors.secondary.withValues(alpha: 0.14)
+                              : AppColors.primary.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          t.walletAccount.toLowerCase().contains('maya')
+                              ? 'MAYA'
+                              : 'GCASH',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color:
+                                t.walletAccount.toLowerCase().contains('maya')
+                                ? AppColors.secondary
+                                : AppColors.primary,
                           ),
                         ),
                       ),
@@ -467,6 +494,75 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTypeProfilePreview() {
+    final selectedType = _selectedTransactionType;
+    final walletColor = _selectedWalletColor;
+
+    if (selectedType == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppColors.outlineVariant.withValues(alpha: 0.4),
+          ),
+        ),
+        child: const Row(
+          children: [
+            Icon(
+              Icons.info_outline_rounded,
+              size: 16,
+              color: AppColors.onSurfaceVariant,
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Select a transaction type to auto-set wallet and flow.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: walletColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: walletColor.withValues(alpha: 0.24)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _selectedWallet == _WalletSelection.maya
+                ? Icons.wallet_rounded
+                : Icons.account_balance_wallet_outlined,
+            size: 16,
+            color: walletColor,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Type profile: ${selectedType.walletAccount} • ${selectedType.isOutflow ? 'Outflow' : 'Inflow'}',
+              style: TextStyle(
+                fontSize: 12,
+                color: walletColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -657,7 +753,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Future<void> _loadTransactionTypes({String? preferSelect}) async {
+  Future<void> _loadTransactionTypes({int? preferSelectId}) async {
     setState(() {
       _isLoadingTransactionTypes = true;
     });
@@ -667,21 +763,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
-    final preferred = preferSelect?.trim();
-
-    String? nextSelected;
-    if (preferred != null && preferred.isNotEmpty) {
-      if (loadedTypes.any((type) => type.name == preferred)) {
-        nextSelected = preferred;
+    int? nextSelectedId;
+    if (preferSelectId != null) {
+      if (loadedTypes.any((type) => type.id == preferSelectId)) {
+        nextSelectedId = preferSelectId;
       }
-    } else if (_selectedType != null &&
-        loadedTypes.any((type) => type.name == _selectedType)) {
-      nextSelected = _selectedType;
+    } else if (_selectedTypeId != null &&
+        loadedTypes.any((type) => type.id == _selectedTypeId)) {
+      nextSelectedId = _selectedTypeId;
     }
 
     setState(() {
       _transactionTypes = loadedTypes;
-      _applyTypeSelection(nextSelected);
+      _applyTypeSelection(nextSelectedId);
       _isLoadingTransactionTypes = false;
     });
   }
@@ -698,20 +792,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
-    await _database.insertTransactionType(
+    final insertedId = await _database.insertTransactionType(
       createdType.name,
       isOutflow: createdType.isOutflow,
+      walletAccount: createdType.walletSelection == _WalletSelection.maya
+          ? 'Maya Wallet'
+          : 'GCash',
     );
     if (!mounted) {
       return;
     }
 
-    await _loadTransactionTypes(preferSelect: createdType.name.trim());
+    await _loadTransactionTypes(preferSelectId: insertedId);
     if (!mounted) {
       return;
     }
     _showMessage(
-      'Transaction type added: ${createdType.name.trim()} (${createdType.isOutflow ? 'Outflow' : 'Inflow'})',
+      'Transaction type added: ${createdType.name.trim()} (${createdType.isOutflow ? 'Outflow' : 'Inflow'} • ${createdType.walletSelection == _WalletSelection.maya ? 'Maya Wallet' : 'GCash'})',
     );
   }
 
@@ -729,7 +826,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       barrierColor: Colors.black.withValues(alpha: 0.56),
       builder: (_) => _ManageTransactionTypesDialog(
         types: _transactionTypes,
-        selectedTypeName: _selectedType,
+        selectedTypeId: _selectedTypeId,
       ),
     );
 
@@ -755,6 +852,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         existingTypes: _transactionTypes,
         initialName: type.name,
         initialIsOutflow: type.isOutflow,
+        initialWalletSelection:
+            type.walletAccount.toLowerCase().contains('maya')
+            ? _WalletSelection.maya
+            : _WalletSelection.gcash,
       ),
     );
 
@@ -767,6 +868,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         id: type.id,
         name: result.name,
         isOutflow: result.isOutflow,
+        walletAccount: result.walletSelection == _WalletSelection.maya
+            ? 'Maya Wallet'
+            : 'GCash',
       );
     } catch (_) {
       if (!mounted) {
@@ -782,7 +886,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (!mounted) {
       return;
     }
-    await _loadTransactionTypes(preferSelect: result.name);
+    await _loadTransactionTypes(preferSelectId: type.id);
     if (!mounted) {
       return;
     }
@@ -1481,7 +1585,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final accountNumber = _accountController.text.trim();
     final principal = double.tryParse(_principalController.text.trim()) ?? 0;
 
-    if (_selectedType == null || _selectedType!.trim().isEmpty) {
+    if (_selectedTransactionType == null) {
       _showMessage(
         'Transaction type is required before saving.',
         isError: true,
@@ -1606,7 +1710,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return false;
     }
 
-    final selectedType = _selectedType?.trim();
+    final selectedType = _selectedTransactionType?.name.trim();
     final isOutflow = _isOutflowSelection;
     final walletAccount = _selectedWalletAccount;
     final usesMayaWallet = walletAccount == 'Maya Wallet';
@@ -1886,11 +1990,13 @@ class _UpsertTransactionTypeDialog extends StatefulWidget {
     required this.existingTypes,
     this.initialName,
     this.initialIsOutflow,
+    this.initialWalletSelection,
   });
 
   final List<TransactionTypeRecord> existingTypes;
   final String? initialName;
   final bool? initialIsOutflow;
+  final _WalletSelection? initialWalletSelection;
 
   @override
   State<_UpsertTransactionTypeDialog> createState() =>
@@ -1901,6 +2007,7 @@ class _UpsertTransactionTypeDialogState
     extends State<_UpsertTransactionTypeDialog> {
   late final TextEditingController _controller;
   late bool _isOutflow;
+  late _WalletSelection _walletSelection;
   String? _errorText;
 
   bool get _isEditing => widget.initialName != null;
@@ -1910,6 +2017,7 @@ class _UpsertTransactionTypeDialogState
     super.initState();
     _controller = TextEditingController(text: widget.initialName ?? '');
     _isOutflow = widget.initialIsOutflow ?? false;
+    _walletSelection = widget.initialWalletSelection ?? _WalletSelection.gcash;
   }
 
   @override
@@ -1927,29 +2035,58 @@ class _UpsertTransactionTypeDialogState
       return;
     }
 
-    final initialLower = (widget.initialName ?? '').trim().toLowerCase();
-    final exists = widget.existingTypes.any((type) {
-      final lower = type.name.toLowerCase();
-      if (lower == initialLower) {
+    final normalizedName = raw.toLowerCase();
+    final initialNameLower = (widget.initialName ?? '').trim().toLowerCase();
+    final initialIsOutflow = widget.initialIsOutflow ?? false;
+    final initialWallet =
+        widget.initialWalletSelection ?? _WalletSelection.gcash;
+
+    final hasExactDuplicate = widget.existingTypes.any((type) {
+      final typeNameLower = type.name.trim().toLowerCase();
+      final typeWallet = type.walletAccount.toLowerCase().contains('maya')
+          ? _WalletSelection.maya
+          : _WalletSelection.gcash;
+
+      final isSameAsEditedOriginal =
+          _isEditing &&
+          typeNameLower == initialNameLower &&
+          type.isOutflow == initialIsOutflow &&
+          typeWallet == initialWallet;
+      if (isSameAsEditedOriginal) {
         return false;
       }
-      return lower == raw.toLowerCase();
+
+      return typeNameLower == normalizedName &&
+          type.isOutflow == _isOutflow &&
+          typeWallet == _walletSelection;
     });
-    if (exists) {
+
+    if (hasExactDuplicate) {
       setState(() {
-        _errorText = 'Transaction type already exists.';
+        _errorText =
+            'Transaction type already exists for this flow and wallet.';
       });
       return;
     }
 
-    Navigator.of(
-      context,
-    ).pop(_TransactionTypeDraft(name: raw, isOutflow: _isOutflow));
+    Navigator.of(context).pop(
+      _TransactionTypeDraft(
+        name: raw,
+        isOutflow: _isOutflow,
+        walletSelection: _walletSelection,
+      ),
+    );
   }
 
   void _setOutflow(bool value) {
     setState(() {
       _isOutflow = value;
+    });
+  }
+
+  void _setWalletSelection(_WalletSelection value) {
+    setState(() {
+      _walletSelection = value;
     });
   }
 
@@ -2073,7 +2210,7 @@ class _UpsertTransactionTypeDialogState
             autofocus: true,
             textCapitalization: TextCapitalization.words,
             decoration: InputDecoration(
-              hintText: 'e.g. Remittance Pickup',
+              hintText: 'e.g. Cash In, Cash Out',
               errorText: _errorText,
               filled: true,
               fillColor: AppColors.surfaceContainerLow,
@@ -2115,11 +2252,40 @@ class _UpsertTransactionTypeDialogState
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          const Text(
+            'Wallet Target',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildFlowOption(
+                label: 'GCash',
+                subtitle: 'Assign this type to GCash wallet.',
+                icon: Icons.account_balance_wallet_outlined,
+                color: AppColors.primary,
+                selected: _walletSelection == _WalletSelection.gcash,
+                onTap: () => _setWalletSelection(_WalletSelection.gcash),
+              ),
+              const SizedBox(width: 10),
+              _buildFlowOption(
+                label: 'Maya',
+                subtitle: 'Assign this type to Maya wallet.',
+                icon: Icons.wallet_rounded,
+                color: AppColors.secondary,
+                selected: _walletSelection == _WalletSelection.maya,
+                onTap: () => _setWalletSelection(_WalletSelection.maya),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           Text(
-            _isOutflow
-                ? 'This type will switch the form to outflow when selected.'
-                : 'This type will switch the form to inflow when selected.',
+            '${_isOutflow ? 'Outflow' : 'Inflow'} • ${_walletSelection == _WalletSelection.maya ? 'Maya Wallet' : 'GCash'} will auto-apply when this type is selected.',
             style: TextStyle(
               fontSize: 11,
               color: AppColors.onSurfaceVariant.withValues(alpha: 0.85),
@@ -2167,11 +2333,11 @@ class _UpsertTransactionTypeDialogState
 class _ManageTransactionTypesDialog extends StatelessWidget {
   const _ManageTransactionTypesDialog({
     required this.types,
-    required this.selectedTypeName,
+    required this.selectedTypeId,
   });
 
   final List<TransactionTypeRecord> types;
-  final String? selectedTypeName;
+  final int? selectedTypeId;
 
   @override
   Widget build(BuildContext context) {
@@ -2222,7 +2388,7 @@ class _ManageTransactionTypesDialog extends StatelessWidget {
           separatorBuilder: (_, __) => const Divider(height: 12),
           itemBuilder: (context, index) {
             final type = types[index];
-            final isSelected = type.name == selectedTypeName;
+            final isSelected = type.id == selectedTypeId;
             return Row(
               children: [
                 Expanded(
@@ -2241,7 +2407,7 @@ class _ManageTransactionTypesDialog extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        type.isOutflow ? 'Outflow type' : 'Inflow type',
+                        '${type.isOutflow ? 'Outflow' : 'Inflow'} • ${type.walletAccount.toLowerCase().contains('maya') ? 'Maya Wallet' : 'GCash'}',
                         style: TextStyle(
                           fontSize: 11,
                           color: type.isOutflow
@@ -2304,10 +2470,15 @@ class _ManageTransactionTypesDialog extends StatelessWidget {
 }
 
 class _TransactionTypeDraft {
-  const _TransactionTypeDraft({required this.name, required this.isOutflow});
+  const _TransactionTypeDraft({
+    required this.name,
+    required this.isOutflow,
+    required this.walletSelection,
+  });
 
   final String name;
   final bool isOutflow;
+  final _WalletSelection walletSelection;
 }
 
 enum _TypeAction { edit, delete }

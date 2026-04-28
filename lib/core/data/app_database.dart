@@ -33,7 +33,7 @@ class AppDatabase {
     _database = await databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 9,
+        version: 11,
         onCreate: (db, version) async {
           await _createLedgerTable(db);
           await _createPartiesTable(db);
@@ -177,9 +177,56 @@ class AppDatabase {
               );
             }
           }
+          if (oldVersion < 10) {
+            final hasWalletAccountColumn = await _columnExists(
+              db,
+              transactionTypesTable,
+              'wallet_account',
+            );
+            if (!hasWalletAccountColumn) {
+              await db.execute(
+                "ALTER TABLE $transactionTypesTable ADD COLUMN wallet_account TEXT NOT NULL DEFAULT 'GCash'",
+              );
+            }
+          }
+          if (oldVersion < 11) {
+            await db.execute('''
+              CREATE TABLE transaction_types_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL COLLATE NOCASE,
+                is_outflow INTEGER NOT NULL DEFAULT 0,
+                wallet_account TEXT NOT NULL DEFAULT 'GCash',
+                created_at TEXT NOT NULL,
+                UNIQUE(name, is_outflow, wallet_account)
+              )
+            ''');
+
+            await db.execute('''
+              INSERT OR IGNORE INTO transaction_types_new (
+                id,
+                name,
+                is_outflow,
+                wallet_account,
+                created_at
+              )
+              SELECT
+                id,
+                name,
+                is_outflow,
+                COALESCE(NULLIF(wallet_account, ''), 'GCash') AS wallet_account,
+                created_at
+              FROM $transactionTypesTable
+            ''');
+
+            await db.execute('DROP TABLE $transactionTypesTable');
+            await db.execute(
+              'ALTER TABLE transaction_types_new RENAME TO $transactionTypesTable',
+            );
+          }
         },
         onOpen: (db) async {
           await ensureWalletSchema(db);
+          await ensureTransactionTypeSchema(db);
           await _seedOwnerMovementCategoriesIfEmpty(db);
           await _backfillDefaultOutflowTypes(db);
           await _removeLegacyDummyParties(db);
@@ -267,9 +314,11 @@ class AppDatabase {
     await db.execute('''
       CREATE TABLE $transactionTypesTable (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL COLLATE NOCASE,
         is_outflow INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL
+        wallet_account TEXT NOT NULL DEFAULT 'GCash',
+        created_at TEXT NOT NULL,
+        UNIQUE(name, is_outflow, wallet_account)
       )
     ''');
   }
@@ -299,6 +348,7 @@ class AppDatabase {
       batch.insert(transactionTypesTable, {
         'name': type.name,
         'is_outflow': type.isOutflow ? 1 : 0,
+        'wallet_account': type.walletAccount,
         'created_at': now,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
@@ -334,7 +384,7 @@ class AppDatabase {
     final db = await database;
     final rows = await db.query(
       transactionTypesTable,
-      columns: ['id', 'name', 'is_outflow'],
+      columns: ['id', 'name', 'is_outflow', 'wallet_account'],
       orderBy: 'name COLLATE NOCASE ASC, id ASC',
     );
     return rows
@@ -343,25 +393,33 @@ class AppDatabase {
             id: (row['id'] as num).toInt(),
             name: (row['name'] as String).trim(),
             isOutflow: ((row['is_outflow'] as num?) ?? 0) == 1,
+            walletAccount:
+                ((row['wallet_account'] as String?) ?? 'GCash').trim().isEmpty
+                ? 'GCash'
+                : (row['wallet_account'] as String).trim(),
           ),
         )
         .where((record) => record.name.isNotEmpty)
         .toList(growable: false);
   }
 
-  Future<void> insertTransactionType(
+  Future<int?> insertTransactionType(
     String name, {
     bool isOutflow = false,
+    String walletAccount = 'GCash',
   }) async {
     final normalized = name.trim();
     if (normalized.isEmpty) {
-      return;
+      return null;
     }
 
     final db = await database;
-    await db.insert(transactionTypesTable, {
+    return db.insert(transactionTypesTable, {
       'name': normalized,
       'is_outflow': isOutflow ? 1 : 0,
+      'wallet_account': walletAccount.trim().isEmpty
+          ? 'GCash'
+          : walletAccount.trim(),
       'created_at': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
@@ -370,6 +428,7 @@ class AppDatabase {
     required int id,
     required String name,
     required bool isOutflow,
+    required String walletAccount,
   }) async {
     final normalized = name.trim();
     if (normalized.isEmpty) {
@@ -379,7 +438,13 @@ class AppDatabase {
     final db = await database;
     await db.update(
       transactionTypesTable,
-      {'name': normalized, 'is_outflow': isOutflow ? 1 : 0},
+      {
+        'name': normalized,
+        'is_outflow': isOutflow ? 1 : 0,
+        'wallet_account': walletAccount.trim().isEmpty
+            ? 'GCash'
+            : walletAccount.trim(),
+      },
       where: 'id = ?',
       whereArgs: [id],
       conflictAlgorithm: ConflictAlgorithm.abort,
@@ -499,6 +564,20 @@ class AppDatabase {
   Future<void> ensureWalletSchemaUpToDate() async {
     final db = await database;
     await ensureWalletSchema(db);
+    await ensureTransactionTypeSchema(db);
+  }
+
+  Future<void> ensureTransactionTypeSchema(Database db) async {
+    final hasWalletAccountColumn = await _columnExists(
+      db,
+      transactionTypesTable,
+      'wallet_account',
+    );
+    if (!hasWalletAccountColumn) {
+      await db.execute(
+        "ALTER TABLE $transactionTypesTable ADD COLUMN wallet_account TEXT NOT NULL DEFAULT 'GCash'",
+      );
+    }
   }
 
   Future<void> ensureWalletSchema(Database db) async {
@@ -564,11 +643,13 @@ class TransactionTypeRecord {
     required this.id,
     required this.name,
     required this.isOutflow,
+    required this.walletAccount,
   });
 
   final int id;
   final String name;
   final bool isOutflow;
+  final String walletAccount;
 }
 
 class OwnerBorrowBalanceRecord {
@@ -588,8 +669,13 @@ class OwnerBorrowBalanceRecord {
 }
 
 class _DefaultTransactionType {
-  const _DefaultTransactionType({required this.name, required this.isOutflow});
+  const _DefaultTransactionType({
+    required this.name,
+    required this.isOutflow,
+    required this.walletAccount,
+  });
 
   final String name;
   final bool isOutflow;
+  final String walletAccount;
 }

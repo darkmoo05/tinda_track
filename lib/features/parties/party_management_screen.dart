@@ -21,15 +21,26 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   final PartyRepository _partyRepository = PartyRepository.instance;
   Timer? _searchDebounce;
   String _searchQuery = '';
+  late Future<List<PartyActivityRecord>> _activePartiesFuture;
+  late final VoidCallback _partyRecordsListener;
 
   @override
   void initState() {
     super.initState();
     _partyRepository.ensureLoaded();
+    _activePartiesFuture = _partyRepository.loadMostActiveParties(limit: 5);
+    _partyRecordsListener = () {
+      if (!mounted) return;
+      setState(() {
+        _activePartiesFuture = _partyRepository.loadMostActiveParties(limit: 5);
+      });
+    };
+    _partyRepository.parties.addListener(_partyRecordsListener);
   }
 
   @override
   void dispose() {
+    _partyRepository.parties.removeListener(_partyRecordsListener);
     _searchDebounce?.cancel();
     super.dispose();
   }
@@ -57,7 +68,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
               final verified = parties.where((p) => p.isVerified).length;
               final rate = total == 0 ? 0.0 : (verified / total) * 100;
               return FutureBuilder<List<PartyActivityRecord>>(
-                future: _partyRepository.loadMostActiveParties(limit: 5),
+                future: _activePartiesFuture,
                 builder: (context, snapshot) {
                   return PartyHealthHero(
                     totalEntities: total,
