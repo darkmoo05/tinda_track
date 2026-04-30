@@ -1736,6 +1736,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final db = await _database.database;
     try {
       await _database.ensureWalletSchema(db);
+      final deviceId = await _database.getOrCreateDeviceId();
+      final nowMs = now.millisecondsSinceEpoch;
       await db.insert(AppDatabase.ledgerTable, {
         'entry_type': 'transaction',
         'title': title,
@@ -1749,6 +1751,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         'tag': 'Transaction',
         'icon_key': iconKey,
         'wallet_account': walletAccount,
+        AppDatabase.syncIdColumn: AppDatabase.generateSyncId('entry'),
+        AppDatabase.deviceIdColumn: deviceId,
+        AppDatabase.updatedAtMsColumn: nowMs,
+        AppDatabase.isDeletedColumn: 0,
+        AppDatabase.isDirtyColumn: 1,
         'created_at': now.toIso8601String(),
       });
       return true;

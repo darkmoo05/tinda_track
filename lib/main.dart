@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'core/app_theme.dart';
 import 'core/data/app_database.dart';
-import 'core/network/api_client.dart';
-import 'core/sync/sync_service.dart';
+import 'core/data/sync_service.dart';
 import 'features/main_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppDatabase.instance.init();
-  ApiClient.instance.init();
-  await SyncService.instance.init();
-  await SyncService.instance.syncOnLaunch();
+  unawaited(() async {
+    try {
+      await SyncService.instance.syncAll();
+    } catch (_) {
+      // Ignore startup sync failures; user can manually sync from Backup Data.
+    }
+  }());
   runApp(const TindaTrackApp());
 }
 

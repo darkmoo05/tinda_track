@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:math';
 
 class AppDatabase {
   AppDatabase._();
@@ -13,6 +14,15 @@ class AppDatabase {
   static const String transactionTypesTable = 'transaction_types';
   static const String ownerMovementCategoriesTable =
       'owner_movement_categories';
+  static const String syncStateTable = 'sync_state';
+
+  static const String syncIdColumn = 'sync_id';
+  static const String deviceIdColumn = 'device_id';
+  static const String updatedAtMsColumn = 'updated_at_ms';
+  static const String isDeletedColumn = 'is_deleted';
+  static const String isDirtyColumn = 'is_dirty';
+
+  static final Random _random = Random();
 
   Database? _database;
   DatabaseFactory? _databaseFactory;
@@ -40,7 +50,10 @@ class AppDatabase {
           await _createChargesTable(db);
           await _createTransactionTypesTable(db);
           await _createOwnerMovementCategoriesTable(db);
+          await _createSyncStateTable(db);
           await _seedOwnerMovementCategoriesIfEmpty(db);
+          await ensureSyncSchema(db);
+          await _backfillSyncMetadata(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -224,29 +237,15 @@ class AppDatabase {
             );
           }
           if (oldVersion < 12) {
-            for (final table in [
-              ledgerTable,
-              partiesTable,
-              chargesTable,
-              transactionTypesTable,
-              ownerMovementCategoriesTable,
-            ]) {
-              final hasSyncId = await _columnExists(db, table, 'sync_id');
-              final hasSyncedAt = await _columnExists(db, table, 'synced_at');
-              if (!hasSyncId) {
-                await db.execute('ALTER TABLE $table ADD COLUMN sync_id TEXT');
-              }
-              if (!hasSyncedAt) {
-                await db.execute(
-                  'ALTER TABLE $table ADD COLUMN synced_at INTEGER',
-                );
-              }
-            }
+            await _createSyncStateTable(db);
+            await ensureSyncSchema(db);
+            await _backfillSyncMetadata(db);
           }
         },
         onOpen: (db) async {
           await ensureWalletSchema(db);
           await ensureTransactionTypeSchema(db);
+          await ensureSyncSchema(db);
           await _seedOwnerMovementCategoriesIfEmpty(db);
           await _backfillDefaultOutflowTypes(db);
           await _removeLegacyDummyParties(db);
@@ -300,9 +299,12 @@ class AppDatabase {
         owner_category TEXT,
         owner_party_name TEXT,
         owner_party_account TEXT,
-        created_at TEXT NOT NULL,
-        sync_id TEXT,
-        synced_at INTEGER
+        $syncIdColumn TEXT UNIQUE,
+        $deviceIdColumn TEXT NOT NULL DEFAULT '',
+        $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0,
+        $isDeletedColumn INTEGER NOT NULL DEFAULT 0,
+        $isDirtyColumn INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
       )
     ''');
   }
@@ -317,8 +319,11 @@ class AppDatabase {
         description TEXT NOT NULL,
         join_date TEXT NOT NULL,
         is_verified INTEGER NOT NULL,
-        sync_id TEXT,
-        synced_at INTEGER
+        $syncIdColumn TEXT UNIQUE,
+        $deviceIdColumn TEXT NOT NULL DEFAULT '',
+        $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0,
+        $isDeletedColumn INTEGER NOT NULL DEFAULT 0,
+        $isDirtyColumn INTEGER NOT NULL DEFAULT 1
       )
     ''');
   }
@@ -330,8 +335,11 @@ class AppDatabase {
         lower_bound INTEGER NOT NULL,
         upper_bound INTEGER NOT NULL,
         charge_amount REAL NOT NULL,
-        sync_id TEXT,
-        synced_at INTEGER
+        $syncIdColumn TEXT UNIQUE,
+        $deviceIdColumn TEXT NOT NULL DEFAULT '',
+        $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0,
+        $isDeletedColumn INTEGER NOT NULL DEFAULT 0,
+        $isDirtyColumn INTEGER NOT NULL DEFAULT 1
       )
     ''');
   }
@@ -343,9 +351,12 @@ class AppDatabase {
         name TEXT NOT NULL COLLATE NOCASE,
         is_outflow INTEGER NOT NULL DEFAULT 0,
         wallet_account TEXT NOT NULL DEFAULT 'GCash',
+        $syncIdColumn TEXT UNIQUE,
+        $deviceIdColumn TEXT NOT NULL DEFAULT '',
+        $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0,
+        $isDeletedColumn INTEGER NOT NULL DEFAULT 0,
+        $isDirtyColumn INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
-        sync_id TEXT,
-        synced_at INTEGER,
         UNIQUE(name, is_outflow, wallet_account)
       )
     ''');
@@ -356,9 +367,21 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS $ownerMovementCategoriesTable (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
-        created_at TEXT NOT NULL,
-        sync_id TEXT,
-        synced_at INTEGER
+        $syncIdColumn TEXT UNIQUE,
+        $deviceIdColumn TEXT NOT NULL DEFAULT '',
+        $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0,
+        $isDeletedColumn INTEGER NOT NULL DEFAULT 0,
+        $isDirtyColumn INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createSyncStateTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $syncStateTable (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
       )
     ''');
   }
@@ -415,6 +438,7 @@ class AppDatabase {
     final rows = await db.query(
       transactionTypesTable,
       columns: ['id', 'name', 'is_outflow', 'wallet_account'],
+      where: '$isDeletedColumn = 0',
       orderBy: 'name COLLATE NOCASE ASC, id ASC',
     );
     return rows
@@ -437,6 +461,8 @@ class AppDatabase {
     String name, {
     bool isOutflow = false,
     String walletAccount = 'GCash',
+    String? deviceId,
+    String? syncId,
   }) async {
     final normalized = name.trim();
     if (normalized.isEmpty) {
@@ -444,12 +470,18 @@ class AppDatabase {
     }
 
     final db = await database;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     return db.insert(transactionTypesTable, {
       'name': normalized,
       'is_outflow': isOutflow ? 1 : 0,
       'wallet_account': walletAccount.trim().isEmpty
           ? 'GCash'
           : walletAccount.trim(),
+      syncIdColumn: syncId ?? generateSyncId('type'),
+      deviceIdColumn: deviceId ?? await getOrCreateDeviceId(),
+      updatedAtMsColumn: nowMs,
+      isDeletedColumn: 0,
+      isDirtyColumn: 1,
       'created_at': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
@@ -466,6 +498,7 @@ class AppDatabase {
     }
 
     final db = await database;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     await db.update(
       transactionTypesTable,
       {
@@ -474,6 +507,8 @@ class AppDatabase {
         'wallet_account': walletAccount.trim().isEmpty
             ? 'GCash'
             : walletAccount.trim(),
+        updatedAtMsColumn: nowMs,
+        isDirtyColumn: 1,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -483,7 +518,13 @@ class AppDatabase {
 
   Future<void> deleteTransactionType(int id) async {
     final db = await database;
-    await db.delete(transactionTypesTable, where: 'id = ?', whereArgs: [id]);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
+      transactionTypesTable,
+      {isDeletedColumn: 1, isDirtyColumn: 1, updatedAtMsColumn: nowMs},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<List<String>> loadOwnerMovementCategories() async {
@@ -492,6 +533,7 @@ class AppDatabase {
     final rows = await db.query(
       ownerMovementCategoriesTable,
       columns: ['name'],
+      where: '$isDeletedColumn = 0',
       orderBy: 'name COLLATE NOCASE ASC, id ASC',
     );
     return rows
@@ -500,15 +542,25 @@ class AppDatabase {
         .toList(growable: false);
   }
 
-  Future<void> insertOwnerMovementCategory(String name) async {
+  Future<void> insertOwnerMovementCategory(
+    String name, {
+    String? deviceId,
+    String? syncId,
+  }) async {
     final normalized = name.trim();
     if (normalized.isEmpty) {
       return;
     }
 
     final db = await database;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     await db.insert(ownerMovementCategoriesTable, {
       'name': normalized,
+      syncIdColumn: syncId ?? generateSyncId('category'),
+      deviceIdColumn: deviceId ?? await getOrCreateDeviceId(),
+      updatedAtMsColumn: nowMs,
+      isDeletedColumn: 0,
+      isDirtyColumn: 1,
       'created_at': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
@@ -523,10 +575,11 @@ class AppDatabase {
     }
 
     final db = await database;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
       await txn.update(
         ownerMovementCategoriesTable,
-        {'name': normalized},
+        {'name': normalized, updatedAtMsColumn: nowMs, isDirtyColumn: 1},
         where: 'LOWER(name) = LOWER(?)',
         whereArgs: [previousName],
         conflictAlgorithm: ConflictAlgorithm.abort,
@@ -542,8 +595,10 @@ class AppDatabase {
 
   Future<void> deleteOwnerMovementCategory(String name) async {
     final db = await database;
-    await db.delete(
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
       ownerMovementCategoriesTable,
+      {isDeletedColumn: 1, isDirtyColumn: 1, updatedAtMsColumn: nowMs},
       where: 'LOWER(name) = LOWER(?)',
       whereArgs: [name],
     );
@@ -608,6 +663,156 @@ class AppDatabase {
         "ALTER TABLE $transactionTypesTable ADD COLUMN wallet_account TEXT NOT NULL DEFAULT 'GCash'",
       );
     }
+  }
+
+  Future<void> ensureSyncSchema(Database db) async {
+    await _ensureTableSyncColumns(db, ledgerTable);
+    await _ensureTableSyncColumns(db, partiesTable);
+    await _ensureTableSyncColumns(db, chargesTable);
+    await _ensureTableSyncColumns(db, transactionTypesTable);
+    await _ensureTableSyncColumns(db, ownerMovementCategoriesTable);
+    await _createSyncStateTable(db);
+  }
+
+  Future<void> _ensureTableSyncColumns(Database db, String tableName) async {
+    if (!await _columnExists(db, tableName, syncIdColumn)) {
+      await db.execute('ALTER TABLE $tableName ADD COLUMN $syncIdColumn TEXT');
+      await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_${tableName}_sync_id ON $tableName($syncIdColumn)',
+      );
+    }
+    if (!await _columnExists(db, tableName, deviceIdColumn)) {
+      await db.execute(
+        "ALTER TABLE $tableName ADD COLUMN $deviceIdColumn TEXT NOT NULL DEFAULT ''",
+      );
+    }
+    if (!await _columnExists(db, tableName, updatedAtMsColumn)) {
+      await db.execute(
+        'ALTER TABLE $tableName ADD COLUMN $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (!await _columnExists(db, tableName, isDeletedColumn)) {
+      await db.execute(
+        'ALTER TABLE $tableName ADD COLUMN $isDeletedColumn INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (!await _columnExists(db, tableName, isDirtyColumn)) {
+      await db.execute(
+        'ALTER TABLE $tableName ADD COLUMN $isDirtyColumn INTEGER NOT NULL DEFAULT 1',
+      );
+    }
+  }
+
+  Future<void> _backfillSyncMetadata(Database db) async {
+    final deviceId = await _getOrCreateDeviceIdWithDb(db);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await _backfillTableSyncMetadata(db, ledgerTable, 'entry', deviceId, nowMs);
+    await _backfillTableSyncMetadata(
+      db,
+      partiesTable,
+      'party',
+      deviceId,
+      nowMs,
+    );
+    await _backfillTableSyncMetadata(
+      db,
+      chargesTable,
+      'charge',
+      deviceId,
+      nowMs,
+    );
+    await _backfillTableSyncMetadata(
+      db,
+      transactionTypesTable,
+      'type',
+      deviceId,
+      nowMs,
+    );
+    await _backfillTableSyncMetadata(
+      db,
+      ownerMovementCategoriesTable,
+      'category',
+      deviceId,
+      nowMs,
+    );
+  }
+
+  Future<void> _backfillTableSyncMetadata(
+    Database db,
+    String tableName,
+    String prefix,
+    String deviceId,
+    int nowMs,
+  ) async {
+    await db.execute('''
+      UPDATE $tableName
+      SET
+        $syncIdColumn = COALESCE(NULLIF($syncIdColumn, ''), '$prefix-' || id),
+        $deviceIdColumn = COALESCE($deviceIdColumn, ''),
+        $updatedAtMsColumn = CASE WHEN $updatedAtMsColumn <= 0 THEN $nowMs ELSE $updatedAtMsColumn END,
+        $isDeletedColumn = COALESCE($isDeletedColumn, 0),
+        $isDirtyColumn = COALESCE($isDirtyColumn, 1)
+    ''');
+    await db.update(
+      tableName,
+      {deviceIdColumn: deviceId},
+      where: '$deviceIdColumn = ?',
+      whereArgs: [''],
+    );
+  }
+
+  Future<String?> getSyncState(String key) async {
+    final db = await database;
+    return _getSyncStateWithDb(db, key);
+  }
+
+  Future<String?> _getSyncStateWithDb(Database db, String key) async {
+    final rows = await db.query(
+      syncStateTable,
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    return rows.first['value'] as String?;
+  }
+
+  Future<void> setSyncState(String key, String value) async {
+    final db = await database;
+    await _setSyncStateWithDb(db, key, value);
+  }
+
+  Future<void> _setSyncStateWithDb(
+    Database db,
+    String key,
+    String value,
+  ) async {
+    await db.insert(syncStateTable, {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<String> getOrCreateDeviceId() async {
+    final db = await database;
+    return _getOrCreateDeviceIdWithDb(db);
+  }
+
+  Future<String> _getOrCreateDeviceIdWithDb(Database db) async {
+    final existing = await _getSyncStateWithDb(db, 'device_id');
+    if (existing != null && existing.trim().isNotEmpty) {
+      return existing;
+    }
+    final id =
+        'device-${DateTime.now().millisecondsSinceEpoch}-${_random.nextInt(1 << 20)}';
+    await _setSyncStateWithDb(db, 'device_id', id);
+    return id;
+  }
+
+  static String generateSyncId(String prefix) {
+    return '$prefix-${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 24)}';
   }
 
   Future<void> ensureWalletSchema(Database db) async {

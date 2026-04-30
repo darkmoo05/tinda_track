@@ -170,6 +170,8 @@ class PartyRepository {
     }
 
     final db = await _database.database;
+    final deviceId = await _database.getOrCreateDeviceId();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     try {
       await db.insert(AppDatabase.partiesTable, {
         'name': normalizedName,
@@ -178,6 +180,11 @@ class PartyRepository {
         'description': 'Newly Registered',
         'join_date': _joinDateFormat.format(DateTime.now()),
         'is_verified': 1,
+        AppDatabase.syncIdColumn: AppDatabase.generateSyncId('party'),
+        AppDatabase.deviceIdColumn: deviceId,
+        AppDatabase.updatedAtMsColumn: nowMs,
+        AppDatabase.isDeletedColumn: 0,
+        AppDatabase.isDirtyColumn: 1,
       });
     } on Exception {
       return false;
@@ -196,14 +203,23 @@ class PartyRepository {
       whereArgs: const ['0012984432', '3311981021', '8800459920'],
     );
     final rows = await db.query(AppDatabase.partiesTable, orderBy: 'id ASC');
+    final visibleRows = rows
+        .where((row) => ((row[AppDatabase.isDeletedColumn] as num?) ?? 0) == 0)
+        .toList(growable: false);
 
-    parties.value = rows.map(_mapRow).toList(growable: false);
+    parties.value = visibleRows.map(_mapRow).toList(growable: false);
   }
 
   Future<bool> deleteParty(int id) async {
     final db = await _database.database;
-    final count = await db.delete(
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final count = await db.update(
       AppDatabase.partiesTable,
+      {
+        AppDatabase.isDeletedColumn: 1,
+        AppDatabase.isDirtyColumn: 1,
+        AppDatabase.updatedAtMsColumn: nowMs,
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -225,10 +241,16 @@ class PartyRepository {
     if (normalizedName.isEmpty || normalizedAccount.isEmpty) return false;
 
     final db = await _database.database;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     try {
       final count = await db.update(
         AppDatabase.partiesTable,
-        {'name': normalizedName, 'account_number': normalizedAccount},
+        {
+          'name': normalizedName,
+          'account_number': normalizedAccount,
+          AppDatabase.updatedAtMsColumn: nowMs,
+          AppDatabase.isDirtyColumn: 1,
+        },
         where: 'id = ?',
         whereArgs: [id],
       );
