@@ -30,33 +30,86 @@ class SyncService {
     final deviceId = await _database.getOrCreateDeviceId();
     final sinceRaw = await _database.getSyncState('last_sync_ms');
     final sinceMs = int.tryParse(sinceRaw ?? '') ?? 0;
+    final hasLocalData = await _hasAnyLocalData(db);
+    final effectiveSinceMs = hasLocalData ? sinceMs : 0;
+    final pullDeviceId = hasLocalData ? deviceId : null;
 
     var pushed = 0;
     var pulled = 0;
 
-    pushed += await _syncParties(db, deviceId, sinceMs, isPush: true);
-    pulled += await _syncParties(db, deviceId, sinceMs, isPush: false);
+    pushed += await _syncParties(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: true,
+      pullDeviceId: pullDeviceId,
+    );
+    pulled += await _syncParties(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: false,
+      pullDeviceId: pullDeviceId,
+    );
 
-    pushed += await _syncEntries(db, deviceId, sinceMs, isPush: true);
-    pulled += await _syncEntries(db, deviceId, sinceMs, isPush: false);
+    pushed += await _syncEntries(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: true,
+      pullDeviceId: pullDeviceId,
+    );
+    pulled += await _syncEntries(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: false,
+      pullDeviceId: pullDeviceId,
+    );
 
-    pushed += await _syncCharges(db, deviceId, sinceMs, isPush: true);
-    pulled += await _syncCharges(db, deviceId, sinceMs, isPush: false);
+    pushed += await _syncCharges(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: true,
+      pullDeviceId: pullDeviceId,
+    );
+    pulled += await _syncCharges(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: false,
+      pullDeviceId: pullDeviceId,
+    );
 
-    pushed += await _syncTransactionTypes(db, deviceId, sinceMs, isPush: true);
-    pulled += await _syncTransactionTypes(db, deviceId, sinceMs, isPush: false);
+    pushed += await _syncTransactionTypes(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: true,
+      pullDeviceId: pullDeviceId,
+    );
+    pulled += await _syncTransactionTypes(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: false,
+      pullDeviceId: pullDeviceId,
+    );
 
     pushed += await _syncMovementCategories(
       db,
       deviceId,
-      sinceMs,
+      effectiveSinceMs,
       isPush: true,
+      pullDeviceId: pullDeviceId,
     );
     pulled += await _syncMovementCategories(
       db,
       deviceId,
-      sinceMs,
+      effectiveSinceMs,
       isPush: false,
+      pullDeviceId: pullDeviceId,
     );
 
     await _database.setSyncState(
@@ -72,6 +125,7 @@ class SyncService {
     String deviceId,
     int sinceMs, {
     required bool isPush,
+    String? pullDeviceId,
   }) async {
     if (isPush) {
       final rows = await db.query(
@@ -100,7 +154,7 @@ class SyncService {
       return rows.length;
     }
 
-    final data = await _pull('/parties/pull', sinceMs, deviceId);
+    final data = await _pull('/parties/pull', sinceMs, pullDeviceId);
     if (data.isEmpty) return 0;
 
     for (final item in data) {
@@ -134,6 +188,7 @@ class SyncService {
     String deviceId,
     int sinceMs, {
     required bool isPush,
+    String? pullDeviceId,
   }) async {
     if (isPush) {
       final rows = await db.query(
@@ -174,7 +229,7 @@ class SyncService {
       return rows.length;
     }
 
-    final data = await _pull('/entries/pull', sinceMs, deviceId);
+    final data = await _pull('/entries/pull', sinceMs, pullDeviceId);
     if (data.isEmpty) return 0;
 
     for (final item in data) {
@@ -223,6 +278,7 @@ class SyncService {
     String deviceId,
     int sinceMs, {
     required bool isPush,
+    String? pullDeviceId,
   }) async {
     if (isPush) {
       final rows = await db.query(
@@ -248,7 +304,7 @@ class SyncService {
       return rows.length;
     }
 
-    final data = await _pull('/charges/pull', sinceMs, deviceId);
+    final data = await _pull('/charges/pull', sinceMs, pullDeviceId);
     if (data.isEmpty) return 0;
 
     for (final item in data) {
@@ -279,6 +335,7 @@ class SyncService {
     String deviceId,
     int sinceMs, {
     required bool isPush,
+    String? pullDeviceId,
   }) async {
     if (isPush) {
       final rows = await db.query(
@@ -304,7 +361,7 @@ class SyncService {
       return rows.length;
     }
 
-    final data = await _pull('/transaction-types/pull', sinceMs, deviceId);
+    final data = await _pull('/transaction-types/pull', sinceMs, pullDeviceId);
     if (data.isEmpty) return 0;
 
     for (final item in data) {
@@ -348,6 +405,7 @@ class SyncService {
     String deviceId,
     int sinceMs, {
     required bool isPush,
+    String? pullDeviceId,
   }) async {
     if (isPush) {
       final rows = await db.query(
@@ -371,7 +429,11 @@ class SyncService {
       return rows.length;
     }
 
-    final data = await _pull('/movement-categories/pull', sinceMs, deviceId);
+    final data = await _pull(
+      '/movement-categories/pull',
+      sinceMs,
+      pullDeviceId,
+    );
     if (data.isEmpty) return 0;
 
     for (final item in data) {
@@ -431,12 +493,17 @@ class SyncService {
   Future<List<Map<String, dynamic>>> _pull(
     String path,
     int sinceMs,
-    String deviceId,
+    String? deviceId,
   ) async {
     final baseUrl = await SyncConfig.getBaseApiUrl();
-    final uri = Uri.parse('$baseUrl$path').replace(
-      queryParameters: {'since': sinceMs.toString(), 'deviceId': deviceId},
-    );
+    final queryParameters = <String, String>{'since': sinceMs.toString()};
+    final normalizedDeviceId = deviceId?.trim() ?? '';
+    if (normalizedDeviceId.isNotEmpty) {
+      queryParameters['deviceId'] = normalizedDeviceId;
+    }
+    final uri = Uri.parse(
+      '$baseUrl$path',
+    ).replace(queryParameters: queryParameters);
     final response = await _runRequest(
       () => http
           .get(uri, headers: const {'accept': 'application/json'})
@@ -591,6 +658,27 @@ class SyncService {
       final normalized = value.toLowerCase().trim();
       return normalized == 'true' || normalized == '1';
     }
+    return false;
+  }
+
+  Future<bool> _hasAnyLocalData(Database db) async {
+    final tables = [
+      AppDatabase.partiesTable,
+      AppDatabase.ledgerTable,
+      AppDatabase.chargesTable,
+      AppDatabase.transactionTypesTable,
+      AppDatabase.ownerMovementCategoriesTable,
+    ];
+
+    for (final table in tables) {
+      final rows = await db.rawQuery(
+        'SELECT 1 AS has_data FROM $table WHERE ${AppDatabase.isDeletedColumn} = 0 LIMIT 1',
+      );
+      if (rows.isNotEmpty) {
+        return true;
+      }
+    }
+
     return false;
   }
 }

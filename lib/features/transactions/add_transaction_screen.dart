@@ -113,6 +113,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return _totalCollected;
   }
 
+  String get _chargeDestinationAccount {
+    return _isOutflowSelection ? _selectedWalletAccount : 'On-hand Cash';
+  }
+
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
 
   bool get _isRegisteredAccount => _matchedParty != null;
@@ -1208,6 +1212,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           _buildPreviewRow('Flow', _selectedFlowLabel),
           const SizedBox(height: 4),
           _buildPreviewRow('Charge Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
+          const SizedBox(height: 4),
+          _buildPreviewRow('Charge Routed To', _chargeDestinationAccount),
           if (_matchedChargeBracket != null) ...[
             const SizedBox(height: 4),
             _buildPreviewRow(
@@ -1714,11 +1720,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final isOutflow = _isOutflowSelection;
     final walletAccount = _selectedWalletAccount;
     final usesMayaWallet = walletAccount == 'Maya Wallet';
+    final walletPostedAmount = isOutflow ? totalCollected : principal;
     final walletDelta = usesMayaWallet
         ? 0.0
-        : (isOutflow ? principal : -principal);
+        : (isOutflow ? walletPostedAmount : -walletPostedAmount);
     final mayaWalletDelta = usesMayaWallet
-        ? (isOutflow ? principal : -principal)
+        ? (isOutflow ? walletPostedAmount : -walletPostedAmount)
         : 0.0;
     final onHandDelta = isOutflow ? -principal : totalCollected;
     final now = DateTime.now();
@@ -1731,7 +1738,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ? 'Account $accountNumber • ${_matchedParty!.name}'
         : notes;
     final persistedNote =
-        '$noteBase • $_selectedFlowLabel • Charge ₱${chargeFee.toStringAsFixed(2)}';
+        '$noteBase • $_selectedFlowLabel • Charge ₱${chargeFee.toStringAsFixed(2)} • Charge routed to $_chargeDestinationAccount';
 
     final db = await _database.database;
     try {

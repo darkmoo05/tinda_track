@@ -159,58 +159,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
+    const cardColor = Color(0xFF8E6C00);
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _minimalCardDecoration(),
-      child: Row(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: cardColor.withOpacity(0.32),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 4,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.green[700],
-              borderRadius: BorderRadius.circular(2),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ON-HAND CASH',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              Icon(Icons.payments_outlined, color: Colors.white70, size: 24),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _dashboardRepository.formatCurrency(dashboard.onHandCash),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'ON-HAND CASH',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    Icon(
-                      Icons.payments_outlined,
-                      color: Colors.green[700],
-                      size: 20,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _dashboardRepository.formatCurrency(dashboard.onHandCash),
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Text(
-                  'Physical currency on-site',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+          const SizedBox(height: 8),
+          const Text(
+            'Physical cash on hand',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
         ],
       ),
@@ -231,87 +224,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
+    const cardColor = Color(0xFF1E3A5F);
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _minimalCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.business_center_outlined,
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Business-Usable Cash',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _dashboardRepository.formatCurrency(dashboard.businessUsableCash),
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Subtracts borrowing/personal expense and adds repayments.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildBreakdownChip(
-                label: 'Gcash',
-                value: _dashboardRepository.formatCurrency(
-                  dashboard.businessWalletBalance,
-                ),
-              ),
-              _buildBreakdownChip(
-                label: 'Maya',
-                value: _dashboardRepository.formatCurrency(
-                  dashboard.businessMayaWalletBalance,
-                ),
-              ),
-              _buildBreakdownChip(
-                label: 'On-hand',
-                value: _dashboardRepository.formatCurrency(
-                  dashboard.businessOnHandCash,
-                ),
-              ),
-              _buildBreakdownChip(
-                label: 'Owner Borrowed',
-                value: _dashboardRepository.formatCurrency(
-                  dashboard.ownerCreditAdjustment,
-                ),
-              ),
-            ],
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: cardColor.withOpacity(0.32),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildBreakdownChip({required String label, required String value}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        '$label: $value',
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppColors.onSurfaceVariant,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'TOTAL FUNDS',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              Icon(
+                Icons.business_center_outlined,
+                color: Colors.white70,
+                size: 24,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _dashboardRepository.formatCurrency(dashboard.businessUsableCash),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Combined business funds',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+        ],
       ),
     );
   }

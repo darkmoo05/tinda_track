@@ -1335,6 +1335,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           final chargeAmount = entryType == 'transaction'
               ? _extractChargeAmountFromNote(notes)
               : 0.0;
+          final chargeDestination = entryType == 'transaction'
+              ? _extractChargeDestinationFromNote(notes)
+              : '';
           runningBalance += inflow - outflow;
 
           return _LedgerExportRow(
@@ -1347,9 +1350,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             inflow: inflow,
             outflow: outflow,
             chargeAmount: chargeAmount,
+            chargeDestination: chargeDestination,
             chargeBreakdown: _buildChargeBreakdown(
               amount: amount,
               chargeAmount: chargeAmount,
+              chargeDestination: chargeDestination,
               entryType: entryType,
             ),
             runningBalance: runningBalance,
@@ -1409,6 +1414,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 'Money In',
                 'Money Out',
                 'Service Fee',
+                'Fee Destination',
                 'Fee Details',
                 'Balance',
               ],
@@ -1430,6 +1436,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       entry.chargeAmount > 0
                           ? _reportCurrency(entry.chargeAmount)
                           : '',
+                      _pdfSafeText(entry.chargeDestination),
                       _pdfSafeText(entry.chargeBreakdown),
                       _reportCurrency(entry.runningBalance),
                     ],
@@ -1507,11 +1514,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
+      ex.TextCellValue(''),
     ]);
     sheet.appendRow([
       ex.TextCellValue(
         'Period: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
       ),
+      ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
@@ -1537,6 +1546,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
+      ex.TextCellValue(''),
     ]);
     sheet.appendRow([
       ex.TextCellValue('Date & Time'),
@@ -1548,6 +1558,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue('Money In'),
       ex.TextCellValue('Money Out'),
       ex.TextCellValue('Service Fee'),
+      ex.TextCellValue('Fee Destination'),
       ex.TextCellValue('Fee Details'),
       ex.TextCellValue('Balance'),
     ]);
@@ -1571,6 +1582,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         ex.TextCellValue(
           entry.chargeAmount > 0 ? _reportCurrency(entry.chargeAmount) : '',
         ),
+        ex.TextCellValue(entry.chargeDestination),
         ex.TextCellValue(entry.chargeBreakdown),
         ex.TextCellValue(_reportCurrency(entry.runningBalance)),
       ]);
@@ -1586,6 +1598,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(_reportCurrency(totals.totalInflow)),
       ex.TextCellValue(_reportCurrency(totals.totalOutflow)),
       ex.TextCellValue(_reportCurrency(totals.totalCharges)),
+      ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(_reportCurrency(totals.net)),
     ]);
@@ -1629,16 +1642,31 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return double.tryParse(rawAmount) ?? 0;
   }
 
+  String _extractChargeDestinationFromNote(String note) {
+    final match = RegExp(
+      r'Charge\s+routed\s+to\s*([^•]+)',
+      caseSensitive: false,
+    ).firstMatch(note);
+    if (match == null || match.groupCount < 1) {
+      return '';
+    }
+    return (match.group(1) ?? '').trim();
+  }
+
   String _buildChargeBreakdown({
     required double amount,
     required double chargeAmount,
+    required String chargeDestination,
     required String entryType,
   }) {
     if (entryType != 'transaction' || chargeAmount <= 0) {
       return '';
     }
 
-    return 'Recorded: ${_reportCurrency(amount)} | Charge: ${_reportCurrency(chargeAmount)}';
+    if (chargeDestination.isEmpty) {
+      return 'Recorded: ${_reportCurrency(amount)} | Charge: ${_reportCurrency(chargeAmount)}';
+    }
+    return 'Recorded: ${_reportCurrency(amount)} | Charge: ${_reportCurrency(chargeAmount)} | Routed to: $chargeDestination';
   }
 
   String _reportCurrency(double amount) {
@@ -1798,6 +1826,7 @@ class _LedgerExportRow {
     required this.chargeAmount,
     required this.chargeBreakdown,
     required this.runningBalance,
+    required this.chargeDestination,
   });
 
   final DateTime createdAt;
@@ -1809,6 +1838,7 @@ class _LedgerExportRow {
   final double inflow;
   final double outflow;
   final double chargeAmount;
+  final String chargeDestination;
   final String chargeBreakdown;
   final double runningBalance;
 }
