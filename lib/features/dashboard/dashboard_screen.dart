@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
+import '../activity/activity_history_screen.dart';
 import '../transactions/add_owner_movement_screen.dart';
 import 'data/dashboard_repository.dart';
 import 'widgets/activity_item.dart';
@@ -13,9 +14,14 @@ import 'widgets/income_architecture_card.dart';
 enum _DashboardActivityFilter { all, business, personal, transactions }
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.onDataChanged});
+  const DashboardScreen({
+    super.key,
+    this.onDataChanged,
+    this.onWalletPerspectiveSelected,
+  });
 
   final VoidCallback? onDataChanged;
+  final ValueChanged<HistoryWalletPerspective>? onWalletPerspectiveSelected;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -25,11 +31,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DashboardRepository _dashboardRepository = DashboardRepository();
   _DashboardActivityFilter _activityFilter = _DashboardActivityFilter.all;
+  late Future<DashboardSnapshot> _dashboardFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _dashboardFuture = _dashboardRepository.loadSnapshot();
+  }
+
+  void _reloadDashboardSnapshot() {
+    setState(() {
+      _dashboardFuture = _dashboardRepository.loadSnapshot();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<DashboardSnapshot>(
-      future: _dashboardRepository.loadSnapshot(),
+      future: _dashboardFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return Scaffold(
@@ -143,8 +162,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (saved == true && mounted) {
       widget.onDataChanged?.call();
-      setState(() {});
+      _reloadDashboardSnapshot();
     }
+  }
+
+  Future<void> _openWalletPerspectiveHistory(
+    HistoryWalletPerspective perspective,
+  ) async {
+    final onWalletPerspectiveSelected = widget.onWalletPerspectiveSelected;
+    if (onWalletPerspectiveSelected != null) {
+      onWalletPerspectiveSelected(perspective);
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ActivityHistoryScreen(initialWalletPerspective: perspective),
+      ),
+    );
   }
 
   Widget _buildWalletSummarySection(
@@ -182,6 +218,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       caption: 'Available balance',
                       icon: Icons.account_balance_wallet_rounded,
                       backgroundColor: AppColors.primary,
+                      onTap: () => _openWalletPerspectiveHistory(
+                        HistoryWalletPerspective.gcash,
+                      ),
                     ),
                     _buildWalletMetricTile(
                       width: tileWidth,
@@ -192,6 +231,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       caption: 'Available balance',
                       icon: Icons.account_balance_rounded,
                       backgroundColor: AppColors.secondary,
+                      onTap: () => _openWalletPerspectiveHistory(
+                        HistoryWalletPerspective.maya,
+                      ),
                     ),
                     _buildWalletMetricTile(
                       width: tileWidth,
@@ -202,6 +244,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       caption: 'Physical cash',
                       icon: Icons.payments_outlined,
                       backgroundColor: const Color(0xFF8E6C00),
+                      onTap: () => _openWalletPerspectiveHistory(
+                        HistoryWalletPerspective.onHand,
+                      ),
                     ),
                     _buildWalletMetricTile(
                       width: tileWidth,
@@ -236,77 +281,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required Color backgroundColor,
     double titleFontSize = 12,
     double titleLetterSpacing = 1.2,
+    VoidCallback? onTap,
   }) {
     final foregroundColor = AppColors.onPrimary;
     final mutedForegroundColor = AppColors.onPrimary.withValues(alpha: 0.78);
 
-    return Container(
-      width: width,
-      constraints: const BoxConstraints(minHeight: 168),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: backgroundColor,
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(28),
+      child: InkWell(
         borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: backgroundColor.withValues(alpha: 0.26),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: mutedForegroundColor,
-                    fontSize: titleFontSize,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: titleLetterSpacing,
-                  ),
-                ),
+        onTap: onTap,
+        child: Ink(
+          width: width,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: backgroundColor.withValues(alpha: 0.26),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
               ),
-              const SizedBox(width: 8),
-              Icon(icon, color: mutedForegroundColor, size: 22),
             ],
           ),
-          const SizedBox(height: 40),
-          SizedBox(
-            width: double.infinity,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                maxLines: 1,
-                style: TextStyle(
-                  color: foregroundColor,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 168),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: mutedForegroundColor,
+                            fontSize: titleFontSize,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: titleLetterSpacing,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(icon, color: mutedForegroundColor, size: 22),
+                    ],
+                  ),
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: foregroundColor,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    caption,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: mutedForegroundColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            caption,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: mutedForegroundColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -394,20 +394,6 @@ class AppDatabase {
     );
   }
 
-  Future<void> _seedTransactionTypesIfEmpty(Database db) async {
-    final batch = db.batch();
-    final now = DateTime.now().toIso8601String();
-    for (final type in _defaultTransactionTypes) {
-      batch.insert(transactionTypesTable, {
-        'name': type.name,
-        'is_outflow': type.isOutflow ? 1 : 0,
-        'wallet_account': type.walletAccount,
-        'created_at': now,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
-    }
-    await batch.commit(noResult: true);
-  }
-
   Future<void> _seedOwnerMovementCategoriesIfEmpty(Database db) async {
     final result = await db.rawQuery(
       'SELECT COUNT(*) AS count FROM $ownerMovementCategoriesTable',

@@ -3,8 +3,7 @@ import 'app_database.dart';
 class SyncConfig {
   SyncConfig._();
 
-  static const String defaultBaseApiUrl =
-      'http://tindatrack.serveminecraft.net:8080/api';
+  static const String defaultBaseApiUrl = 'http://192.168.1.24:8080/api';
 
   static const String _stateKey = 'api_base_url';
 
