@@ -120,6 +120,9 @@ class DashboardRepository {
     double mayaWalletTopUpBaseline = 0;
     double onHandTopUpBaseline = 0;
     double chargesCollected = 0;
+    double chargesToOnHand = 0;
+    double chargesToGcash = 0;
+    double chargesToMaya = 0;
     double businessFundingTotal = 0;
     double personalExpenseTotal = 0;
     double totalBorrowed = 0;
@@ -201,8 +204,19 @@ class DashboardRepository {
       }
 
       if (entryType == 'transaction') {
-        final chargeAmount = _extractChargeAmount(row);
+        final chargeRouting = _deriveChargeRouting(row);
+        final chargeAmount = chargeRouting.amount;
+        final chargeDestination = chargeRouting.destination.toLowerCase();
         chargesCollected += chargeAmount;
+        if (chargeAmount > 0) {
+          if (chargeDestination.contains('maya')) {
+            chargesToMaya += chargeAmount;
+          } else if (chargeDestination.contains('gcash')) {
+            chargesToGcash += chargeAmount;
+          } else {
+            chargesToOnHand += chargeAmount;
+          }
+        }
         transactionCount++;
         chargesByDay.update(
           dayKey,
@@ -298,7 +312,8 @@ class DashboardRepository {
       ownerCreditAdjustment: ownerCreditAdjustment,
       netBorrowOutstanding: totalBorrowed - totalRepaid,
       flowTrendLabel: '$transactionCount transactions',
-      flowCaption: 'Total amount collected on charges',
+      flowCaption:
+          'Charges routed • On-hand: ${formatCurrency(chargesToOnHand)} • GCash: ${formatCurrency(chargesToGcash)} • Maya: ${formatCurrency(chargesToMaya)}',
       alertTitle: alertContent.title,
       alertMessage: alertContent.message,
       alertActionLabel: alertContent.actionLabel,
@@ -317,13 +332,66 @@ class DashboardRepository {
   double _extractChargeAmount(Map<String, Object?> row) {
     final note = (row['note'] as String?) ?? '';
     final match = RegExp(
-      r'Charge\s*₱\s*([0-9]+(?:\.[0-9]+)?)',
+      r'Charge\s*(?:₱|PHP)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)',
       caseSensitive: false,
     ).firstMatch(note);
     if (match == null || match.groupCount < 1) {
       return 0;
     }
-    return double.tryParse(match.group(1)!) ?? 0;
+    return double.tryParse((match.group(1) ?? '').replaceAll(',', '')) ?? 0;
+  }
+
+  _ChargeRouting _deriveChargeRouting(Map<String, Object?> row) {
+    final iconKey = ((row['icon_key'] as String?) ?? '').toLowerCase();
+    final walletAccount = ((row['wallet_account'] as String?) ?? '').trim();
+    final amount = (row['amount'] as num?)?.toDouble() ?? 0;
+    final walletDelta = (row['wallet_delta'] as num?)?.toDouble() ?? 0;
+    final mayaWalletDelta = (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0;
+    final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
+
+    final isOutflow = iconKey.contains('out');
+    final selectedWalletDelta = mayaWalletDelta != 0
+        ? mayaWalletDelta
+        : walletDelta;
+
+    final principal = isOutflow
+        ? (onHandDelta < 0 ? -onHandDelta : 0)
+        : (selectedWalletDelta < 0 ? -selectedWalletDelta : 0);
+
+    var chargeAmount = amount - principal;
+    if (chargeAmount.abs() < 0.0001) {
+      chargeAmount = 0;
+    }
+    if (chargeAmount < 0) {
+      chargeAmount = 0;
+    }
+
+    var destination = isOutflow
+        ? (walletAccount.isEmpty ? 'Wallet' : walletAccount)
+        : 'On-hand Cash';
+
+    // Legacy rows may not follow the new transaction note/delta conventions.
+    if (chargeAmount == 0) {
+      final parsedCharge = _extractChargeAmount(row);
+      if (parsedCharge > 0) {
+        chargeAmount = parsedCharge;
+        destination = _extractChargeDestination(row);
+      }
+    }
+
+    return _ChargeRouting(amount: chargeAmount, destination: destination);
+  }
+
+  String _extractChargeDestination(Map<String, Object?> row) {
+    final note = (row['note'] as String?) ?? '';
+    final match = RegExp(
+      r'Charge\s+routed\s+to\s*([^•]+)',
+      caseSensitive: false,
+    ).firstMatch(note);
+    if (match == null || match.groupCount < 1) {
+      return 'on-hand cash';
+    }
+    return (match.group(1) ?? '').trim().toLowerCase();
   }
 
   _DashboardAlertContent _buildAlertContent({
@@ -501,7 +569,7 @@ class DashboardRepository {
       caseSensitive: false,
     ).firstMatch(note);
     if (match != null && match.groupCount >= 1) {
-      return match.group(1)!;
+      return match.group(1) ?? reference;
     }
 
     return reference;
@@ -554,4 +622,11 @@ class _DashboardAlertContent {
   final String title;
   final String message;
   final String actionLabel;
+}
+
+class _ChargeRouting {
+  const _ChargeRouting({required this.amount, required this.destination});
+
+  final double amount;
+  final String destination;
 }

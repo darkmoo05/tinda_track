@@ -20,6 +20,8 @@ class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   bool _fabOpen = false;
   int _refreshToken = 0;
+  int _historyViewToken = 0;
+  HistoryWalletPerspective? _historyWalletPerspective;
 
   void _handleDataChanged() {
     if (!mounted) {
@@ -67,6 +69,15 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
+  void _openHistoryWithPerspective(HistoryWalletPerspective perspective) {
+    setState(() {
+      _fabOpen = false;
+      _selectedIndex = 1;
+      _historyWalletPerspective = perspective;
+      _historyViewToken++;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -78,8 +89,12 @@ class _MainShellState extends State<MainShell> {
               DashboardScreen(
                 key: ValueKey('dashboard-$_refreshToken'),
                 onDataChanged: _handleDataChanged,
+                onWalletPerspectiveSelected: _openHistoryWithPerspective,
               ),
-              ActivityHistoryScreen(key: ValueKey('history-$_refreshToken')),
+              ActivityHistoryScreen(
+                key: ValueKey('history-$_refreshToken-$_historyViewToken'),
+                initialWalletPerspective: _historyWalletPerspective,
+              ),
               PartyManagementScreen(key: ValueKey('parties-$_refreshToken')),
               ChargesScreen(key: ValueKey('charges-$_refreshToken')),
             ],

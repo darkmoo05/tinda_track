@@ -29,6 +29,7 @@ class ArchitectAnalyticsCard extends StatefulWidget {
 
 class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
   int _selectedPeriod = 0; // 0: DAY, 1: WEEK, 2: MONTH, 3: YEAR
+  static const List<String> _periods = ['DAY', 'WEEK', 'MONTH', 'YEAR'];
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +63,7 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Text(
@@ -80,7 +81,7 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
               _buildSegmentedControl(),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 18),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -110,66 +111,155 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
               color: AppColors.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 120,
-            child: BarChart(_buildChartData(filtered.spots, filtered.labels)),
-          ),
+          const SizedBox(height: 18),
+          _buildChartPanel(context, filtered.spots, filtered.labels),
         ],
       ),
     );
   }
 
   Widget _buildSegmentedControl() {
-    final periods = ['DAY', 'WEEK', 'MONTH', 'YEAR'];
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 210),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Container(
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: List.generate(periods.length, (index) {
-              final isSelected = _selectedPeriod == index;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedPeriod = index),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.white : Colors.transparent,
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 4,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    periods[index],
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected
-                          ? AppColors.primary
-                          : AppColors.onSurfaceVariant,
-                    ),
-                  ),
+      constraints: const BoxConstraints(minWidth: 124, maxWidth: 152),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.14)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'View by',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 2),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                isExpanded: true,
+                value: _selectedPeriod,
+                borderRadius: BorderRadius.circular(16),
+                dropdownColor: AppColors.surfaceContainerLowest,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.onSurfaceVariant,
                 ),
-              );
-            }),
-          ),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.onSurface,
+                ),
+                items: List.generate(_periods.length, (index) {
+                  return DropdownMenuItem<int>(
+                    value: index,
+                    child: Text(_periods[index]),
+                  );
+                }),
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  setState(() => _selectedPeriod = value);
+                },
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildChartPanel(
+    BuildContext context,
+    List<FlSpot> spots,
+    List<String> labels,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final chartWidth = (labels.length * 52.0).clamp(
+          constraints.maxWidth,
+          560.0,
+        );
+
+        return Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.surfaceContainerHigh),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.onSurface.withValues(alpha: 0.035),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.bar_chart_rounded,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Charges monitoring report',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: AppColors.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                height: 170,
+                padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(18),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.surfaceContainerLowest,
+                      AppColors.surfaceContainerLow,
+                    ],
+                  ),
+                  border: Border.all(color: AppColors.surfaceContainerHigh),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: chartWidth,
+                    child: BarChart(_buildChartData(spots, labels)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -329,27 +419,51 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
         .map((spot) => spot.y)
         .reduce((a, b) => a > b ? a : b);
     final chartMaxY = maxY <= 0 ? 1.0 : maxY * 1.2;
+    final shouldCompactLabels = labels.length > 4;
 
     final groups = List.generate(safeSpots.length, (index) {
+      final isLatest = index == safeSpots.length - 1;
+      final barColor = isLatest
+          ? AppColors.primary
+          : AppColors.primaryContainer;
+
       return BarChartGroupData(
         x: index,
+        barsSpace: 0,
         barRods: [
           BarChartRodData(
             toY: safeSpots[index].y,
-            color: AppColors.secondary,
-            width: 12,
-            borderRadius: BorderRadius.circular(4),
+            color: barColor,
+            width: safeSpots.length >= 6 ? 14 : 18,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                barColor.withValues(alpha: 0.98),
+                barColor.withValues(alpha: isLatest ? 0.78 : 0.66),
+              ],
+            ),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+            ),
+            backDrawRodData: BackgroundBarChartRodData(
+              show: true,
+              toY: chartMaxY,
+              color: AppColors.outlineVariant.withValues(alpha: 0.12),
+            ),
           ),
         ],
       );
     });
 
     return BarChartData(
+      backgroundColor: Colors.transparent,
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
         getDrawingHorizontalLine: (value) => FlLine(
-          color: AppColors.outlineVariant.withValues(alpha: 0.25),
+          color: AppColors.outlineVariant.withValues(alpha: 0.20),
           strokeWidth: 1,
         ),
       ),
@@ -375,7 +489,7 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                   idx == 0 ||
                   idx == labels.length - 1 ||
                   idx == (labels.length ~/ 2);
-              if (!isEdge && labels.length > 3) {
+              if (!isEdge && shouldCompactLabels) {
                 return const SizedBox.shrink();
               }
 
@@ -383,10 +497,12 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   labels[idx],
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurfaceVariant,
+                  style: TextStyle(
+                    fontSize: shouldCompactLabels ? 9 : 10,
+                    fontWeight: FontWeight.w700,
+                    color: isEdge
+                        ? AppColors.onSurface
+                        : AppColors.onSurfaceVariant,
                   ),
                 ),
               );
@@ -397,12 +513,16 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
       borderData: FlBorderData(show: false),
       minY: 0,
       maxY: chartMaxY,
+      groupsSpace: 14,
+      alignment: BarChartAlignment.spaceAround,
       barGroups: groups,
       barTouchData: BarTouchData(
         enabled: true,
         touchTooltipData: BarTouchTooltipData(
-          tooltipRoundedRadius: 8,
+          tooltipRoundedRadius: 12,
           getTooltipColor: (_) => AppColors.onSurface,
+          fitInsideHorizontally: true,
+          fitInsideVertically: true,
           getTooltipItem: (group, groupIndex, rod, rodIndex) {
             final label = (groupIndex >= 0 && groupIndex < labels.length)
                 ? labels[groupIndex]

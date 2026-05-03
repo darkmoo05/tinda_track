@@ -16,8 +16,12 @@ import '../../shared/widgets/app_side_drawer.dart';
 import 'widgets/activity_tile.dart';
 import 'widgets/date_header.dart';
 
+enum HistoryWalletPerspective { gcash, maya, onHand }
+
 class ActivityHistoryScreen extends StatefulWidget {
-  const ActivityHistoryScreen({super.key});
+  const ActivityHistoryScreen({super.key, this.initialWalletPerspective});
+
+  final HistoryWalletPerspective? initialWalletPerspective;
 
   @override
   State<ActivityHistoryScreen> createState() => _ActivityHistoryScreenState();
@@ -44,6 +48,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedWalletFilter = _walletFilterFromPerspective(
+      widget.initialWalletPerspective,
+    );
     _historyFuture = _loadHistory();
   }
 
@@ -73,7 +80,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
             final allRows = snapshot.data!;
             final transactions = allRows
-                .where((row) => row.entryType == 'transaction')
+                .where(_isTransactionPerspectiveRow)
                 .toList();
             final ownerMovements = allRows
                 .where((row) => row.entryType == 'owner_movement')
@@ -343,6 +350,15 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                   walletKey: 'maya',
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildWalletFilterCard(
+                  label: 'On-hand',
+                  icon: Icons.payments_outlined,
+                  color: const Color(0xFF8E6C00),
+                  walletKey: 'on_hand',
+                ),
+              ),
             ],
           ),
         if (_beginDateFilter != null || _endDateFilter != null) ...[
@@ -463,6 +479,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
               Expanded(
                 child: Text(
                   label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -483,11 +502,20 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     List<_HistoryRow> items, {
     required bool applyWalletFilter,
   }) {
+    final hideTopUpRowsInTransactionsView =
+        applyWalletFilter && _selectedWalletFilter == null;
+
     if (_searchQuery.isEmpty &&
         _beginDateFilter == null &&
         _endDateFilter == null &&
         _selectedWalletFilter == null) {
-      return items;
+      if (!hideTopUpRowsInTransactionsView) {
+        return items;
+      }
+
+      return items
+          .where((item) => !_isTopUpPerspectiveRow(item))
+          .toList(growable: false);
     }
 
     return items
@@ -514,21 +542,29 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
               _beginDateFilter == null || !itemDate.isBefore(_beginDateFilter!);
           final matchesEndDate =
               _endDateFilter == null || !itemDate.isAfter(_endDateFilter!);
-          final isTransaction = item.entryType == 'transaction';
-          final isMayaTransaction = _isMayaTransaction(item);
           final matchesWallet =
               !applyWalletFilter ||
               _selectedWalletFilter == null ||
-              !isTransaction ||
-              (_selectedWalletFilter == 'maya' && isMayaTransaction) ||
-              (_selectedWalletFilter == 'gcash' && !isMayaTransaction);
+              _matchesWalletPerspective(item, _selectedWalletFilter!);
+          final matchesTopUpVisibility =
+              !hideTopUpRowsInTransactionsView || !_isTopUpPerspectiveRow(item);
 
           return matchesSearch &&
               matchesBeginDate &&
               matchesEndDate &&
-              matchesWallet;
+              matchesWallet &&
+              matchesTopUpVisibility;
         })
         .toList(growable: false);
+  }
+
+  bool _isTopUpPerspectiveRow(_HistoryRow item) {
+    if (item.entryType != 'owner_movement') {
+      return false;
+    }
+
+    final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
+    return movementType == 'top-up' || movementType == 'initial capital';
   }
 
   Future<void> _pickBeginDateFilter() async {
@@ -587,17 +623,71 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     });
   }
 
-  bool _isMayaTransaction(_HistoryRow item) {
-    if (item.entryType != 'transaction') {
-      return false;
-    }
-
-    final walletLabel = item.walletAccount.trim().toLowerCase();
-    if (walletLabel.contains('maya')) {
+  bool _isTransactionPerspectiveRow(_HistoryRow item) {
+    if (item.entryType == 'transaction') {
       return true;
     }
 
-    return item.iconKey.startsWith('maya_');
+    if (item.entryType != 'owner_movement') {
+      return false;
+    }
+
+    final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
+    return movementType == 'top-up' || movementType == 'initial capital';
+  }
+
+  bool _matchesWalletPerspective(_HistoryRow item, String walletFilter) {
+    final normalizedFilter = walletFilter.toLowerCase();
+    final walletKey = _normalizeWalletKey(item.walletAccount);
+
+    if (item.entryType == 'transaction') {
+      if (walletKey == normalizedFilter) {
+        return true;
+      }
+
+      return item.chargeAmount > 0 &&
+          item.chargeDestinationKey == normalizedFilter;
+    }
+
+    if (item.entryType == 'owner_movement') {
+      final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
+      final isTopUp =
+          movementType == 'top-up' || movementType == 'initial capital';
+      if (!isTopUp) {
+        return false;
+      }
+
+      return walletKey == normalizedFilter;
+    }
+
+    return false;
+  }
+
+  String? _walletFilterFromPerspective(HistoryWalletPerspective? perspective) {
+    switch (perspective) {
+      case HistoryWalletPerspective.gcash:
+        return 'gcash';
+      case HistoryWalletPerspective.maya:
+        return 'maya';
+      case HistoryWalletPerspective.onHand:
+        return 'on_hand';
+      case null:
+        return null;
+    }
+  }
+
+  String _normalizeWalletKey(String walletAccount) {
+    final normalized = walletAccount.trim().toLowerCase();
+    if (normalized.contains('maya')) {
+      return 'maya';
+    }
+    if (normalized.contains('gcash')) {
+      return 'gcash';
+    }
+    if (normalized.contains('on-hand') || normalized.contains('on hand')) {
+      return 'on_hand';
+    }
+    return '';
   }
 
   List<Widget> _groupItemsByDate(List<_HistoryRow> items) {
@@ -892,6 +982,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           final entryType = row['entry_type'] as String;
           final reference = row['reference'] as String;
           final walletAccount = (row['wallet_account'] as String?) ?? '';
+          final note = (row['note'] as String?) ?? '';
           final rawIconKey = row['icon_key'] as String;
           final iconKey = walletAccount == 'Maya Wallet'
               ? (rawIconKey == 'cash_in'
@@ -903,10 +994,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                     : rawIconKey)
               : rawIconKey;
           final displayReference = entryType == 'transaction'
-              ? _resolveTransactionAccountNumber(
-                  reference,
-                  (row['note'] as String?) ?? '',
-                )
+              ? _resolveTransactionAccountNumber(reference, note)
               : reference;
 
           return _HistoryRow(
@@ -916,14 +1004,29 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             rawReference: reference,
             accountNumber: entryType == 'transaction' ? displayReference : null,
             walletAccount: walletAccount,
-            note: (row['note'] as String?) ?? '',
+            note: note,
             amount: (row['amount'] as num).toDouble(),
             tag: row['tag'] as String,
             iconKey: iconKey,
             createdAt: DateTime.parse(row['created_at'] as String),
+            ownerMovementType: row['owner_movement_type'] as String?,
+            chargeAmount: _extractChargeAmountFromNote(note),
+            chargeDestinationKey: _extractChargeDestinationKeyFromNote(note),
           );
         })
         .toList(growable: false);
+  }
+
+  String? _extractChargeDestinationKeyFromNote(String note) {
+    final match = RegExp(
+      r'Charge\s+routed\s+to\s*([^•]+)',
+      caseSensitive: false,
+    ).firstMatch(note);
+    if (match == null || match.groupCount < 1) {
+      return null;
+    }
+
+    return _normalizeWalletKey((match.group(1) ?? '').trim());
   }
 
   Future<void> _openLedgerReportSheet() async {
@@ -1335,6 +1438,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           final chargeAmount = entryType == 'transaction'
               ? _extractChargeAmountFromNote(notes)
               : 0.0;
+          final chargeDestination = entryType == 'transaction'
+              ? _extractChargeDestinationFromNote(notes)
+              : '';
           runningBalance += inflow - outflow;
 
           return _LedgerExportRow(
@@ -1347,9 +1453,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             inflow: inflow,
             outflow: outflow,
             chargeAmount: chargeAmount,
+            chargeDestination: chargeDestination,
             chargeBreakdown: _buildChargeBreakdown(
               amount: amount,
               chargeAmount: chargeAmount,
+              chargeDestination: chargeDestination,
               entryType: entryType,
             ),
             runningBalance: runningBalance,
@@ -1409,6 +1517,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 'Money In',
                 'Money Out',
                 'Service Fee',
+                'Fee Destination',
                 'Fee Details',
                 'Balance',
               ],
@@ -1430,6 +1539,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       entry.chargeAmount > 0
                           ? _reportCurrency(entry.chargeAmount)
                           : '',
+                      _pdfSafeText(entry.chargeDestination),
                       _pdfSafeText(entry.chargeBreakdown),
                       _reportCurrency(entry.runningBalance),
                     ],
@@ -1507,11 +1617,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
+      ex.TextCellValue(''),
     ]);
     sheet.appendRow([
       ex.TextCellValue(
         'Period: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
       ),
+      ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
@@ -1537,6 +1649,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
+      ex.TextCellValue(''),
     ]);
     sheet.appendRow([
       ex.TextCellValue('Date & Time'),
@@ -1548,6 +1661,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue('Money In'),
       ex.TextCellValue('Money Out'),
       ex.TextCellValue('Service Fee'),
+      ex.TextCellValue('Fee Destination'),
       ex.TextCellValue('Fee Details'),
       ex.TextCellValue('Balance'),
     ]);
@@ -1571,6 +1685,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         ex.TextCellValue(
           entry.chargeAmount > 0 ? _reportCurrency(entry.chargeAmount) : '',
         ),
+        ex.TextCellValue(entry.chargeDestination),
         ex.TextCellValue(entry.chargeBreakdown),
         ex.TextCellValue(_reportCurrency(entry.runningBalance)),
       ]);
@@ -1586,6 +1701,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(_reportCurrency(totals.totalInflow)),
       ex.TextCellValue(_reportCurrency(totals.totalOutflow)),
       ex.TextCellValue(_reportCurrency(totals.totalCharges)),
+      ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(_reportCurrency(totals.net)),
     ]);
@@ -1629,16 +1745,31 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return double.tryParse(rawAmount) ?? 0;
   }
 
+  String _extractChargeDestinationFromNote(String note) {
+    final match = RegExp(
+      r'Charge\s+routed\s+to\s*([^•]+)',
+      caseSensitive: false,
+    ).firstMatch(note);
+    if (match == null || match.groupCount < 1) {
+      return '';
+    }
+    return (match.group(1) ?? '').trim();
+  }
+
   String _buildChargeBreakdown({
     required double amount,
     required double chargeAmount,
+    required String chargeDestination,
     required String entryType,
   }) {
     if (entryType != 'transaction' || chargeAmount <= 0) {
       return '';
     }
 
-    return 'Recorded: ${_reportCurrency(amount)} | Charge: ${_reportCurrency(chargeAmount)}';
+    if (chargeDestination.isEmpty) {
+      return 'Recorded: ${_reportCurrency(amount)} | Charge: ${_reportCurrency(chargeAmount)}';
+    }
+    return 'Recorded: ${_reportCurrency(amount)} | Charge: ${_reportCurrency(chargeAmount)} | Routed to: $chargeDestination';
   }
 
   String _reportCurrency(double amount) {
@@ -1736,7 +1867,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       case 'cash_out':
         return AppColors.error;
       case 'maya_cash_out':
-        return AppColors.secondary;
+        return AppColors.error;
       default:
         return AppColors.onSurfaceVariant;
     }
@@ -1755,7 +1886,10 @@ class _HistoryRow {
     required this.tag,
     required this.iconKey,
     required this.createdAt,
+    required this.chargeAmount,
+    required this.chargeDestinationKey,
     this.accountNumber,
+    this.ownerMovementType,
   });
 
   final String entryType;
@@ -1769,6 +1903,9 @@ class _HistoryRow {
   final String tag;
   final String iconKey;
   final DateTime createdAt;
+  final String? ownerMovementType;
+  final double chargeAmount;
+  final String? chargeDestinationKey;
 }
 
 enum _ReportFileType { pdf, excel }
@@ -1798,6 +1935,7 @@ class _LedgerExportRow {
     required this.chargeAmount,
     required this.chargeBreakdown,
     required this.runningBalance,
+    required this.chargeDestination,
   });
 
   final DateTime createdAt;
@@ -1809,6 +1947,7 @@ class _LedgerExportRow {
   final double inflow;
   final double outflow;
   final double chargeAmount;
+  final String chargeDestination;
   final String chargeBreakdown;
   final double runningBalance;
 }

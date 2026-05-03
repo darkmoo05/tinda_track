@@ -113,6 +113,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return _totalCollected;
   }
 
+  String get _chargeDestinationAccount {
+    return _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount
+        ? _selectedWalletAccount
+        : 'On-hand Cash';
+  }
+
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
 
   bool get _isRegisteredAccount => _matchedParty != null;
@@ -563,192 +569,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildWalletSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _fieldLabel('Wallet Account', isRequired: true),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildSelectionCard(
-                label: 'GCash',
-                subtitle: 'Route balance through GCash',
-                icon: Icons.account_balance_wallet_outlined,
-                color: AppColors.primary,
-                selected: _selectedWallet == _WalletSelection.gcash,
-                onTap: () {
-                  setState(() {
-                    _selectedWallet = _WalletSelection.gcash;
-                  });
-                },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildSelectionCard(
-                label: 'Maya',
-                subtitle: 'Route balance through Maya',
-                icon: Icons.wallet_rounded,
-                color: AppColors.secondary,
-                selected: _selectedWallet == _WalletSelection.maya,
-                onTap: () {
-                  setState(() {
-                    _selectedWallet = _WalletSelection.maya;
-                  });
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFlowSelector() {
-    final accentColor = _isOutflowSelection
-        ? AppColors.error
-        : AppColors.secondary;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _fieldLabel('Flow Direction', isRequired: true),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildSelectionCard(
-                label: 'Inflow',
-                subtitle: 'Money goes into the wallet',
-                icon: Icons.call_made_rounded,
-                color: AppColors.secondary,
-                selected: _selectedFlowDirection == _FlowDirection.inflow,
-                onTap: () {
-                  setState(() {
-                    _selectedFlowDirection = _FlowDirection.inflow;
-                  });
-                },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildSelectionCard(
-                label: 'Outflow',
-                subtitle: 'Money goes out from the wallet',
-                icon: Icons.call_received_rounded,
-                color: AppColors.error,
-                selected: _selectedFlowDirection == _FlowDirection.outflow,
-                onTap: () {
-                  setState(() {
-                    _selectedFlowDirection = _FlowDirection.outflow;
-                  });
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: accentColor.withValues(alpha: 0.22)),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                _isOutflowSelection
-                    ? Icons.trending_down_rounded
-                    : Icons.trending_up_rounded,
-                size: 16,
-                color: accentColor,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Selected flow: $_selectedFlowLabel',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: accentColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSelectionCard({
-    required String label,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: selected
-          ? color.withValues(alpha: 0.12)
-          : AppColors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected
-                  ? color.withValues(alpha: 0.45)
-                  : AppColors.outlineVariant.withValues(alpha: 0.45),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 18,
-                    color: selected ? color : AppColors.onSurfaceVariant,
-                  ),
-                  const Spacer(),
-                  if (selected)
-                    Icon(Icons.check_circle_rounded, size: 18, color: color),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: selected ? color : AppColors.onSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -1205,9 +1025,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           const SizedBox(height: 4),
           _buildPreviewRow('Wallet', _selectedWalletAccount),
           const SizedBox(height: 4),
-          _buildPreviewRow('Flow', _selectedFlowLabel),
-          const SizedBox(height: 4),
           _buildPreviewRow('Charge Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
+          const SizedBox(height: 4),
+          _buildPreviewRow('Charge Routed To', _chargeDestinationAccount),
           if (_matchedChargeBracket != null) ...[
             const SizedBox(height: 4),
             _buildPreviewRow(
@@ -1714,13 +1534,28 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final isOutflow = _isOutflowSelection;
     final walletAccount = _selectedWalletAccount;
     final usesMayaWallet = walletAccount == 'Maya Wallet';
-    final walletDelta = usesMayaWallet
-        ? 0.0
-        : (isOutflow ? principal : -principal);
-    final mayaWalletDelta = usesMayaWallet
-        ? (isOutflow ? principal : -principal)
-        : 0.0;
-    final onHandDelta = isOutflow ? -principal : totalCollected;
+    final walletPostedAmount = isOutflow ? totalCollected : principal;
+    var selectedWalletDelta = isOutflow
+        ? walletPostedAmount
+        : -walletPostedAmount;
+    var onHandDelta = isOutflow ? -principal : totalCollected;
+
+    // Fee routing is automatic: add-on-top -> on-hand, deduct-from-amount -> wallet.
+    final defaultFeeToWallet = isOutflow;
+    final feeToWallet =
+        _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount;
+    if (feeToWallet != defaultFeeToWallet) {
+      if (feeToWallet) {
+        selectedWalletDelta += chargeFee;
+        onHandDelta -= chargeFee;
+      } else {
+        selectedWalletDelta -= chargeFee;
+        onHandDelta += chargeFee;
+      }
+    }
+
+    final walletDelta = usesMayaWallet ? 0.0 : selectedWalletDelta;
+    final mayaWalletDelta = usesMayaWallet ? selectedWalletDelta : 0.0;
     final now = DateTime.now();
     final reference = accountNumber;
     final iconKey = isOutflow ? 'cash_out' : 'cash_in';
@@ -1731,11 +1566,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ? 'Account $accountNumber • ${_matchedParty!.name}'
         : notes;
     final persistedNote =
-        '$noteBase • $_selectedFlowLabel • Charge ₱${chargeFee.toStringAsFixed(2)}';
+        '$noteBase • $_selectedFlowLabel • Charge ₱${chargeFee.toStringAsFixed(2)} • Charge routed to $_chargeDestinationAccount';
 
     final db = await _database.database;
     try {
       await _database.ensureWalletSchema(db);
+      final deviceId = await _database.getOrCreateDeviceId();
+      final nowMs = now.millisecondsSinceEpoch;
       await db.insert(AppDatabase.ledgerTable, {
         'entry_type': 'transaction',
         'title': title,
@@ -1749,6 +1586,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         'tag': 'Transaction',
         'icon_key': iconKey,
         'wallet_account': walletAccount,
+        AppDatabase.syncIdColumn: AppDatabase.generateSyncId('entry'),
+        AppDatabase.deviceIdColumn: deviceId,
+        AppDatabase.updatedAtMsColumn: nowMs,
+        AppDatabase.isDeletedColumn: 0,
+        AppDatabase.isDirtyColumn: 1,
         'created_at': now.toIso8601String(),
       });
       return true;
@@ -1841,45 +1683,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return true;
     }
     return false;
-  }
-
-  Widget _buildPopupField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    TextInputType? keyboardType,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          decoration: InputDecoration(
-            hintText: hint,
-            filled: true,
-            fillColor: AppColors.surfaceContainerLow,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   void _showMessage(String message, {bool isError = false}) {
@@ -2160,6 +1963,7 @@ class _UpsertTransactionTypeDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       backgroundColor: AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titlePadding: EdgeInsets.zero,

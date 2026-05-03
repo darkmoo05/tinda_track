@@ -58,10 +58,17 @@ class ChargeRepository {
     }
 
     final db = await _database.database;
+    final deviceId = await _database.getOrCreateDeviceId();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     await db.insert(AppDatabase.chargesTable, {
       'lower_bound': lowerBound,
       'upper_bound': upperBound,
       'charge_amount': chargeAmount,
+      AppDatabase.syncIdColumn: AppDatabase.generateSyncId('charge'),
+      AppDatabase.deviceIdColumn: deviceId,
+      AppDatabase.updatedAtMsColumn: nowMs,
+      AppDatabase.isDeletedColumn: 0,
+      AppDatabase.isDirtyColumn: 1,
     });
 
     _loadOperation = null;
@@ -90,12 +97,15 @@ class ChargeRepository {
     }
 
     final db = await _database.database;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     final count = await db.update(
       AppDatabase.chargesTable,
       {
         'lower_bound': lowerBound,
         'upper_bound': upperBound,
         'charge_amount': chargeAmount,
+        AppDatabase.updatedAtMsColumn: nowMs,
+        AppDatabase.isDirtyColumn: 1,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -112,8 +122,14 @@ class ChargeRepository {
 
   Future<bool> deleteBracket(int id) async {
     final db = await _database.database;
-    final count = await db.delete(
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final count = await db.update(
       AppDatabase.chargesTable,
+      {
+        AppDatabase.isDeletedColumn: 1,
+        AppDatabase.isDirtyColumn: 1,
+        AppDatabase.updatedAtMsColumn: nowMs,
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -131,6 +147,7 @@ class ChargeRepository {
     final db = await _database.database;
     final rows = await db.query(
       AppDatabase.chargesTable,
+      where: '${AppDatabase.isDeletedColumn} = 0',
       orderBy: 'lower_bound ASC, upper_bound ASC',
     );
     brackets.value = rows

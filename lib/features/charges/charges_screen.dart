@@ -94,25 +94,6 @@ class _ChargesScreenState extends State<ChargesScreen> {
           const SizedBox(height: 100),
         ],
       ),
-      bottomNavigationBar: widget.launchedFromTransaction
-          ? SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                  label: const Text('BACK TO TRANSACTION'),
-                ),
-              ),
-            )
-          : null,
     );
   }
 

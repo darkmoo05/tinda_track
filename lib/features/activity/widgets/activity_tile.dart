@@ -27,6 +27,13 @@ class ArchitectActivityTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isIncome = amount.startsWith('+');
+    final normalizedTitle = title.toLowerCase();
+    final normalizedType = type.toLowerCase();
+    final isTopUp =
+        normalizedTitle.contains('top-up') ||
+        normalizedTitle.contains('top up') ||
+        normalizedType.contains('top-up') ||
+        normalizedType.contains('top up');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -76,7 +83,9 @@ class ArchitectActivityTile extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: isIncome ? AppColors.secondary : AppColors.primary,
+                      color: isTopUp
+                          ? AppColors.primary
+                          : (isIncome ? AppColors.secondary : AppColors.error),
                     ),
                   ),
                   const SizedBox(height: 2),

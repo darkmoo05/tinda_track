@@ -907,6 +907,8 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     final db = await _database.database;
     try {
       await _database.ensureWalletSchema(db);
+      final deviceId = await _database.getOrCreateDeviceId();
+      final nowMs = now.millisecondsSinceEpoch;
       await db.insert(AppDatabase.ledgerTable, {
         'entry_type': 'owner_movement',
         'title': title,
@@ -925,6 +927,11 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         'owner_category': _isPersonalExpense ? _selectedCategory : null,
         'owner_party_name': null,
         'owner_party_account': null,
+        AppDatabase.syncIdColumn: AppDatabase.generateSyncId('entry'),
+        AppDatabase.deviceIdColumn: deviceId,
+        AppDatabase.updatedAtMsColumn: nowMs,
+        AppDatabase.isDeletedColumn: 0,
+        AppDatabase.isDirtyColumn: 1,
         'created_at': now.toIso8601String(),
       });
       return true;

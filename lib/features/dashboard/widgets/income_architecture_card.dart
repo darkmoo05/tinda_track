@@ -165,12 +165,12 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
   }
 
   Widget _buildTimePeriodFilter() {
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
         _buildPeriodButton('Week', _TimePeriod.week),
-        const SizedBox(width: 8),
         _buildPeriodButton('Month', _TimePeriod.month),
-        const SizedBox(width: 8),
         _buildPeriodButton('Year', _TimePeriod.year),
       ],
     );
@@ -178,39 +178,39 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
 
   Widget _buildPeriodButton(String label, _TimePeriod period) {
     final isSelected = _selectedPeriod == period;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (selected) {
-          if (selected) {
-            setState(() {
-              _selectedPeriod = period;
-              // Auto-scroll to start when period changes
-              Future.delayed(const Duration(milliseconds: 100), () {
-                if (_scrollController.hasClients) {
-                  _scrollController.animateTo(
-                    0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  );
-                }
-              });
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            _selectedPeriod = period;
+            // Auto-scroll to start when period changes
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (_scrollController.hasClients) {
+                _scrollController.animateTo(
+                  0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              }
             });
-          }
-        },
-        backgroundColor: Colors.transparent,
-        selectedColor: AppColors.primary.withValues(alpha: 0.3),
-        side: BorderSide(
-          color: isSelected ? AppColors.primary : AppColors.outlineVariant,
-          width: isSelected ? 2 : 1,
-        ),
-        labelStyle: TextStyle(
-          color: isSelected ? AppColors.primary : AppColors.onSurfaceVariant,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-        ),
+          });
+        }
+      },
+      backgroundColor: AppColors.surfaceContainerLowest,
+      selectedColor: AppColors.primary.withValues(alpha: 0.12),
+      side: BorderSide(
+        color: isSelected ? AppColors.primary : AppColors.surfaceContainerHigh,
+        width: isSelected ? 1.5 : 1,
       ),
+      showCheckmark: false,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      labelStyle: TextStyle(
+        color: isSelected ? AppColors.primary : AppColors.onSurfaceVariant,
+        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     );
   }
 
@@ -221,7 +221,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     List<String> xLabels,
   ) {
     // Calculate minimum chart width based on data points
-    final minChartWidth = (xLabels.length * 50.0).clamp(280.0, double.infinity);
+    final minChartWidth = (xLabels.length * 48.0).clamp(260.0, double.infinity);
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -229,10 +229,67 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
       clipBehavior: Clip.hardEdge,
       child: SizedBox(
         width: minChartWidth,
-        height: 240,
+        height: 212,
         child: LineChart(
           _buildChartData(walletSpots, mayaSpots, cashSpots, xLabels),
         ),
+      ),
+    );
+  }
+
+  Widget _buildChartPanel(
+    BuildContext context,
+    List<FlSpot> walletSpots,
+    List<FlSpot> mayaSpots,
+    List<FlSpot> cashSpots,
+    List<String> xLabels,
+  ) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.surfaceContainerHigh),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.onSurface.withValues(alpha: 0.035),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.multiline_chart_rounded,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Balance movement over time',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: AppColors.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildScrollableChart(walletSpots, mayaSpots, cashSpots, xLabels),
+        ],
       ),
     );
   }
@@ -257,41 +314,45 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
       xLabels,
     );
 
-    return Material(
-      elevation: 8,
-      borderRadius: BorderRadius.circular(12),
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 16,
-              spreadRadius: 2,
-              offset: const Offset(0, 6),
-            ),
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.surfaceContainerHigh),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.surfaceContainerLowest,
+            AppColors.surfaceContainerLow,
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: 12),
-            _buildTimePeriodFilter(),
-            const SizedBox(height: 16),
-            _buildLegend(),
-            const SizedBox(height: 20),
-            _buildScrollableChart(
-              filteredWalletSpots,
-              filteredMayaSpots,
-              filteredCashSpots,
-              filteredXLabels,
-            ),
-          ],
-        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.onSurface.withValues(alpha: 0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(context),
+          const SizedBox(height: 14),
+          _buildTimePeriodFilter(),
+          const SizedBox(height: 16),
+          _buildLegend(),
+          const SizedBox(height: 18),
+          _buildChartPanel(
+            context,
+            filteredWalletSpots,
+            filteredMayaSpots,
+            filteredCashSpots,
+            filteredXLabels,
+          ),
+        ],
       ),
     );
   }
@@ -304,10 +365,10 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
           'Wallet and Cash Balance Trend',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             color: AppColors.onSurface,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text(
           'Daily closing balances for GCash, Maya, and on-hand cash',
           style: Theme.of(
@@ -319,35 +380,54 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
   }
 
   Widget _buildLegend() {
-    return Row(
-      children: [
-        _legendDot(AppColors.primary, 'GCash'),
-        const SizedBox(width: 16),
-        _legendDot(AppColors.secondary, 'Maya'),
-        const SizedBox(width: 16),
-        _legendDot(const Color(0xFF8E6C00), 'On-hand Cash'),
-      ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.hardEdge,
+      child: Row(
+        children: [
+          _legendChip(AppColors.primary, 'GCash'),
+          const SizedBox(width: 10),
+          _legendChip(AppColors.secondary, 'Maya'),
+          const SizedBox(width: 10),
+          _legendChip(const Color(0xFF8E6C00), 'On-hand Cash'),
+        ],
+      ),
     );
   }
 
-  Widget _legendDot(Color color, String label) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.onSurfaceVariant,
+  Widget _legendChip(Color color, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 6),
+              ],
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -367,12 +447,13 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
 
     return LineChartData(
       clipData: FlClipData.all(),
+      backgroundColor: Colors.transparent,
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
         horizontalInterval: 5,
         getDrawingHorizontalLine: (_) => FlLine(
-          color: AppColors.outlineVariant.withValues(alpha: 0.4),
+          color: AppColors.outlineVariant.withValues(alpha: 0.24),
           strokeWidth: 1,
         ),
       ),
@@ -511,8 +592,8 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         enabled: true,
         handleBuiltInTouches: true,
         touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (_) => AppColors.onSurface.withValues(alpha: 0.95),
-          tooltipRoundedRadius: 8,
+          getTooltipColor: (_) => const Color(0xFF102A43),
+          tooltipRoundedRadius: 14,
           tooltipPadding: const EdgeInsets.symmetric(
             horizontal: 12,
             vertical: 8,
@@ -523,9 +604,9 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
           getTooltipItems: (touchedSpots) {
             return touchedSpots.map((spot) {
               final tooltipColor = switch (spot.barIndex) {
-                0 => AppColors.primaryContainer,
-                1 => AppColors.secondaryContainer,
-                _ => const Color(0xFFF8E287),
+                0 => const Color(0xFF8CC8FF),
+                1 => const Color(0xFFA8F0B3),
+                _ => const Color(0xFFF4D47A),
               };
               return LineTooltipItem(
                 '₱ ${(spot.y * 1000).toStringAsFixed(0)}',
