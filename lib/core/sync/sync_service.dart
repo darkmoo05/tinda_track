@@ -117,8 +117,8 @@ class SyncService {
   Future<bool> _push({bool forceAll = false}) async {
     final db = await AppDatabase.instance.database;
     final whereClause = forceAll
-        ? null
-        : '(synced_at IS NULL OR sync_id IS NULL)';
+        ? '${AppDatabase.isDeletedColumn} = 0'
+        : '${AppDatabase.isDirtyColumn} = 1';
     var allSucceeded = true;
 
     // Parties
@@ -220,16 +220,32 @@ class SyncService {
       since: since,
     );
     for (final r in remoteParties) {
-      await db.insert(AppDatabase.partiesTable, {
-        'name': r['name'],
-        'account_number': r['accountNumber'],
-        'entity_id': r['entityId'] ?? '',
-        'description': r['description'] ?? '',
-        'join_date': r['joinDate'],
-        'is_verified': (r['isVerified'] == true) ? 1 : 0,
-        'sync_id': r['syncId'],
-        'synced_at': now,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      if (r['isDeleted'] == true) {
+        await db.update(
+          AppDatabase.partiesTable,
+          {
+            AppDatabase.isDeletedColumn: 1,
+            AppDatabase.isDirtyColumn: 0,
+            AppDatabase.updatedAtMsColumn: now,
+          },
+          where: '${AppDatabase.syncIdColumn} = ?',
+          whereArgs: [r['syncId']],
+        );
+      } else {
+        await db.insert(AppDatabase.partiesTable, {
+          'name': r['name'],
+          'account_number': r['accountNumber'],
+          'entity_id': r['entityId'] ?? '',
+          'description': r['description'] ?? '',
+          'join_date': r['joinDate'],
+          'is_verified': (r['isVerified'] == true) ? 1 : 0,
+          AppDatabase.syncIdColumn: r['syncId'],
+          AppDatabase.deviceIdColumn: r['deviceId'] ?? '',
+          AppDatabase.updatedAtMsColumn: now,
+          AppDatabase.isDeletedColumn: 0,
+          AppDatabase.isDirtyColumn: 0,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
     }
 
     // Ledger entries
@@ -238,28 +254,44 @@ class SyncService {
       since: since,
     );
     for (final r in remoteEntries) {
-      await db.insert(AppDatabase.ledgerTable, {
-        'entry_type': r['entryType'],
-        'title': r['title'] ?? '',
-        'note': r['note'] ?? '',
-        'reference': r['reference'] ?? '',
-        'amount': r['amount'],
-        'wallet_delta': r['walletDelta'] ?? 0,
-        'maya_wallet_delta': r['mayaWalletDelta'] ?? 0,
-        'on_hand_delta': r['onHandDelta'] ?? 0,
-        'recorded_flow': r['recordedFlow'] ?? 0,
-        'tag': r['tag'] ?? '',
-        'icon_key': r['iconKey'] ?? '',
-        'wallet_account': r['walletAccount'] ?? '',
-        'owner_scope': r['ownerScope'] ?? 'Business',
-        'owner_movement_type': r['ownerMovementType'],
-        'owner_category': r['ownerCategory'],
-        'owner_party_name': r['ownerPartyName'],
-        'owner_party_account': r['ownerPartyAccount'],
-        'created_at': r['entryDate'],
-        'sync_id': r['syncId'],
-        'synced_at': now,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      if (r['isDeleted'] == true) {
+        await db.update(
+          AppDatabase.ledgerTable,
+          {
+            AppDatabase.isDeletedColumn: 1,
+            AppDatabase.isDirtyColumn: 0,
+            AppDatabase.updatedAtMsColumn: now,
+          },
+          where: '${AppDatabase.syncIdColumn} = ?',
+          whereArgs: [r['syncId']],
+        );
+      } else {
+        await db.insert(AppDatabase.ledgerTable, {
+          'entry_type': r['entryType'],
+          'title': r['title'] ?? '',
+          'note': r['note'] ?? '',
+          'reference': r['reference'] ?? '',
+          'amount': r['amount'],
+          'wallet_delta': r['walletDelta'] ?? 0,
+          'maya_wallet_delta': r['mayaWalletDelta'] ?? 0,
+          'on_hand_delta': r['onHandDelta'] ?? 0,
+          'recorded_flow': r['recordedFlow'] ?? 0,
+          'tag': r['tag'] ?? '',
+          'icon_key': r['iconKey'] ?? '',
+          'wallet_account': r['walletAccount'] ?? '',
+          'owner_scope': r['ownerScope'] ?? 'Business',
+          'owner_movement_type': r['ownerMovementType'],
+          'owner_category': r['ownerCategory'],
+          'owner_party_name': r['ownerPartyName'],
+          'owner_party_account': r['ownerPartyAccount'],
+          'created_at': r['entryDate'],
+          AppDatabase.syncIdColumn: r['syncId'],
+          AppDatabase.deviceIdColumn: r['deviceId'] ?? '',
+          AppDatabase.updatedAtMsColumn: now,
+          AppDatabase.isDeletedColumn: 0,
+          AppDatabase.isDirtyColumn: 0,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
     }
 
     // Charges
@@ -268,13 +300,29 @@ class SyncService {
       since: since,
     );
     for (final r in remoteCharges) {
-      await db.insert(AppDatabase.chargesTable, {
-        'lower_bound': r['lowerBound'],
-        'upper_bound': r['upperBound'],
-        'charge_amount': r['chargeAmount'],
-        'sync_id': r['syncId'],
-        'synced_at': now,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      if (r['isDeleted'] == true) {
+        await db.update(
+          AppDatabase.chargesTable,
+          {
+            AppDatabase.isDeletedColumn: 1,
+            AppDatabase.isDirtyColumn: 0,
+            AppDatabase.updatedAtMsColumn: now,
+          },
+          where: '${AppDatabase.syncIdColumn} = ?',
+          whereArgs: [r['syncId']],
+        );
+      } else {
+        await db.insert(AppDatabase.chargesTable, {
+          'lower_bound': r['lowerBound'],
+          'upper_bound': r['upperBound'],
+          'charge_amount': r['chargeAmount'],
+          AppDatabase.syncIdColumn: r['syncId'],
+          AppDatabase.deviceIdColumn: r['deviceId'] ?? '',
+          AppDatabase.updatedAtMsColumn: now,
+          AppDatabase.isDeletedColumn: 0,
+          AppDatabase.isDirtyColumn: 0,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
     }
 
     // Transaction types
@@ -283,18 +331,34 @@ class SyncService {
       since: since,
     );
     for (final r in remoteTypes) {
-      await db.insert(
-        AppDatabase.transactionTypesTable,
-        {
-          'name': r['name'],
-          'is_outflow': (r['isOutflow'] == true) ? 1 : 0,
-          'wallet_account': r['walletAccount'] ?? 'GCash',
-          'created_at': r['createdAt'] ?? DateTime.now().toIso8601String(),
-          'sync_id': r['syncId'],
-          'synced_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      if (r['isDeleted'] == true) {
+        await db.update(
+          AppDatabase.transactionTypesTable,
+          {
+            AppDatabase.isDeletedColumn: 1,
+            AppDatabase.isDirtyColumn: 0,
+            AppDatabase.updatedAtMsColumn: now,
+          },
+          where: '${AppDatabase.syncIdColumn} = ?',
+          whereArgs: [r['syncId']],
+        );
+      } else {
+        await db.insert(
+          AppDatabase.transactionTypesTable,
+          {
+            'name': r['name'],
+            'is_outflow': (r['isOutflow'] == true) ? 1 : 0,
+            'wallet_account': r['walletAccount'] ?? 'GCash',
+            'created_at': r['createdAt'] ?? DateTime.now().toIso8601String(),
+            AppDatabase.syncIdColumn: r['syncId'],
+            AppDatabase.deviceIdColumn: r['deviceId'] ?? '',
+            AppDatabase.updatedAtMsColumn: now,
+            AppDatabase.isDeletedColumn: 0,
+            AppDatabase.isDirtyColumn: 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
     }
 
     // Movement categories
@@ -303,16 +367,32 @@ class SyncService {
       since: since,
     );
     for (final r in remoteCats) {
-      await db.insert(
-        AppDatabase.ownerMovementCategoriesTable,
-        {
-          'name': r['name'],
-          'created_at': r['createdAt'] ?? DateTime.now().toIso8601String(),
-          'sync_id': r['syncId'],
-          'synced_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      if (r['isDeleted'] == true) {
+        await db.update(
+          AppDatabase.ownerMovementCategoriesTable,
+          {
+            AppDatabase.isDeletedColumn: 1,
+            AppDatabase.isDirtyColumn: 0,
+            AppDatabase.updatedAtMsColumn: now,
+          },
+          where: '${AppDatabase.syncIdColumn} = ?',
+          whereArgs: [r['syncId']],
+        );
+      } else {
+        await db.insert(
+          AppDatabase.ownerMovementCategoriesTable,
+          {
+            'name': r['name'],
+            'created_at': r['createdAt'] ?? DateTime.now().toIso8601String(),
+            AppDatabase.syncIdColumn: r['syncId'],
+            AppDatabase.deviceIdColumn: r['deviceId'] ?? '',
+            AppDatabase.updatedAtMsColumn: now,
+            AppDatabase.isDeletedColumn: 0,
+            AppDatabase.isDirtyColumn: 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
     }
 
     await prefs.setInt(_lastSyncKey, now);
@@ -330,7 +410,11 @@ class SyncService {
       final syncId = _syncId(row);
       await db.update(
         table,
-        {'sync_id': syncId, 'synced_at': now},
+        {
+          AppDatabase.syncIdColumn: syncId,
+          AppDatabase.isDirtyColumn: 0,
+          AppDatabase.updatedAtMsColumn: now,
+        },
         where: 'id = ?',
         whereArgs: [row['id']],
       );
@@ -350,7 +434,7 @@ class SyncService {
     'description': r['description'],
     'joinDate': r['join_date'],
     'isVerified': r['is_verified'] == 1,
-    'isDeleted': false,
+    'isDeleted': r['is_deleted'] == 1,
   };
 
   Map<String, dynamic> _toEntryPayload(Map<String, dynamic> r) => {
@@ -374,7 +458,7 @@ class SyncService {
     'ownerPartyName': r['owner_party_name'],
     'ownerPartyAccount': r['owner_party_account'],
     'entryDate': r['created_at'],
-    'isDeleted': false,
+    'isDeleted': r['is_deleted'] == 1,
   };
 
   Map<String, dynamic> _toChargePayload(Map<String, dynamic> r) => {
@@ -383,7 +467,7 @@ class SyncService {
     'lowerBound': r['lower_bound'],
     'upperBound': r['upper_bound'],
     'chargeAmount': r['charge_amount'],
-    'isDeleted': false,
+    'isDeleted': r['is_deleted'] == 1,
   };
 
   Map<String, dynamic> _toTransactionTypePayload(Map<String, dynamic> r) => {
@@ -392,14 +476,14 @@ class SyncService {
     'name': r['name'],
     'isOutflow': r['is_outflow'] == 1,
     'walletAccount': r['wallet_account'],
-    'isDeleted': false,
+    'isDeleted': r['is_deleted'] == 1,
   };
 
   Map<String, dynamic> _toMovementCategoryPayload(Map<String, dynamic> r) => {
     'syncId': _syncId(r),
     'deviceId': _deviceId,
     'name': r['name'],
-    'isDeleted': false,
+    'isDeleted': r['is_deleted'] == 1,
   };
 
   void _logPushFailure(String table, int count) {

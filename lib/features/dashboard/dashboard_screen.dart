@@ -370,6 +370,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildTotalFundsTile(DashboardSnapshot dashboard) {
+    final totalCapital = dashboard.businessFundingTotal;
+    final chargeEarnings = dashboard.recordedFlow;
+    final computedTotalFunds = totalCapital + chargeEarnings;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -384,37 +388,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'TOTAL FUNDS',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.7,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  _dashboardRepository.formatCurrency(
-                    dashboard.businessUsableCash,
-                  ),
-                  maxLines: 1,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'TOTAL FUNDS',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.7,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _dashboardRepository.formatCurrency(computedTotalFunds),
+                      maxLines: 1,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Capital ${_dashboardRepository.formatCurrency(totalCapital)} + Charges ${_dashboardRepository.formatCurrency(chargeEarnings)}',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Computation: Initial Capital/Top-ups + Total Charge Earnings',
+            style: TextStyle(color: Colors.white60, fontSize: 11),
           ),
         ],
       ),
