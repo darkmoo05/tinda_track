@@ -569,7 +569,7 @@ class DashboardRepository {
       caseSensitive: false,
     ).firstMatch(note);
     if (match != null && match.groupCount >= 1) {
-      return match.group(1)!;
+      return match.group(1) ?? reference;
     }
 
     return reference;

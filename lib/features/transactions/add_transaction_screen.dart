@@ -114,7 +114,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   String get _chargeDestinationAccount {
-    return _isOutflowSelection ? _selectedWalletAccount : 'On-hand Cash';
+    return _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount
+        ? _selectedWalletAccount
+        : 'On-hand Cash';
   }
 
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
@@ -1209,8 +1211,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           const SizedBox(height: 4),
           _buildPreviewRow('Wallet', _selectedWalletAccount),
           const SizedBox(height: 4),
-          _buildPreviewRow('Flow', _selectedFlowLabel),
-          const SizedBox(height: 4),
           _buildPreviewRow('Charge Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
           const SizedBox(height: 4),
           _buildPreviewRow('Charge Routed To', _chargeDestinationAccount),
@@ -1721,13 +1721,27 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final walletAccount = _selectedWalletAccount;
     final usesMayaWallet = walletAccount == 'Maya Wallet';
     final walletPostedAmount = isOutflow ? totalCollected : principal;
-    final walletDelta = usesMayaWallet
-        ? 0.0
-        : (isOutflow ? walletPostedAmount : -walletPostedAmount);
-    final mayaWalletDelta = usesMayaWallet
-        ? (isOutflow ? walletPostedAmount : -walletPostedAmount)
-        : 0.0;
-    final onHandDelta = isOutflow ? -principal : totalCollected;
+    var selectedWalletDelta = isOutflow
+        ? walletPostedAmount
+        : -walletPostedAmount;
+    var onHandDelta = isOutflow ? -principal : totalCollected;
+
+    // Fee routing is automatic: add-on-top -> on-hand, deduct-from-amount -> wallet.
+    final defaultFeeToWallet = isOutflow;
+    final feeToWallet =
+        _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount;
+    if (feeToWallet != defaultFeeToWallet) {
+      if (feeToWallet) {
+        selectedWalletDelta += chargeFee;
+        onHandDelta -= chargeFee;
+      } else {
+        selectedWalletDelta -= chargeFee;
+        onHandDelta += chargeFee;
+      }
+    }
+
+    final walletDelta = usesMayaWallet ? 0.0 : selectedWalletDelta;
+    final mayaWalletDelta = usesMayaWallet ? selectedWalletDelta : 0.0;
     final now = DateTime.now();
     final reference = accountNumber;
     final iconKey = isOutflow ? 'cash_out' : 'cash_in';
