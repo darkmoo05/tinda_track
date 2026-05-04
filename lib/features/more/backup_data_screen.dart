@@ -97,7 +97,7 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Enter the base URL of your Tinda Track server. '
+              'Enter the base URL of your Tinda Tracker server. '
               'Use your local IP (e.g. http://192.168.1.24:8080/api) '
               'when the device is on the same Wi-Fi as your computer.',
               style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),

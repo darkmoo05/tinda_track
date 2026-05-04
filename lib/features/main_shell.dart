@@ -54,7 +54,10 @@ class _MainShellState extends State<MainShell> {
       MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
     );
     if (saved == true && mounted) {
-      _handleDataChanged();
+      setState(() {
+        _selectedIndex = 0;
+        _refreshToken++;
+      });
     }
   }
 
