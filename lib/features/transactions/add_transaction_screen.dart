@@ -1,4 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../../core/data/app_database.dart';
 import '../../core/app_theme.dart';
 import '../charges/data/charge_repository.dart';
@@ -11,6 +20,10 @@ enum _WalletSelection { gcash, maya }
 
 enum _FlowDirection { inflow, outflow }
 
+enum _ReceiptImageSource { camera, gallery, file }
+
+enum _FieldConfidence { unknown, low, medium, high }
+
 class AddTransactionScreen extends StatefulWidget {
   const AddTransactionScreen({super.key});
 
@@ -20,6 +33,7 @@ class AddTransactionScreen extends StatefulWidget {
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _accountController = TextEditingController();
+  final _referenceController = TextEditingController();
   final _principalController = TextEditingController();
   final _notesController = TextEditingController();
   final PartyRepository _partyRepository = PartyRepository.instance;
@@ -28,7 +42,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
   bool _isLoadingTransactionTypes = true;
+  bool _isScanningReceipt = false;
   bool _showRequiredIndicators = false;
+  bool _isSaving = false;
   _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
   _WalletSelection _selectedWallet = _WalletSelection.gcash;
   _FlowDirection _selectedFlowDirection = _FlowDirection.inflow;
@@ -110,7 +126,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   double get _netCashToDrawer {
-    return _totalCollected;
+    return _isOutflowSelection ? _amountToSend : _totalCollected;
   }
 
   String get _chargeDestinationAccount {
@@ -148,8 +164,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   String get _selectedFlowLabel {
     return _isOutflowSelection
-        ? 'Outflow (Wallet Increases)'
-        : 'Inflow (Wallet Decreases)';
+        ? 'Customer Receives from Wallet'
+        : 'Customer Sends to Wallet';
   }
 
   String get _defaultTransactionTitle {
@@ -168,7 +184,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (!mounted) {
         return;
       }
-      _resolvePartyFromAccount(_accountController.text);
+      if (_accountController.text.trim().isNotEmpty) {
+        _resolvePartyFromAccount(_accountController.text);
+      }
     });
     _chargeRepository.ensureLoaded().then((_) {
       if (!mounted) {
@@ -181,6 +199,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   @override
   void dispose() {
     _accountController.dispose();
+    _referenceController.dispose();
     _principalController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -208,6 +227,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         centerTitle: false,
       ),
       body: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.all(24),
         children: [
           Text(
@@ -259,9 +279,37 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   suffixIcon: Icons.search_rounded,
                   onSuffixPressed: _openAccountSearchPicker,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   onChanged: _resolvePartyFromAccount,
                   isRequired: true,
                   hasError: _isAccountNumberMissing,
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: _isScanningReceipt
+                        ? null
+                        : _scanReceiptAndAutofill,
+                    icon: _isScanningReceipt
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.document_scanner_outlined, size: 16),
+                    label: Text(
+                      _isScanningReceipt
+                          ? 'Scanning receipt...'
+                          : 'Scan Receipt (Camera/Gallery)',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: AppColors.primary.withValues(alpha: 0.25),
+                      ),
+                      foregroundColor: AppColors.primary,
+                    ),
+                  ),
                 ),
                 if (_hasTypedAccount && _isRegisteredAccount) ...[
                   const SizedBox(height: 8),
@@ -274,15 +322,32 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 const SizedBox(height: 16),
                 _buildTextField(
                   controller: _principalController,
-                  label: 'Principal Amount',
+                  label: 'Transaction Amount',
                   hint: '0.00',
                   prefixText: '₱  ',
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  inputFormatters: [
+                    TextInputFormatter.withFunction((oldValue, newValue) {
+                      final text = newValue.text;
+                      if (text.isEmpty) return newValue;
+                      if (text.startsWith('.')) return oldValue;
+                      final dotCount = '.'.allMatches(text).length;
+                      if (dotCount > 1) return oldValue;
+                      return newValue;
+                    }),
+                  ],
                   onChanged: _onPrincipalChanged,
                   isRequired: true,
                   hasError: _isPrincipalMissing,
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _referenceController,
+                  label: 'Reference',
+                  hint: 'Enter receipt / reference number',
+                  inputFormatters: [LengthLimitingTextInputFormatter(80)],
                 ),
                 const SizedBox(height: 12),
                 _buildChargeHandlingSelector(),
@@ -292,6 +357,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   label: 'Notes',
                   hint: 'Optional notes...',
                   maxLines: 3,
+                  inputFormatters: [LengthLimitingTextInputFormatter(300)],
                 ),
               ],
             ),
@@ -368,7 +434,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ),
         const SizedBox(height: 2),
         DropdownButtonFormField<int>(
-          initialValue: value,
+          value: value,
           isExpanded: true,
           onChanged: onChanged,
           decoration: _inputDecoration(
@@ -420,7 +486,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          t.isOutflow ? 'OUTFLOW' : 'INFLOW',
+                          t.isOutflow ? 'RECEIVE' : 'SEND',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -562,7 +628,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Type profile: ${selectedType.walletAccount} • ${selectedType.isOutflow ? 'Outflow' : 'Inflow'}',
+              '${selectedType.walletAccount} — ${selectedType.isOutflow ? 'Customer Receives' : 'Customer Sends'}',
               style: TextStyle(
                 fontSize: 12,
                 color: walletColor,
@@ -630,7 +696,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
     _showMessage(
-      'Transaction type added: ${createdType.name.trim()} (${createdType.isOutflow ? 'Outflow' : 'Inflow'} • ${createdType.walletSelection == _WalletSelection.maya ? 'Maya Wallet' : 'GCash'})',
+      'Transaction type added: ${createdType.name.trim()} (${createdType.isOutflow ? 'Customer Receives' : 'Customer Sends'} • ${createdType.walletSelection == _WalletSelection.maya ? 'Maya Wallet' : 'GCash'})',
     );
   }
 
@@ -839,6 +905,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     TextInputType? keyboardType,
     int maxLines = 1,
     ValueChanged<String>? onChanged,
+    List<TextInputFormatter>? inputFormatters,
     bool isRequired = false,
     bool hasError = false,
   }) {
@@ -855,6 +922,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
+          inputFormatters: inputFormatters,
           onChanged: (value) {
             setState(() {});
             onChanged?.call(value);
@@ -910,6 +978,1009 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     _accountController.text = selectedParty.accountNumber;
     await _resolvePartyFromAccount(selectedParty.accountNumber);
+  }
+
+  Future<void> _scanReceiptAndAutofill() async {
+    if (_isScanningReceipt) {
+      return;
+    }
+
+    setState(() {
+      _isScanningReceipt = true;
+    });
+
+    var stage = 'initialization';
+    try {
+      stage = 'image selection';
+      final path = await _pickReceiptImagePath();
+      if (path == null || path.isEmpty) {
+        return;
+      }
+
+      stage = 'OCR processing';
+      // Fast path: parse direct OCR first.
+      final rawText = await _runOcrOnImagePath(path);
+      var mergedRawText = rawText;
+
+      stage = 'quick parse';
+      final quickDraft = _parseReceiptDraftSafely(
+        rawText,
+        sourceName: p.basename(path),
+      );
+
+      final shouldRunCropPass =
+          quickDraft == null ||
+          !quickDraft.hasAnyAutofillField ||
+          !_isPlausibleScannedAmount(quickDraft.amount) ||
+          quickDraft.amountConfidence == _FieldConfidence.low ||
+          quickDraft.amountConfidence == _FieldConfidence.unknown;
+
+      if (shouldRunCropPass) {
+        stage = 'OCR crop pass';
+        final croppedText = await _runCroppedOcrPass(path);
+        if (croppedText.isNotEmpty) {
+          mergedRawText = '$rawText\n$croppedText';
+        }
+      }
+
+      stage = 'receipt parsing';
+      final draft = _parseReceiptDraftSafely(
+        mergedRawText,
+        sourceName: p.basename(path),
+      );
+      if (!mounted) {
+        return;
+      }
+      if (draft == null || !draft.hasAnySignal) {
+        _showMessage(
+          'OCR completed but no usable amount/account/reference was detected. Try a clearer receipt image.',
+          isError: true,
+        );
+        return;
+      }
+
+      stage = 'confirmation dialog';
+      final shouldApply = await _confirmReceiptAutofill(draft);
+      if (!mounted || !shouldApply) {
+        return;
+      }
+
+      final suggestedTypeId = _pickBestTransactionTypeId(draft);
+
+      stage = 'field autofill';
+      setState(() {
+        if (draft.accountNumber != null && draft.accountNumber!.isNotEmpty) {
+          _accountController.text = draft.accountNumber!;
+        }
+        if (draft.amount != null && draft.amount! > 0) {
+          final formattedAmount = _formatScannedAmountForInput(draft.amount!);
+          if (formattedAmount.isNotEmpty) {
+            _principalController.text = formattedAmount;
+          }
+        }
+        if (draft.reference != null && draft.reference!.trim().isNotEmpty) {
+          _referenceController.text = draft.reference!.trim();
+        }
+        if (suggestedTypeId != null) {
+          _applyTypeSelection(suggestedTypeId);
+        } else if (draft.walletSelection != null &&
+            _selectedTransactionType == null) {
+          _selectedWallet = draft.walletSelection!;
+        }
+      });
+
+      if (draft.accountNumber != null && draft.accountNumber!.isNotEmpty) {
+        stage = 'party resolution';
+        try {
+          await _resolvePartyFromAccount(draft.accountNumber!);
+        } catch (error, stackTrace) {
+          debugPrint(
+            'Receipt scan: party lookup failed but autofill continues: $error\n$stackTrace',
+          );
+        }
+      }
+
+      stage = 'post-processing';
+      _onPrincipalChanged(_principalController.text);
+      if (!mounted) {
+        return;
+      }
+
+      if (!draft.hasAnyAutofillField) {
+        _showMessage(
+          'Receipt scanned. No direct amount/account/reference was detected.',
+        );
+        return;
+      }
+
+      _showMessage('Receipt details applied. Please review before saving.');
+    } catch (error, stackTrace) {
+      debugPrint('Receipt scan failed at $stage: $error\n$stackTrace');
+      if (!mounted) {
+        return;
+      }
+      _showMessage(
+        'Receipt scan failed during $stage. Please try again with a clearer image.',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isScanningReceipt = false;
+        });
+      }
+    }
+  }
+
+  _ReceiptDraft? _parseReceiptDraftSafely(
+    String rawText, {
+    String? sourceName,
+  }) {
+    try {
+      return _parseReceiptDraft(rawText, sourceName: sourceName);
+    } catch (error, stackTrace) {
+      debugPrint('Receipt parse crashed, using fallback: $error\n$stackTrace');
+
+      final fallbackText = [
+        if (sourceName != null && sourceName.trim().isNotEmpty) sourceName,
+        rawText,
+      ].join('\n');
+
+      try {
+        return _buildFallbackDraftFromRaw(fallbackText);
+      } catch (fallbackError, fallbackStackTrace) {
+        debugPrint(
+          'Receipt fallback parse failed: $fallbackError\n$fallbackStackTrace',
+        );
+        return null;
+      }
+    }
+  }
+
+  _ReceiptDraft _buildFallbackDraftFromRaw(String text) {
+    final normalized = text.trim();
+    final walletSelection = _detectWalletSelection(normalized);
+    final flowDirection = _detectFlowDirection(normalized);
+    final amountData = _extractLikelyAmountFromText(normalized);
+    final accountData = _extractLikelyAccountNumber(normalized);
+    final referenceData = _extractLikelyReference(normalized);
+
+    return _ReceiptDraft(
+      amount: amountData.value,
+      amountConfidence: amountData.confidence,
+      accountNumber: accountData.value,
+      accountConfidence: accountData.confidence,
+      reference: referenceData.value,
+      referenceConfidence: referenceData.confidence,
+      walletSelection: walletSelection,
+      flowDirection: flowDirection,
+      rawOcrPreview: normalized,
+    );
+  }
+
+  Future<String> _runOcrOnImagePath(String path) async {
+    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    try {
+      final inputImage = InputImage.fromFilePath(path);
+      final recognized = await recognizer.processImage(inputImage);
+      return recognized.text;
+    } finally {
+      await recognizer.close();
+    }
+  }
+
+  Future<String> _runCroppedOcrPass(String originalPath) async {
+    try {
+      final originalBytes = await File(originalPath).readAsBytes();
+      final decoded = img.decodeImage(originalBytes);
+      if (decoded == null || decoded.width < 80 || decoded.height < 80) {
+        return '';
+      }
+
+      final segmentTexts = <String>[];
+
+      // Preprocess one region: crop → grayscale → optional invert → upscale → contrast.
+      // invertIfDark: inverts regions with a predominantly dark/colored background
+      // (e.g. GCash blue header) so ML Kit always sees dark text on white.
+      Future<void> addSegment({
+        required double x,
+        required double y,
+        required double w,
+        required double h,
+        double scale = 3.0,
+        double contrast = 1.5,
+        bool invertIfDark = false,
+      }) async {
+        final cropX = (decoded.width * x).round();
+        final cropY = (decoded.height * y).round();
+        final cropW = (decoded.width * w).round().clamp(
+          1,
+          decoded.width - cropX,
+        );
+        final cropH = (decoded.height * h).round().clamp(
+          1,
+          decoded.height - cropY,
+        );
+
+        final cropped = img.copyCrop(
+          decoded,
+          x: cropX,
+          y: cropY,
+          width: cropW,
+          height: cropH,
+        );
+
+        var grayscale = img.grayscale(cropped);
+
+        if (invertIfDark) {
+          // Sample average luminance in the centre strip to decide whether
+          // to invert (dark background → white text → invert for OCR).
+          int totalLum = 0;
+          final sampleY = (grayscale.height * 0.4).round();
+          final sampleH = (grayscale.height * 0.2)
+              .clamp(1.0, grayscale.height.toDouble())
+              .round();
+          for (var py = sampleY; py < sampleY + sampleH; py++) {
+            for (var px = 0; px < grayscale.width; px++) {
+              totalLum += grayscale.getPixel(px, py).r.toInt();
+            }
+          }
+          final avgLum = totalLum / (grayscale.width * sampleH);
+          if (avgLum < 128) {
+            grayscale = img.invert(grayscale);
+          }
+        }
+
+        // Upscale — ML Kit accuracy improves significantly at ≥3x
+        final resized = img.copyResize(
+          grayscale,
+          width: (grayscale.width * scale).round(),
+        );
+
+        final enhanced = img.adjustColor(
+          resized,
+          contrast: contrast,
+          brightness: 1.06,
+          saturation: 0,
+        );
+
+        final text = await _runOcrOnTempImage(enhanced, 'seg');
+        if (text.trim().isNotEmpty) {
+          segmentTexts.add(text.trim());
+        }
+      }
+
+      // Generic enhanced pass: full image grayscale + upscale + contrast.
+      // Works for any receipt layout (GCash, Maya, BPI, BDO, store POS, etc.).
+      // A single pass is much faster than 4 fixed GCash-specific segments.
+      await addSegment(
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+        scale: 2.5,
+        contrast: 1.5,
+        invertIfDark: true,
+      );
+
+      // Focused centre strip — covers the core data rows of most receipts
+      // (amount, reference, account) without the often-noisy header/footer.
+      await addSegment(
+        x: 0.0,
+        y: 0.12,
+        w: 1.0,
+        h: 0.76,
+        scale: 3.0,
+        contrast: 1.6,
+        invertIfDark: true,
+      );
+
+      return segmentTexts.join('\n');
+    } catch (error, stackTrace) {
+      debugPrint('Receipt crop OCR failed: $error\n$stackTrace');
+      return '';
+    }
+  }
+
+  Future<String> _runOcrOnTempImage(img.Image image, String prefix) async {
+    final tempDir = await getTemporaryDirectory();
+    final cropPath = p.join(
+      tempDir.path,
+      '${prefix}_${DateTime.now().microsecondsSinceEpoch}.jpg',
+    );
+    final cropFile = File(cropPath);
+    await cropFile.writeAsBytes(img.encodeJpg(image, quality: 94));
+    return _runOcrOnImagePath(cropPath);
+  }
+
+  Future<String?> _pickReceiptImagePath() async {
+    final source = await _showReceiptImageSourcePicker();
+    if (!mounted || source == null) {
+      return null;
+    }
+
+    if (source == _ReceiptImageSource.file) {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'heic'],
+        withData: true,
+      );
+      final file = picked?.files.single;
+      if (file == null) {
+        return null;
+      }
+      if (file.path != null && file.path!.isNotEmpty) {
+        return file.path;
+      }
+
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        return null;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final ext = p.extension(file.name).isNotEmpty
+          ? p.extension(file.name)
+          : '.jpg';
+      final tempPath = p.join(
+        tempDir.path,
+        'receipt_${DateTime.now().millisecondsSinceEpoch}$ext',
+      );
+      final tempFile = File(tempPath);
+      await tempFile.writeAsBytes(bytes, flush: true);
+      return tempFile.path;
+    }
+
+    final picker = ImagePicker();
+    final file = await picker.pickImage(
+      source: source == _ReceiptImageSource.camera
+          ? ImageSource.camera
+          : ImageSource.gallery,
+      imageQuality: 90,
+    );
+    return file?.path;
+  }
+
+  Future<_ReceiptImageSource?> _showReceiptImageSourcePicker() async {
+    return showModalBottomSheet<_ReceiptImageSource>(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Use Camera'),
+              subtitle: const Text('Take a photo of the receipt'),
+              onTap: () =>
+                  Navigator.of(context).pop(_ReceiptImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Pick from Gallery'),
+              subtitle: const Text('Choose existing screenshot/photo'),
+              onTap: () =>
+                  Navigator.of(context).pop(_ReceiptImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open_outlined),
+              title: const Text('Browse Files'),
+              subtitle: const Text('Pick from any folder'),
+              onTap: () => Navigator.of(context).pop(_ReceiptImageSource.file),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  _ReceiptDraft? _parseReceiptDraft(String rawText, {String? sourceName}) {
+    final normalized = rawText.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+
+    final combinedText = sourceName == null || sourceName.trim().isEmpty
+        ? normalized
+        : '$sourceName\n$normalized';
+    final safeText = combinedText
+        .replaceAll('\u0000', ' ')
+        .replaceAll(RegExp(r'\uFFFD'), ' ')
+        .trim();
+
+    ({double? value, _FieldConfidence confidence}) amountData = (
+      value: null,
+      confidence: _FieldConfidence.unknown,
+    );
+    ({String? value, _FieldConfidence confidence}) accountData = (
+      value: null,
+      confidence: _FieldConfidence.unknown,
+    );
+    ({String? value, _FieldConfidence confidence}) referenceData = (
+      value: null,
+      confidence: _FieldConfidence.unknown,
+    );
+    _WalletSelection? walletSelection;
+    _FlowDirection? flowDirection;
+
+    try {
+      amountData = _extractLikelyAmountFromText(safeText);
+    } catch (error, stackTrace) {
+      debugPrint('Receipt parse amount failed: $error\n$stackTrace');
+    }
+
+    try {
+      accountData = _extractLikelyAccountNumber(safeText);
+    } catch (error, stackTrace) {
+      debugPrint('Receipt parse account failed: $error\n$stackTrace');
+    }
+
+    try {
+      referenceData = _extractLikelyReference(safeText);
+    } catch (error, stackTrace) {
+      debugPrint('Receipt parse reference failed: $error\n$stackTrace');
+    }
+
+    try {
+      walletSelection = _detectWalletSelection(safeText);
+    } catch (error, stackTrace) {
+      debugPrint('Receipt parse wallet failed: $error\n$stackTrace');
+    }
+
+    try {
+      flowDirection = _detectFlowDirection(safeText);
+    } catch (error, stackTrace) {
+      debugPrint('Receipt parse flow failed: $error\n$stackTrace');
+    }
+
+    return _ReceiptDraft(
+      amount: amountData.value,
+      amountConfidence: amountData.confidence,
+      accountNumber: accountData.value,
+      accountConfidence: accountData.confidence,
+      reference: referenceData.value,
+      referenceConfidence: referenceData.confidence,
+      walletSelection: walletSelection,
+      flowDirection: flowDirection,
+      rawOcrPreview: safeText,
+    );
+  }
+
+  _FlowDirection? _detectFlowDirection(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('cash out') ||
+        lower.contains('withdraw') ||
+        lower.contains('withdrawal')) {
+      return _FlowDirection.outflow;
+    }
+    if (lower.contains('cash in') || lower.contains('cashin')) {
+      return _FlowDirection.inflow;
+    }
+    return null;
+  }
+
+  _WalletSelection? _detectWalletSelection(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('maya') || lower.contains('paymaya')) {
+      return _WalletSelection.maya;
+    }
+    if (lower.contains('gcash') || lower.contains('g-cash')) {
+      return _WalletSelection.gcash;
+    }
+    // Other wallets/banks — map to nearest supported selection if available
+    if (lower.contains('shopeepay') ||
+        lower.contains('shopee pay') ||
+        lower.contains('seabank')) {
+      return _WalletSelection.maya; // fallback to maya as closest e-wallet
+    }
+    return null;
+  }
+
+  ({double? value, _FieldConfidence confidence}) _extractLikelyAmountFromText(
+    String text,
+  ) {
+    // Normalize whitespace but do NOT replace o->0 yet (it destroys keywords)
+    final flat = text
+        .replaceAll(RegExp(r'[\r\n]+'), ' ')
+        .replaceAll(RegExp(r'  +'), ' ')
+        .trim();
+
+    final candidates = <({double value, int score})>[];
+
+    // Amount pattern: matches with OR without thousands comma, 1–2 decimal places
+    // e.g. 5.00 / 5,000.00 / 5.0
+    const _decimalAmt = r'\d{1,3}(?:,\d{3})*\.\d{1,2}';
+
+    // 1. Currency-symbol prefix (₱ or OCR-read P), with or without commas
+    // Highest priority — e.g. ₱5.00, P5.00, ₱5,000.00, ₱ 5.00
+    final currencyPattern = RegExp(
+      '(?<![a-zA-Z])[₱P]\\s*($_decimalAmt)',
+      caseSensitive: false,
+    );
+    for (final m in currencyPattern.allMatches(flat)) {
+      final parsed = _parseAmountToken(m.group(1));
+      if (_isPlausibleScannedAmount(parsed)) {
+        final score = m.group(1)!.contains(',') ? 14 : 12;
+        candidates.add((value: parsed!, score: score));
+      }
+    }
+
+    // 2. Keyword label + value on the NEXT line (ML Kit splits label/value rows)
+    // e.g. line "Total Amount Sent" followed by line "₱5.00"
+    final lineList = text.split(RegExp(r'[\r\n]+'));
+    for (var i = 0; i < lineList.length - 1; i++) {
+      final lineLower = lineList[i].toLowerCase().trim();
+      final isAmountLabel =
+          lineLower == 'amount' ||
+          lineLower == 'total amount' ||
+          lineLower == 'total amount sent' ||
+          lineLower == 'total' ||
+          lineLower == 'grand total' ||
+          lineLower == 'net amount' ||
+          lineLower == 'subtotal' ||
+          lineLower == 'payment' ||
+          lineLower == 'paid' ||
+          lineLower == 'charge' ||
+          lineLower == 'price' ||
+          lineLower == 'fee' ||
+          lineLower == 'transaction amount' ||
+          lineLower.startsWith('amount:') ||
+          lineLower.startsWith('total amount:') ||
+          lineLower.startsWith('total:') ||
+          lineLower.startsWith('grand total:') ||
+          lineLower.startsWith('subtotal:') ||
+          lineLower.startsWith('payment:') ||
+          lineLower.startsWith('paid:') ||
+          lineLower.startsWith('net amount:') ||
+          lineLower.startsWith('transaction amount:');
+      if (isAmountLabel) {
+        // Check next 1–2 lines for the value
+        for (var j = i + 1; j <= i + 2 && j < lineList.length; j++) {
+          final nextLine = lineList[j].trim();
+          // Extract isolated decimal tokens so phone/reference digits
+          // cannot be concatenated into a fake large amount.
+          final nextLineAmountTokens = RegExp(
+            r'[₱P]?\s*(\d{1,3}(?:,\d{3})*\.\d{1,2})',
+            caseSensitive: false,
+          );
+          for (final token in nextLineAmountTokens.allMatches(nextLine)) {
+            final parsed = _parseAmountToken(token.group(1));
+            if (_isPlausibleScannedAmount(parsed)) {
+              candidates.add((value: parsed!, score: 13));
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Keyword + amount on SAME line, allow currency symbol between them
+    // Handles: "Amount 5.00", "Total Amount Sent ₱5.00", "Amount: 5.00"
+    final keywordSameLine = RegExp(
+      '(?:total\\s+amount\\s+sent|transaction\\s+amount|grand\\s+total|net\\s+amount|total\\s+amount|subtotal|total|amount|payment|paid|charge|price|fee)\\s{0,4}[:\\-]?\\s{0,4}[₱P]?\\s{0,2}($_decimalAmt)',
+      caseSensitive: false,
+    );
+    for (final m in keywordSameLine.allMatches(flat)) {
+      final parsed = _parseAmountToken(m.group(1));
+      if (_isPlausibleScannedAmount(parsed)) {
+        candidates.add((value: parsed!, score: 10));
+      }
+    }
+
+    // 4. Comma-formatted amount anywhere (e.g. 5,000.00) — still reliable signal
+    final commaFormatted = RegExp(r'\b(\d{1,3}(?:,\d{3})+\.\d{1,2})\b');
+    for (final m in commaFormatted.allMatches(flat)) {
+      final parsed = _parseAmountToken(m.group(1));
+      if (_isPlausibleScannedAmount(parsed)) {
+        candidates.add((value: parsed!, score: 8));
+      }
+    }
+
+    if (candidates.isNotEmpty) {
+      candidates.sort((a, b) {
+        final byScore = b.score.compareTo(a.score);
+        if (byScore != 0) return byScore;
+        // If same score, prefer the larger amount
+        return b.value.compareTo(a.value);
+      });
+      final top = candidates.first;
+      final confidence = switch (top.score) {
+        >= 12 => _FieldConfidence.high,
+        >= 10 => _FieldConfidence.medium,
+        _ => _FieldConfidence.low,
+      };
+      return (value: top.value, confidence: confidence);
+    }
+
+    // 5. Last resort: any decimal number that looks like an amount
+    final generic = RegExp(r'\b(\d{1,3}(?:,\d{3})*\.\d{2})\b');
+    double? best;
+    for (final m in generic.allMatches(flat)) {
+      final parsed = _parseAmountToken(m.group(1));
+      if (!_isPlausibleScannedAmount(parsed)) {
+        continue;
+      }
+      final parsedValue = parsed!;
+      if (parsedValue >= 2000 &&
+          parsedValue <= 2100 &&
+          m.group(1)!.endsWith('.00')) {
+        continue; // skip year-like values
+      }
+      if (best == null || parsedValue > best) {
+        best = parsedValue;
+      }
+    }
+    if (best != null) {
+      return (value: best, confidence: _FieldConfidence.low);
+    }
+    return (value: null, confidence: _FieldConfidence.unknown);
+  }
+
+  double? _parseAmountToken(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+    final normalized = _normalizeOcrDigits(
+      raw,
+    ).replaceAll(' ', '').replaceAll('P', '').replaceAll('p', '');
+
+    final cleaned = normalized
+        .replaceAll(RegExp(r'[^0-9\.,]'), '')
+        .replaceAll(',', '')
+        .trim();
+    if (cleaned.isEmpty) {
+      return null;
+    }
+    return double.tryParse(cleaned);
+  }
+
+  bool _isPlausibleScannedAmount(double? value) {
+    if (value == null || !value.isFinite) {
+      return false;
+    }
+    // Guardrails to prevent phone/reference digits from being interpreted
+    // as an amount. Adjust upper bound if your business needs larger values.
+    return value >= 1 && value <= 500000;
+  }
+
+  String _normalizeOcrDigits(String value) {
+    return value
+        .replaceAll('O', '0')
+        .replaceAll('o', '0')
+        .replaceAll('Q', '0')
+        .replaceAll('I', '1')
+        .replaceAll('l', '1')
+        .replaceAll('|', '1')
+        .replaceAll('S', '5')
+        .replaceAll('s', '5')
+        .replaceAll('B', '8');
+  }
+
+  ({String? value, _FieldConfidence confidence}) _extractLikelyAccountNumber(
+    String text,
+  ) {
+    // 1. International format with spaces: +63 975 307 9315 or +63-975-307-9315
+    final intlSpaced = RegExp(r'\+63[\s-]?9\d{2}[\s-]\d{3}[\s-]\d{4}');
+    final intlSpacedMatch = intlSpaced.firstMatch(text);
+    if (intlSpacedMatch != null) {
+      final digits = intlSpacedMatch
+          .group(0)!
+          .replaceAll(RegExp(r'[^0-9]'), '');
+      final normalized = _normalizeAccountDigits(digits);
+      if (normalized != null) {
+        return (value: normalized, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // 2. International format compact: +639753079315
+    final intlCompact = RegExp(r'\+639\d{9}');
+    final intlCompactMatch = intlCompact.firstMatch(text);
+    if (intlCompactMatch != null) {
+      final digits = intlCompactMatch
+          .group(0)!
+          .replaceAll(RegExp(r'[^0-9]'), '');
+      final normalized = _normalizeAccountDigits(digits);
+      if (normalized != null) {
+        return (value: normalized, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // 3. Local format with spaces: 0975 307 9315 or 09753079315
+    final localPhone = RegExp(r'\b0?9\d{2}[\s-]?\d{3}[\s-]?\d{4}\b');
+    final localMatch = localPhone.firstMatch(text);
+    if (localMatch != null) {
+      final digits = localMatch.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
+      final normalized = _normalizeAccountDigits(digits);
+      if (normalized != null) {
+        return (value: normalized, confidence: _FieldConfidence.medium);
+      }
+    }
+
+    // 4. Contextual keyword search (use raw text to keep keywords intact)
+    final contextualPattern = RegExp(
+      r'(?:mobile|account|number|recipient|to|from)[^0-9]{0,20}(\+?6?3?9\d{2}[\s-]?\d{3}[\s-]?\d{4}|0?9\d{9})',
+      caseSensitive: false,
+    );
+    final contextMatch = contextualPattern.firstMatch(text);
+    if (contextMatch != null) {
+      final raw = contextMatch.group(1) ?? '';
+      final normalized = _normalizeAccountDigits(
+        raw.replaceAll(RegExp(r'[^0-9]'), ''),
+      );
+      if (normalized != null) {
+        return (value: normalized, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // 5. Filename token fallback: extract from GCash filename like GCash-639753079315-...
+    final filenamePhone = RegExp(
+      r'(?:GCash|Maya|Pay)[^0-9]*(63)?9(\d{9})',
+      caseSensitive: false,
+    );
+    final fnMatch = filenamePhone.firstMatch(text);
+    if (fnMatch != null) {
+      final prefix = fnMatch.group(1) ?? '';
+      final rest = fnMatch.group(2) ?? '';
+      final normalized = _normalizeAccountDigits(
+        '${prefix}9$rest'.replaceAll(RegExp(r'[^0-9]'), ''),
+      );
+      if (normalized != null) {
+        return (value: normalized, confidence: _FieldConfidence.low);
+      }
+    }
+
+    return (value: null, confidence: _FieldConfidence.unknown);
+  }
+
+  String? _normalizeAccountDigits(String raw) {
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) {
+      return null;
+    }
+    if (digits.startsWith('63') && digits.length == 12) {
+      return '0${digits.substring(2)}';
+    }
+    if (digits.length == 10 && digits.startsWith('9')) {
+      return '0$digits';
+    }
+    if (digits.length >= 10 && digits.length <= 13) {
+      return digits;
+    }
+    return null;
+  }
+
+  ({String? value, _FieldConfidence confidence}) _extractLikelyReference(
+    String text,
+  ) {
+    // Collect all digit groups after any ref keyword, allowing spaces within the number
+    // Handles: "Ref No. 2039 688 926688", "Ref No. 2039688926688", "Reference: ABC123"
+    final refKeywordPattern = RegExp(
+      r'(?:ref(?:erence)?(?:\s*no\.?|\s*num(?:ber)?|\s*#|\s*id)?|transaction\s*(?:no\.?|id|num(?:ber)?)?|trx\s*(?:no\.?|id)?|trace\s*(?:no\.?|num(?:ber)?)?|control\s*(?:no\.?|num(?:ber)?)?|receipt\s*(?:no\.?|num(?:ber)?)?|or\s*(?:no\.?|num(?:ber)?)?|o\.r\.?\s*(?:no\.?|num(?:ber)?)?|txn\s*(?:no\.?|id)?|approval\s*(?:no\.?|code)?|auth(?:orization)?\s*(?:no\.?|code)?|rrn|stan)[\s:.-]*([\d][\d\s\-]{7,})',
+      caseSensitive: false,
+    );
+    final refMatch = refKeywordPattern.firstMatch(text);
+    if (refMatch != null) {
+      final raw = refMatch.group(1) ?? '';
+      // Extract consecutive digit groups, stopping at any word character (letter)
+      final digitGroups = RegExp(r'\d+');
+      final allDigits = digitGroups
+          .allMatches(raw.split(RegExp(r'[A-Za-z]')).first)
+          .map((m) => m.group(0)!)
+          .join();
+      if (allDigits.length >= 8) {
+        return (value: allDigits, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // Alphanumeric reference codes after keyword (e.g. "Ref: ABC123456", "Approval Code: XYZ")
+    final alphaRefPattern = RegExp(
+      r'(?:ref(?:erence)?(?:\s*no\.?|\s*num(?:ber)?|\s*#|\s*id)?|transaction\s*(?:no\.?|id|num(?:ber)?)?|trx\s*(?:no\.?|id)?|trace\s*(?:no\.?)?|control\s*(?:no\.?)?|receipt\s*(?:no\.?)?|or\s*(?:no\.?)?|txn\s*(?:no\.?|id)?|approval\s*(?:no\.?|code)?|auth(?:orization)?\s*(?:code)?)[\s:.-]*([A-Z0-9][A-Z0-9\-]{5,})',
+      caseSensitive: false,
+    );
+    final alphaMatch = alphaRefPattern.firstMatch(text);
+    if (alphaMatch != null) {
+      final value = alphaMatch.group(1)?.trim();
+      if (value != null && value.isNotEmpty) {
+        return (value: value, confidence: _FieldConfidence.medium);
+      }
+    }
+
+    // Any long digit-only sequence (12+ digits) that looks like a transaction ID
+    final longDigits = RegExp(r'\b(\d{12,})\b');
+    final longMatch = longDigits.firstMatch(text);
+    if (longMatch != null) {
+      final value = longMatch.group(1)!;
+      // Skip if it looks like a timestamp/date or phone
+      if (!value.startsWith('0') && value.length <= 20) {
+        return (value: value, confidence: _FieldConfidence.low);
+      }
+    }
+
+    return (value: null, confidence: _FieldConfidence.unknown);
+  }
+
+  int? _pickBestTransactionTypeId(_ReceiptDraft draft) {
+    if (_transactionTypes.isEmpty) {
+      return null;
+    }
+
+    int? bestId;
+    var bestScore = -1;
+    for (final type in _transactionTypes) {
+      var score = 0;
+      if (draft.walletSelection != null) {
+        final typeWallet = type.walletAccount.toLowerCase().contains('maya')
+            ? _WalletSelection.maya
+            : _WalletSelection.gcash;
+        if (typeWallet == draft.walletSelection) {
+          score += 3;
+        }
+      }
+      if (draft.flowDirection != null) {
+        final typeFlow = type.isOutflow
+            ? _FlowDirection.outflow
+            : _FlowDirection.inflow;
+        if (typeFlow == draft.flowDirection) {
+          score += 4;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = type.id;
+      }
+    }
+
+    return bestScore >= 4 ? bestId : null;
+  }
+
+  TransactionTypeRecord? _findTransactionTypeById(int id) {
+    for (final type in _transactionTypes) {
+      if (type.id == id) {
+        return type;
+      }
+    }
+    return null;
+  }
+
+  String _confidenceLabel(_FieldConfidence confidence) {
+    return switch (confidence) {
+      _FieldConfidence.high => 'High',
+      _FieldConfidence.medium => 'Medium',
+      _FieldConfidence.low => 'Low',
+      _FieldConfidence.unknown => 'Unknown',
+    };
+  }
+
+  String _formatScannedAmountForInput(double amount) {
+    if (!amount.isFinite || amount <= 0) {
+      return '';
+    }
+
+    try {
+      return amount.toStringAsFixed(2);
+    } catch (_) {
+      return amount.toString();
+    }
+  }
+
+  String _formatScannedAmountForDisplay(double amount) {
+    if (!amount.isFinite || amount <= 0) {
+      return 'Not found';
+    }
+
+    try {
+      return '₱ ${amount.toStringAsFixed(2)}';
+    } catch (_) {
+      return '₱ ${amount.toString()}';
+    }
+  }
+
+  Future<bool> _confirmReceiptAutofill(_ReceiptDraft draft) async {
+    final suggestedTypeId = _pickBestTransactionTypeId(draft);
+    final suggestedType = suggestedTypeId != null
+        ? _findTransactionTypeById(suggestedTypeId)
+        : null;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.56),
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLowest,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Apply Scanned Receipt Data?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Amount: ${draft.amount != null ? _formatScannedAmountForDisplay(draft.amount!) : 'Not found'}',
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Confidence: ${_confidenceLabel(draft.amountConfidence)}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Account: ${draft.accountNumber != null ? draft.accountNumber : 'Not found'}',
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Confidence: ${_confidenceLabel(draft.accountConfidence)}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Reference: ${draft.reference != null ? draft.reference : 'Not found'}',
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Confidence: ${_confidenceLabel(draft.referenceConfidence)}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text('Wallet: ${draft.walletLabel ?? 'Not found'}'),
+            const SizedBox(height: 6),
+            Text('Flow: ${draft.flowLabel ?? 'Not found'}'),
+            const SizedBox(height: 6),
+            Text(
+              'Suggested Type: ${suggestedType?.name ?? 'No confident match'}',
+            ),
+            const SizedBox(height: 10),
+            if (draft.rawOcrPreview != null &&
+                draft.rawOcrPreview!.trim().isNotEmpty)
+              Text(
+                'OCR Preview: ${_summarizeOcrPreview(draft.rawOcrPreview!)}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            if (draft.rawOcrPreview != null &&
+                draft.rawOcrPreview!.trim().isNotEmpty)
+              const SizedBox(height: 8),
+            const Text(
+              'Always review values before saving. Receipt formats vary by app and version.',
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
+  }
+
+  String _summarizeOcrPreview(String raw) {
+    final normalized = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.length <= 180) {
+      return normalized;
+    }
+    return '${normalized.substring(0, 180)}...';
   }
 
   Widget _buildPartyFoundBanner(String name) {
@@ -974,7 +2045,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'Parties not registered. Tap here to register details before saving.',
+                  'Party not registered. Tap here to register details before saving.',
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.error,
@@ -1019,32 +2090,36 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
           const SizedBox(height: 16),
           _buildPreviewRow(
-            'Charge Handling',
+            'Service Fee Mode',
             _chargeHandlingMode == _ChargeHandlingMode.addOnTop
-                ? 'Charge Added On Top'
-                : 'Charge Deducted From Amount',
+                ? 'Fee charged to customer'
+                : 'Fee taken from amount sent',
           ),
           const SizedBox(height: 4),
-          _buildPreviewRow('Wallet', _selectedWalletAccount),
+          _buildPreviewRow('Using Wallet', _selectedWalletAccount),
           const SizedBox(height: 4),
-          _buildPreviewRow('Charge Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
+          _buildPreviewRow('Service Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
           const SizedBox(height: 4),
-          _buildPreviewRow('Charge Routed To', _chargeDestinationAccount),
+          _buildPreviewRow('Fee Goes To', _chargeDestinationAccount),
           if (_matchedChargeBracket != null) ...[
             const SizedBox(height: 4),
             _buildPreviewRow(
-              'Charge Range',
-              '${_matchedChargeBracket!.lowerBound} - ${_matchedChargeBracket!.upperBound}',
+              'Fee Bracket',
+              '₱ ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} – ₱ ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
             ),
           ],
           const SizedBox(height: 4),
           _buildHighlightedPreviewRow(
             _isOutflowSelection
-                ? 'Amount Received from ${_selectedWalletAccount == 'Maya Wallet' ? 'Maya' : 'GCash'}'
-                : 'Amount Sent to ${_selectedWalletAccount == 'Maya Wallet' ? 'Maya' : 'GCash'}',
-            '₱ ${_amountToSend.toStringAsFixed(2)}',
+                ? 'E-money Received from Customer'
+                : 'E-money You Send to Customer',
+            '₱ ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
             _selectedWalletColor,
           ),
+          if (_enteredAmount > 0 && _matchedChargeBracket == null) ...[
+            const SizedBox(height: 8),
+            _buildNoBracketWarning(),
+          ],
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(color: AppColors.outlineVariant, thickness: 0.5),
@@ -1052,16 +2127,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total Collected',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.onSurface,
+              Flexible(
+                child: Text(
+                  _isOutflowSelection
+                      ? 'E-money to Receive from Customer'
+                      : 'Total to Collect from Customer',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onSurface,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '₱ ${_totalCollected.toStringAsFixed(2)}',
+
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -1076,18 +2157,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             children: [
               Row(
                 children: [
-                  const Text(
-                    'Net Cash to Drawer',
-                    style: TextStyle(
+                  Text(
+                    _isOutflowSelection ? 'Cash to Pay Out' : 'Cash You Keep',
+                    style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 14,
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+                  Tooltip(
+                    message: _isOutflowSelection
+                        ? 'Cash you hand out to the customer from your drawer.'
+                        : 'Cash that goes into your drawer after this transaction.',
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      size: 14,
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+                    ),
                   ),
                 ],
               ),
@@ -1104,8 +2190,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           const SizedBox(height: 12),
           Text(
             _chargeHandlingMode == _ChargeHandlingMode.addOnTop
-                ? 'Charge is added on top of the entered amount. Example: entered ₱100 + charge ₱5 = collect ₱105, send ₱100.'
-                : 'Charge is deducted from the entered amount. Example: entered ₱100 with charge ₱5 = send ₱95.',
+                ? 'Service fee is added on top. Example: ₱100 transaction + ₱5 fee = collect ₱105 from customer, send ₱100.'
+                : 'Fee is deducted before sending. Example: ₱100 entered, ₱5 fee deducted = only ₱95 is sent to the customer\'s wallet.',
             style: TextStyle(
               fontSize: 11,
               color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
@@ -1121,13 +2207,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.onSurfaceVariant,
+        Flexible(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant,
+            ),
           ),
         ),
+        const SizedBox(width: 8),
         Text(
           value,
           style: const TextStyle(
@@ -1151,24 +2240,30 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.account_balance_wallet_rounded,
-                size: 14,
-                color: color,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+          Flexible(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 14,
                   color: color,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
           Text(
             value,
             style: TextStyle(
@@ -1182,18 +2277,45 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  Widget _buildNoBracketWarning() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 14),
+          SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'No fee range set for this amount. Fee shown as ₱0. Create a fee range first.',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChargeHandlingSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _fieldLabel('Charge Handling'),
+        _fieldLabel('Fee Handling'),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             ChoiceChip(
-              label: const Text('Add Charge On Top'),
+              label: const Text('Customer Pays the Fee'),
               selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
               onSelected: (_) {
                 setState(() {
@@ -1202,7 +2324,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               },
             ),
             ChoiceChip(
-              label: const Text('Deduct Charge From Amount'),
+              label: const Text('Deduct Fee from Sent Amount'),
               selected:
                   _chargeHandlingMode ==
                   _ChargeHandlingMode.deductFromEnteredAmount,
@@ -1230,7 +2352,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: ElevatedButton(
-        onPressed: _onSaveTransaction,
+        onPressed: _isSaving ? null : _onSaveTransaction,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
@@ -1239,14 +2361,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: const Text(
-          'SAVE TRANSACTION',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
+        child: _isSaving
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              )
+            : const Text(
+                'SAVE TRANSACTION',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
       ),
     );
   }
@@ -1320,7 +2451,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ),
               const SizedBox(height: 14),
               const Text(
-                'Missing Charge Range',
+                'No Fee Range Found',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 17,
@@ -1330,7 +2461,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'The entered principal amount does not match any configured charge range. Please create a new charges range first.',
+                'The entered amount does not match any configured fee range. Please create a new fee range first.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
@@ -1400,10 +2531,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<void> _onSaveTransaction() async {
-    if (!_showRequiredIndicators) {
-      setState(() => _showRequiredIndicators = true);
+    if (_isSaving) return;
+    setState(() {
+      _showRequiredIndicators = true;
+      _isSaving = true;
+    });
+    try {
+      await _runSaveTransaction();
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
+  }
 
+  Future<void> _runSaveTransaction() async {
     final accountNumber = _accountController.text.trim();
     final principal = double.tryParse(_principalController.text.trim()) ?? 0;
 
@@ -1422,7 +2562,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     if (principal <= 0) {
       _showMessage(
-        'Principal amount is required before saving.',
+        'Transaction amount is required before saving.',
         isError: true,
       );
       return;
@@ -1430,7 +2570,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     if (_matchedChargeBracket == null) {
       _showMessage(
-        'No charge range found for this principal amount. Create a new range first.',
+        'No fee range found for this amount. Create a new range first.',
         isError: true,
       );
       _showMissingChargeRangeAlert();
@@ -1458,8 +2598,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         : gcashBalance;
     final sourceLabel = isOutflow ? 'On-hand Cash' : selectedWalletAccount;
     final requiredSourceAmount =
-        !isOutflow &&
-            _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount
+        _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount
         ? _enteredAmount - _chargeFee
         : _enteredAmount;
     final available = isOutflow ? onHandBalance : selectedWalletBalance;
@@ -1477,10 +2616,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     await _resolvePartyFromAccount(accountNumber);
 
     if (!_isRegisteredAccount) {
-      _showSnackBar(
-        messenger,
+      _showMessage(
         'Party is not registered yet. Register details first.',
         isError: true,
+        messenger: messenger,
       );
       final registered = await _openPartyRegistrationPopup(
         prefilledAccountNumber: accountNumber,
@@ -1496,12 +2635,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (!mounted) return;
 
       if (_isRegisteredAccount) {
-        _showSnackBar(messenger, 'Party registered. Saving transaction now...');
+        _showMessage(
+          'Party registered. Saving transaction now...',
+          messenger: messenger,
+        );
       } else {
-        _showSnackBar(
-          messenger,
+        _showMessage(
           'Unable to verify registration. Please try again.',
           isError: true,
+          messenger: messenger,
         );
         return;
       }
@@ -1512,17 +2654,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final saved = await _saveTransactionRecord();
     if (!saved) {
       if (!mounted) return;
-      _showSnackBar(
-        messenger,
+      _showMessage(
         'Unable to save transaction. Please try again.',
         isError: true,
+        messenger: messenger,
       );
       return;
     }
 
     if (!mounted) return;
 
-    _showSnackBar(messenger, 'Transaction saved for ${_matchedParty!.name}.');
+    _showMessage(
+      'Transaction saved for ${_matchedParty!.name}.',
+      messenger: messenger,
+    );
     Navigator.of(context).pop(true);
   }
 
@@ -1531,6 +2676,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final chargeFee = _chargeFee;
     final totalCollected = _totalCollected;
     final accountNumber = _accountController.text.trim();
+    final referenceText = _referenceController.text.trim();
     final notes = _notesController.text.trim();
 
     if (principal <= 0 || _matchedParty == null) {
@@ -1569,7 +2715,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final walletDelta = usesMayaWallet ? 0.0 : selectedWalletDelta;
     final mayaWalletDelta = usesMayaWallet ? selectedWalletDelta : 0.0;
     final now = DateTime.now();
-    final reference = accountNumber;
+    final reference = referenceText.isNotEmpty ? referenceText : accountNumber;
     final iconKey = isOutflow ? 'cash_out' : 'cash_in';
     final title = (selectedType != null && selectedType.isNotEmpty)
         ? selectedType
@@ -1578,7 +2724,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ? 'Account $accountNumber • ${_matchedParty!.name}'
         : notes;
     final persistedNote =
-        '$noteBase • $_selectedFlowLabel • Wallet ${selectedWalletDelta >= 0 ? 'increased' : 'decreased'} by ₱${selectedWalletDelta.abs().toStringAsFixed(2)} • On-hand ${onHandDelta >= 0 ? 'increased' : 'decreased'} by ₱${onHandDelta.abs().toStringAsFixed(2)} • Charge ₱${chargeFee.toStringAsFixed(2)} • Charge routed to $_chargeDestinationAccount';
+        '$noteBase • $_selectedFlowLabel • Wallet ${selectedWalletDelta >= 0 ? 'increased' : 'decreased'} by ₱${selectedWalletDelta.abs().toStringAsFixed(2)} • On-hand ${onHandDelta >= 0 ? 'increased' : 'decreased'} by ₱${onHandDelta.abs().toStringAsFixed(2)} • Fee ₱${chargeFee.toStringAsFixed(2)} • Fee goes to $_chargeDestinationAccount';
 
     final db = await _database.database;
     try {
@@ -1622,6 +2768,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         COALESCE(SUM(maya_wallet_delta), 0) AS maya_wallet_balance,
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ${AppDatabase.ledgerTable}
+      WHERE ${AppDatabase.isDeletedColumn} = 0
     ''');
 
     if (rows.isEmpty) {
@@ -1634,43 +2781,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         (row['maya_wallet_balance'] as num?)?.toDouble() ?? 0.0;
     final onHandBalance = (row['on_hand_balance'] as num?)?.toDouble() ?? 0.0;
     return (walletBalance, mayaWalletBalance, onHandBalance);
-  }
-
-  void _showSnackBar(
-    ScaffoldMessengerState? messenger,
-    String message, {
-    bool isError = false,
-  }) {
-    messenger
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                isError
-                    ? Icons.error_outline_rounded
-                    : Icons.check_circle_outline_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(color: Colors.white, fontSize: 13.5),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
   }
 
   Future<bool> _openPartyRegistrationPopup({
@@ -1697,17 +2807,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return false;
   }
 
-  void _showMessage(String message, {bool isError = false}) {
-    if (!mounted) {
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) {
-      return;
-    }
-
-    messenger
+  void _showMessage(
+    String message, {
+    bool isError = false,
+    ScaffoldMessengerState? messenger,
+  }) {
+    final m =
+        messenger ?? (mounted ? ScaffoldMessenger.maybeOf(context) : null);
+    if (m == null) return;
+    m
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
@@ -1797,6 +2905,58 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
     );
+  }
+}
+
+class _ReceiptDraft {
+  const _ReceiptDraft({
+    this.amount,
+    this.amountConfidence = _FieldConfidence.unknown,
+    this.accountNumber,
+    this.accountConfidence = _FieldConfidence.unknown,
+    this.reference,
+    this.referenceConfidence = _FieldConfidence.unknown,
+    this.walletSelection,
+    this.flowDirection,
+    this.rawOcrPreview,
+  });
+
+  final double? amount;
+  final _FieldConfidence amountConfidence;
+  final String? accountNumber;
+  final _FieldConfidence accountConfidence;
+  final String? reference;
+  final _FieldConfidence referenceConfidence;
+  final _WalletSelection? walletSelection;
+  final _FlowDirection? flowDirection;
+  final String? rawOcrPreview;
+
+  String? get walletLabel {
+    return switch (walletSelection) {
+      _WalletSelection.gcash => 'GCash',
+      _WalletSelection.maya => 'Maya Wallet',
+      null => null,
+    };
+  }
+
+  String? get flowLabel {
+    return switch (flowDirection) {
+      _FlowDirection.inflow => 'Cash In',
+      _FlowDirection.outflow => 'Cash Out',
+      null => null,
+    };
+  }
+
+  bool get hasAnySignal {
+    return amount != null ||
+        accountNumber != null ||
+        reference != null ||
+        walletSelection != null ||
+        flowDirection != null;
+  }
+
+  bool get hasAnyAutofillField {
+    return amount != null || accountNumber != null || reference != null;
   }
 }
 
@@ -1899,7 +3059,7 @@ class _UpsertTransactionTypeDialogState
     if (hasExactDuplicate) {
       setState(() {
         _errorText =
-            'Transaction type already exists for this flow and wallet.';
+            'This type name already exists for the same direction and wallet.';
       });
       return;
     }
@@ -2086,7 +3246,7 @@ class _UpsertTransactionTypeDialogState
           ),
           const SizedBox(height: 12),
           const Text(
-            'Flow Behavior',
+            'Transaction Direction',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -2097,8 +3257,9 @@ class _UpsertTransactionTypeDialogState
           Row(
             children: [
               _buildFlowOption(
-                label: 'Inflow',
-                subtitle: 'Selecting this type sets the transaction to inflow.',
+                label: 'Customer Sends',
+                subtitle:
+                    'Customer gives you cash, you send e-money to their wallet.',
                 icon: Icons.call_made_rounded,
                 color: AppColors.secondary,
                 selected: !_isOutflow,
@@ -2106,9 +3267,9 @@ class _UpsertTransactionTypeDialogState
               ),
               const SizedBox(width: 10),
               _buildFlowOption(
-                label: 'Outflow',
+                label: 'Customer Receives',
                 subtitle:
-                    'Selecting this type sets the transaction to outflow.',
+                    'Customer receives cash from you, you get e-money from their wallet.',
                 icon: Icons.call_received_rounded,
                 color: AppColors.error,
                 selected: _isOutflow,
@@ -2118,7 +3279,7 @@ class _UpsertTransactionTypeDialogState
           ),
           const SizedBox(height: 12),
           const Text(
-            'Wallet Target',
+            'Use Which Wallet',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -2130,7 +3291,7 @@ class _UpsertTransactionTypeDialogState
             children: [
               _buildFlowOption(
                 label: 'GCash',
-                subtitle: 'Assign this type to GCash wallet.',
+                subtitle: 'This transaction goes through GCash.',
                 icon: Icons.account_balance_wallet_outlined,
                 color: AppColors.primary,
                 selected: _walletSelection == _WalletSelection.gcash,
@@ -2139,7 +3300,7 @@ class _UpsertTransactionTypeDialogState
               const SizedBox(width: 10),
               _buildFlowOption(
                 label: 'Maya',
-                subtitle: 'Assign this type to Maya wallet.',
+                subtitle: 'This transaction goes through Maya.',
                 icon: Icons.wallet_rounded,
                 color: AppColors.secondary,
                 selected: _walletSelection == _WalletSelection.maya,
@@ -2149,7 +3310,7 @@ class _UpsertTransactionTypeDialogState
           ),
           const SizedBox(height: 8),
           Text(
-            '${_isOutflow ? 'Outflow' : 'Inflow'} • ${_walletSelection == _WalletSelection.maya ? 'Maya Wallet' : 'GCash'} will auto-apply when this type is selected.',
+            'Choosing this type will automatically set direction to ${_isOutflow ? 'Customer Receives' : 'Customer Sends'} via ${_walletSelection == _WalletSelection.maya ? 'Maya Wallet' : 'GCash'}.',
             style: TextStyle(
               fontSize: 11,
               color: AppColors.onSurfaceVariant.withValues(alpha: 0.85),

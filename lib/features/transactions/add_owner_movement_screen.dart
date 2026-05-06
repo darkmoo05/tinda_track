@@ -102,15 +102,15 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   String get _movementDescription {
     if (_isPersonalExpense) {
-      return 'Logs a personal cash-out from $_destinationLabel and records it as owner credit to be paid back to business.';
+      return 'You took cash from $_destinationLabel for personal use. This will be recorded as a debt you owe the business.';
     }
     if (_isBorrowing) {
-      return 'Records owner cash borrowed from $_destinationLabel for personal use. This increases owner credit to pay back.';
+      return 'You borrowed money from $_destinationLabel. This adds to what you owe the business.';
     }
     if (_isRepayment) {
-      return 'Records owner repayment returned to $_destinationLabel and reduces outstanding owner credit.';
+      return 'You returned money to $_destinationLabel. This reduces what you owe the business.';
     }
-    return 'Adds more business float into $_destinationLabel.';
+    return 'You added funds to $_destinationLabel to keep the business running.';
   }
 
   @override
