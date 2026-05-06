@@ -513,7 +513,6 @@ class DashboardRepository {
     final amount = (row['amount'] as num).toDouble();
     final iconKey = row['icon_key'] as String;
     final entryType = row['entry_type'] as String;
-    final isOutgoing = iconKey == 'cash_out';
     final reference = row['reference'] as String;
     final walletAccount = (row['wallet_account'] as String?)?.trim();
     final ownerPartyName = (row['owner_party_name'] as String?)?.trim() ?? '';
@@ -527,16 +526,28 @@ class DashboardRepository {
         ? ((ownerScope == null || ownerScope.isEmpty) ? 'Business' : ownerScope)
         : 'Business';
 
+    // Wallet perspective: cash_in drains wallet (−, red), cash_out grows wallet (+, green).
+    // Non-transaction entries keep the original sign convention.
+    final bool isNegative;
+    final Color activityColor;
+    if (entryType == 'transaction') {
+      isNegative = iconKey == 'cash_in' || iconKey == 'maya_cash_in';
+      activityColor = isNegative ? AppColors.error : AppColors.secondary;
+    } else {
+      isNegative = iconKey == 'cash_out';
+      activityColor = _colorFor(iconKey);
+    }
+
     return DashboardActivity(
       title: row['title'] as String,
       subtitle:
           '${walletAccount != null && walletAccount.isNotEmpty ? '$walletAccount • ' : ''}$subtitleRef • ${_activityDateFormat.format(createdAt)}',
-      amount: '${isOutgoing ? '-' : '+'}${_currencyFormat.format(amount)}',
+      amount: '${isNegative ? '-' : '+'}${_currencyFormat.format(amount)}',
       tag: _activityTag(row),
       scope: scope,
       createdAt: createdAt,
       icon: _iconFor(iconKey),
-      iconColor: _colorFor(iconKey),
+      iconColor: activityColor,
     );
   }
 

@@ -223,17 +223,25 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     // Calculate minimum chart width based on data points
     final minChartWidth = (xLabels.length * 48.0).clamp(260.0, double.infinity);
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      controller: _scrollController,
-      clipBehavior: Clip.hardEdge,
-      child: SizedBox(
-        width: minChartWidth,
-        height: 212,
-        child: LineChart(
-          _buildChartData(walletSpots, mayaSpots, cashSpots, xLabels),
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final chartWidth = constraints.maxWidth > minChartWidth
+            ? constraints.maxWidth
+            : minChartWidth;
+
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          controller: _scrollController,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox(
+            width: chartWidth,
+            height: 212,
+            child: LineChart(
+              _buildChartData(walletSpots, mayaSpots, cashSpots, xLabels),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -245,7 +253,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     List<String> xLabels,
   ) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(24),

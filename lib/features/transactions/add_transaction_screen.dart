@@ -114,9 +114,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   String get _chargeDestinationAccount {
-    return _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount
-        ? _selectedWalletAccount
-        : 'On-hand Cash';
+    // Inflow: fee always goes to on-hand (store receives cash)
+    // Outflow: fee always goes to wallet (customer's wallet is charged)
+    return _isOutflowSelection ? _selectedWalletAccount : 'On-hand Cash';
   }
 
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
@@ -147,7 +147,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   String get _selectedFlowLabel {
-    return _isOutflowSelection ? 'Outflow from Wallet' : 'Inflow to Wallet';
+    return _isOutflowSelection
+        ? 'Outflow (Wallet Increases)'
+        : 'Inflow (Wallet Decreases)';
   }
 
   String get _defaultTransactionTitle {
@@ -1455,8 +1457,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ? mayaWalletBalance
         : gcashBalance;
     final sourceLabel = isOutflow ? 'On-hand Cash' : selectedWalletAccount;
+    final requiredSourceAmount =
+        !isOutflow &&
+            _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount
+        ? _enteredAmount - _chargeFee
+        : _enteredAmount;
     final available = isOutflow ? onHandBalance : selectedWalletBalance;
-    if (principal > available) {
+    if (requiredSourceAmount > available) {
       _showMessage(
         'Insufficient $sourceLabel balance. Available: ₱ ${available.toStringAsFixed(2)}',
         isError: true,
@@ -1534,24 +1541,29 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final isOutflow = _isOutflowSelection;
     final walletAccount = _selectedWalletAccount;
     final usesMayaWallet = walletAccount == 'Maya Wallet';
-    final walletPostedAmount = isOutflow ? totalCollected : principal;
-    var selectedWalletDelta = isOutflow
-        ? walletPostedAmount
-        : -walletPostedAmount;
-    var onHandDelta = isOutflow ? -principal : totalCollected;
-
-    // Fee routing is automatic: add-on-top -> on-hand, deduct-from-amount -> wallet.
-    final defaultFeeToWallet = isOutflow;
-    final feeToWallet =
+    final amount = _enteredAmount;
+    final isDeductFromAmount =
         _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount;
-    if (feeToWallet != defaultFeeToWallet) {
-      if (feeToWallet) {
-        selectedWalletDelta += chargeFee;
-        onHandDelta -= chargeFee;
-      } else {
-        selectedWalletDelta -= chargeFee;
-        onHandDelta += chargeFee;
-      }
+
+    // Inflow (Cash In):  store sends e-money to customer, receives cash.
+    //   wallet decreases, on-hand increases (all cash goes to on-hand).
+    //   addOnTop:          walletDelta = -amount,        onHandDelta = +(amount + fee)
+    //   deductFromAmount:  walletDelta = -(amount - fee), onHandDelta = +amount
+    //
+    // Outflow (Cash Out): customer's wallet is charged, store pays cash.
+    //   wallet increases, on-hand decreases (all e-money goes to wallet).
+    //   addOnTop:          walletDelta = +(amount + fee), onHandDelta = -amount
+    //   deductFromAmount:  walletDelta = +amount,         onHandDelta = -(amount - fee)
+    final double selectedWalletDelta;
+    final double onHandDelta;
+    if (!isOutflow) {
+      selectedWalletDelta = isDeductFromAmount
+          ? -(amount - chargeFee)
+          : -amount;
+      onHandDelta = isDeductFromAmount ? amount : amount + chargeFee;
+    } else {
+      selectedWalletDelta = isDeductFromAmount ? amount : amount + chargeFee;
+      onHandDelta = isDeductFromAmount ? -(amount - chargeFee) : -amount;
     }
 
     final walletDelta = usesMayaWallet ? 0.0 : selectedWalletDelta;
@@ -1566,7 +1578,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ? 'Account $accountNumber • ${_matchedParty!.name}'
         : notes;
     final persistedNote =
-        '$noteBase • $_selectedFlowLabel • Charge ₱${chargeFee.toStringAsFixed(2)} • Charge routed to $_chargeDestinationAccount';
+        '$noteBase • $_selectedFlowLabel • Wallet ${selectedWalletDelta >= 0 ? 'increased' : 'decreased'} by ₱${selectedWalletDelta.abs().toStringAsFixed(2)} • On-hand ${onHandDelta >= 0 ? 'increased' : 'decreased'} by ₱${onHandDelta.abs().toStringAsFixed(2)} • Charge ₱${chargeFee.toStringAsFixed(2)} • Charge routed to $_chargeDestinationAccount';
 
     final db = await _database.database;
     try {
@@ -1808,36 +1820,56 @@ class _UpsertTransactionTypeDialog extends StatefulWidget {
 
 class _UpsertTransactionTypeDialogState
     extends State<_UpsertTransactionTypeDialog> {
-  late final TextEditingController _controller;
+  String? _selectedPreset;
   late bool _isOutflow;
   late _WalletSelection _walletSelection;
   String? _errorText;
+
+  static const Map<_WalletSelection, Map<bool, List<String>>> _presets = {
+    _WalletSelection.gcash: {
+      false: [
+        'GCash Cash-In',
+        'Cash In from Bank',
+        'Cash In via Partner',
+        'Payment Received',
+        'Bills Payment',
+        'Load Purchase / E-Load',
+        'Bank Transfer',
+      ],
+      true: ['GCash Cash-Out'],
+    },
+    _WalletSelection.maya: {
+      false: ['Maya Cash-In', 'Bank Transfer', 'Pay Bills', 'Load / Prepaid'],
+      true: ['Maya Cash-Out'],
+    },
+  };
+
+  List<String> get _currentPresets => _presets[_walletSelection]![_isOutflow]!;
 
   bool get _isEditing => widget.initialName != null;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialName ?? '');
     _isOutflow = widget.initialIsOutflow ?? false;
     _walletSelection = widget.initialWalletSelection ?? _WalletSelection.gcash;
+    _selectedPreset = widget.initialName;
   }
 
   @override
   void dispose() {
-    _controller.dispose();
     super.dispose();
   }
 
   void _onSave() {
-    final raw = _controller.text.trim();
-    if (raw.isEmpty) {
+    if (_selectedPreset == null || _selectedPreset!.trim().isEmpty) {
       setState(() {
-        _errorText = 'Type name is required.';
+        _errorText = 'Please select a transaction type.';
       });
       return;
     }
 
+    final raw = _selectedPreset!.trim();
     final normalizedName = raw.toLowerCase();
     final initialNameLower = (widget.initialName ?? '').trim().toLowerCase();
     final initialIsOutflow = widget.initialIsOutflow ?? false;
@@ -1884,12 +1916,16 @@ class _UpsertTransactionTypeDialogState
   void _setOutflow(bool value) {
     setState(() {
       _isOutflow = value;
+      _selectedPreset = null;
+      _errorText = null;
     });
   }
 
   void _setWalletSelection(_WalletSelection value) {
     setState(() {
       _walletSelection = value;
+      _selectedPreset = null;
+      _errorText = null;
     });
   }
 
@@ -2009,20 +2045,44 @@ class _UpsertTransactionTypeDialogState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 16),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: InputDecoration(
-              hintText: 'e.g. Cash In, Cash Out',
-              errorText: _errorText,
-              filled: true,
-              fillColor: AppColors.surfaceContainerLow,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
+          Builder(
+            builder: (context) {
+              final presets = _currentPresets;
+              final items = <String>[...presets];
+              // When editing, keep the original name in the list even if it
+              // doesn't match the current preset catalogue (legacy value).
+              if (_selectedPreset != null && !items.contains(_selectedPreset)) {
+                items.insert(0, _selectedPreset!);
+              }
+              return DropdownButtonFormField<String>(
+                value: _selectedPreset,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  hintText: 'Select a transaction type',
+                  errorText: _errorText,
+                  filled: true,
+                  fillColor: AppColors.surfaceContainerLow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                items: items
+                    .map(
+                      (name) => DropdownMenuItem(
+                        value: name,
+                        child: Text(name, overflow: TextOverflow.ellipsis),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedPreset = value;
+                    _errorText = null;
+                  });
+                },
+              );
+            },
           ),
           const SizedBox(height: 12),
           const Text(
