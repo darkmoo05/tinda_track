@@ -641,6 +641,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     final walletKey = _normalizeWalletKey(item.walletAccount);
 
     if (item.entryType == 'transaction') {
+      if (normalizedFilter == 'on_hand') {
+        // On-hand cash card should log both inflow and outflow transaction cash movements.
+        return item.onHandDelta != 0;
+      }
+
       if (walletKey == normalizedFilter) {
         return true;
       }
@@ -701,18 +706,21 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         grouped.add(ArchitectDateHeader(label: dateLabel));
       }
 
-      final isOutgoing =
-          item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
+      final displayAmount = _resolveDisplayAmount(item);
+      final isWalletOutflow = _isWalletOutflow(item);
+      final tileColor = item.entryType == 'transaction'
+          ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
+          : _colorFor(item.iconKey);
       grouped.add(
         ArchitectActivityTile(
           title: item.title,
           type: item.tag,
           reference: item.reference,
           amount:
-              '${isOutgoing ? '-' : '+'} ${_currencyFormat.format(item.amount)}',
+              '${isWalletOutflow ? '-' : '+'} ${_currencyFormat.format(displayAmount)}',
           time: _timeFormat.format(item.createdAt),
           icon: _iconFor(item.iconKey),
-          iconColor: _colorFor(item.iconKey),
+          iconColor: tileColor,
           onTap: () => _showTransactionDetails(item),
         ),
       );
@@ -722,11 +730,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Future<void> _showTransactionDetails(_HistoryRow item) async {
-    final isOutgoing =
-        item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
-    final accentColor = isOutgoing ? AppColors.error : AppColors.secondary;
+    final isWalletOutflow = _isWalletOutflow(item);
+    final accentColor = item.entryType == 'transaction'
+        ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
+        : _colorFor(item.iconKey);
+    final displayAmount = _resolveDisplayAmount(item);
     final amountText =
-        '${isOutgoing ? '-' : '+'} ${_currencyFormat.format(item.amount)}';
+        '${isWalletOutflow ? '-' : '+'} ${_currencyFormat.format(displayAmount)}';
     final dateTimeText =
         '${_fullDateFormat.format(item.createdAt)} ${_timeFormat.format(item.createdAt)}';
     final entryTypeLabel = item.entryType == 'transaction'
@@ -1010,6 +1020,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             iconKey: iconKey,
             createdAt: DateTime.parse(row['created_at'] as String),
             ownerMovementType: row['owner_movement_type'] as String?,
+            onHandDelta: (row['on_hand_delta'] as num?)?.toDouble() ?? 0,
             chargeAmount: _extractChargeAmountFromNote(note),
             chargeDestinationKey: _extractChargeDestinationKeyFromNote(note),
           );
@@ -1831,6 +1842,45 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return _fullDateFormat.format(dateTime);
   }
 
+  bool _isWalletOutflow(_HistoryRow item) {
+    if (item.entryType == 'transaction') {
+      if (_selectedWalletFilter == 'on_hand') {
+        // On-hand perspective: cash_out drains physical cash (−), cash_in adds physical cash (+).
+        return item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
+      }
+      // GCash / Maya perspective: cash_in drains wallet (−), cash_out grows wallet (+).
+      return item.iconKey == 'cash_in' || item.iconKey == 'maya_cash_in';
+    }
+
+    return item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
+  }
+
+  double _resolveDisplayAmount(_HistoryRow item) {
+    if (item.entryType != 'transaction') {
+      return item.amount;
+    }
+
+    final destinationKey = item.chargeDestinationKey;
+    final isOnHandPerspective = _selectedWalletFilter == 'on_hand';
+    final walletKey = _normalizeWalletKey(item.walletAccount);
+    final shouldExcludeCharge = isOnHandPerspective
+        ? item.chargeAmount > 0 &&
+              destinationKey != null &&
+              destinationKey.isNotEmpty &&
+              destinationKey != 'on_hand'
+        : item.chargeAmount > 0 &&
+              destinationKey != null &&
+              destinationKey.isNotEmpty &&
+              destinationKey != walletKey;
+
+    if (!shouldExcludeCharge) {
+      return item.amount;
+    }
+
+    final adjustedAmount = item.amount - item.chargeAmount;
+    return adjustedAmount > 0 ? adjustedAmount : 0;
+  }
+
   IconData _iconFor(String iconKey) {
     switch (iconKey) {
       case 'wallet':
@@ -1861,13 +1911,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       case 'cash':
         return AppColors.secondary;
       case 'cash_in':
-        return AppColors.secondary;
+        return AppColors.error;
       case 'maya_cash_in':
-        return AppColors.secondary;
+        return AppColors.error;
       case 'cash_out':
-        return AppColors.error;
+        return AppColors.secondary;
       case 'maya_cash_out':
-        return AppColors.error;
+        return AppColors.secondary;
       default:
         return AppColors.onSurfaceVariant;
     }
@@ -1886,6 +1936,7 @@ class _HistoryRow {
     required this.tag,
     required this.iconKey,
     required this.createdAt,
+    required this.onHandDelta,
     required this.chargeAmount,
     required this.chargeDestinationKey,
     this.accountNumber,
@@ -1904,6 +1955,7 @@ class _HistoryRow {
   final String iconKey;
   final DateTime createdAt;
   final String? ownerMovementType;
+  final double onHandDelta;
   final double chargeAmount;
   final String? chargeDestinationKey;
 }
