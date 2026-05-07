@@ -43,6 +43,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _missingRangeAlertShownForCurrentInput = false;
   bool _isLoadingTransactionTypes = true;
   bool _isScanningReceipt = false;
+  String?
+  _lastScannedAccountName; // Temporarily store account name from receipt scan
   bool _showRequiredIndicators = false;
   bool _isSaving = false;
   _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
@@ -1071,6 +1073,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
       if (draft.accountNumber != null && draft.accountNumber!.isNotEmpty) {
         stage = 'party resolution';
+        // Store account name from scan for later use in party registration
+        _lastScannedAccountName = draft.accountName;
         try {
           await _resolvePartyFromAccount(draft.accountNumber!);
         } catch (error, stackTrace) {
@@ -1139,17 +1143,30 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   _ReceiptDraft _buildFallbackDraftFromRaw(String text) {
     final normalized = text.trim();
+    debugPrint('=== Receipt Parse Debug ===');
+    debugPrint(
+      'Normalized OCR text (first 500 chars): ${normalized.substring(0, (normalized.length < 500 ? normalized.length : 500))}',
+    );
+
     final walletSelection = _detectWalletSelection(normalized);
     final flowDirection = _detectFlowDirection(normalized);
     final amountData = _extractLikelyAmountFromText(normalized);
     final accountData = _extractLikelyAccountNumber(normalized);
+    final accountNameData = _extractLikelyAccountName(normalized);
     final referenceData = _extractLikelyReference(normalized);
+
+    debugPrint(
+      'Extracted: Amount=${amountData.value} (${amountData.confidence}), Account=${accountData.value} (${accountData.confidence}), Name=${accountNameData.value} (${accountNameData.confidence}), Ref=${referenceData.value} (${referenceData.confidence})',
+    );
+    debugPrint('Wallet=$walletSelection, Flow=$flowDirection');
 
     return _ReceiptDraft(
       amount: amountData.value,
       amountConfidence: amountData.confidence,
       accountNumber: accountData.value,
       accountConfidence: accountData.confidence,
+      accountName: accountNameData.value,
+      accountNameConfidence: accountNameData.confidence,
       reference: referenceData.value,
       referenceConfidence: referenceData.confidence,
       walletSelection: walletSelection,
@@ -1437,11 +1454,24 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       debugPrint('Receipt parse flow failed: $error\n$stackTrace');
     }
 
+    ({String? value, _FieldConfidence confidence}) accountNameData = (
+      value: null,
+      confidence: _FieldConfidence.unknown,
+    );
+
+    try {
+      accountNameData = _extractLikelyAccountName(safeText);
+    } catch (error, stackTrace) {
+      debugPrint('Receipt parse account name failed: $error\n$stackTrace');
+    }
+
     return _ReceiptDraft(
       amount: amountData.value,
       amountConfidence: amountData.confidence,
       accountNumber: accountData.value,
       accountConfidence: accountData.confidence,
+      accountName: accountNameData.value,
+      accountNameConfidence: accountNameData.confidence,
       reference: referenceData.value,
       referenceConfidence: referenceData.confidence,
       walletSelection: walletSelection,
@@ -1452,12 +1482,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   _FlowDirection? _detectFlowDirection(String text) {
     final lower = text.toLowerCase();
+    // Outflow: user sent/withdrew money
     if (lower.contains('cash out') ||
         lower.contains('withdraw') ||
-        lower.contains('withdrawal')) {
+        lower.contains('withdrawal') ||
+        lower.contains(
+          'sent money',
+        ) || // Maya: 'Sent money to' or OCR misread 'Sent money o'
+        lower.contains('sent to') ||
+        lower.contains('purchased from') ||
+        lower.contains('purchase')) {
       return _FlowDirection.outflow;
     }
-    if (lower.contains('cash in') || lower.contains('cashin')) {
+    // Inflow: user received money
+    if (lower.contains('cash in') ||
+        lower.contains('cashin') ||
+        lower.contains('received') ||
+        lower.contains('sent by')) {
       return _FlowDirection.inflow;
     }
     return null;
@@ -1489,16 +1530,59 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         .replaceAll(RegExp(r'  +'), ' ')
         .trim();
 
+    debugPrint(
+      '[Amount] Input text sample: ${flat.substring(0, (flat.length < 200 ? flat.length : 200))}',
+    );
     final candidates = <({double value, int score})>[];
 
     // Amount pattern: matches with OR without thousands comma, 1–2 decimal places
     // e.g. 5.00 / 5,000.00 / 5.0
     const _decimalAmt = r'\d{1,3}(?:,\d{3})*\.\d{1,2}';
 
-    // 1. Currency-symbol prefix (₱ or OCR-read P), with or without commas
-    // Highest priority — e.g. ₱5.00, P5.00, ₱5,000.00, ₱ 5.00
+    // 0a. Special OCR misread: -PI00.00 where ₱ → P and digit 1 → I
+    // When OCR reads ₱100.00 as PI00.00, the '1' is absorbed into 'I'
+    // So we detect -PI followed by 2+ digits and prepend '1'
+    final piMisreadPattern = RegExp(
+      r'-PI(\d{2,}\.\d{1,2})',
+      caseSensitive: false,
+    );
+    for (final m in piMisreadPattern.allMatches(flat)) {
+      final corrected = '1${m.group(1)!}';
+      final parsed = double.tryParse(corrected.replaceAll(',', ''));
+      if (_isPlausibleScannedAmount(parsed)) {
+        debugPrint('[Amount] PI-misread corrected: $corrected');
+        candidates.add((value: parsed!, score: 13));
+      }
+    }
+
+    // 0. Simple minus+currency pattern first (catches -PI100.00, -P100.00, -₱100.00)
+    final simpleMinusPattern = RegExp(
+      '-\\s*(?:pi|p|php|₱)?\\s*($_decimalAmt)',
+      caseSensitive: false,
+    );
+    for (final m in simpleMinusPattern.allMatches(flat)) {
+      final parsed = _parseAmountToken(m.group(1));
+      if (_isPlausibleScannedAmount(parsed)) {
+        candidates.add((value: parsed!, score: 13));
+      }
+    }
+
+    // 1. Minus-prefixed currency (Maya format: -₱100.00)
+    final minusCurrencyPattern = RegExp(
+      '-\\s*(?:php|₱|PI|P)\\s*($_decimalAmt)',
+      caseSensitive: false,
+    );
+    for (final m in minusCurrencyPattern.allMatches(flat)) {
+      final parsed = _parseAmountToken(m.group(1));
+      if (_isPlausibleScannedAmount(parsed)) {
+        candidates.add((value: parsed!, score: 13));
+      }
+    }
+
+    // 2. Currency prefix: PHP / ₱ / P, with or without commas
+    // Highest priority — e.g. PHP 100.00, ₱5.00, P5.00, ₱5,000.00, ₱ 5.00
     final currencyPattern = RegExp(
-      '(?<![a-zA-Z])[₱P]\\s*($_decimalAmt)',
+      '(?:php|₱|PI|(?<![a-zA-Z])P)\\s*($_decimalAmt)',
       caseSensitive: false,
     );
     for (final m in currencyPattern.allMatches(flat)) {
@@ -1544,7 +1628,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           // Extract isolated decimal tokens so phone/reference digits
           // cannot be concatenated into a fake large amount.
           final nextLineAmountTokens = RegExp(
-            r'[₱P]?\s*(\d{1,3}(?:,\d{3})*\.\d{1,2})',
+            r'(?:php|₱|P)?\s*(\d{1,3}(?:,\d{3})*\.\d{1,2})',
             caseSensitive: false,
           );
           for (final token in nextLineAmountTokens.allMatches(nextLine)) {
@@ -1559,9 +1643,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
 
     // 3. Keyword + amount on SAME line, allow currency symbol between them
-    // Handles: "Amount 5.00", "Total Amount Sent ₱5.00", "Amount: 5.00"
+    // Handles: "Amount 5.00", "Total Amount Sent ₱5.00", "Amount: 5.00", "sent PHP 100.00"
     final keywordSameLine = RegExp(
-      '(?:total\\s+amount\\s+sent|transaction\\s+amount|grand\\s+total|net\\s+amount|total\\s+amount|subtotal|total|amount|payment|paid|charge|price|fee)\\s{0,4}[:\\-]?\\s{0,4}[₱P]?\\s{0,2}($_decimalAmt)',
+      '(?:sent|total\\s+amount\\s+sent|transaction\\s+amount|grand\\s+total|net\\s+amount|total\\s+amount|subtotal|total|amount|payment|paid|charge|price|fee)\\s{0,4}[:\\-]?\\s{0,4}(?:php|₱|P)?\\s{0,2}(\\d{1,3}(?:,\\d{3})*\\.\\d{1,2})',
       caseSensitive: false,
     );
     for (final m in keywordSameLine.allMatches(flat)) {
@@ -1588,6 +1672,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         return b.value.compareTo(a.value);
       });
       final top = candidates.first;
+      debugPrint('[Amount] Found with score ${top.score}: ${top.value}');
       final confidence = switch (top.score) {
         >= 12 => _FieldConfidence.high,
         >= 10 => _FieldConfidence.medium,
@@ -1615,8 +1700,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
     }
     if (best != null) {
+      debugPrint('[Amount] Found (generic fallback): $best');
       return (value: best, confidence: _FieldConfidence.low);
     }
+    debugPrint('[Amount] Not found');
     return (value: null, confidence: _FieldConfidence.unknown);
   }
 
@@ -1663,13 +1750,59 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   ({String? value, _FieldConfidence confidence}) _extractLikelyAccountNumber(
     String text,
   ) {
+    // 0. Prioritize "Destination:" label — Maya "Sent money" receipts show
+    //    Source (user's own wallet) then Destination (recipient). We want Destination.
+    final destinationPattern = RegExp(
+      r'destination[:\s]+(\+?6?3?9\d{2}[\s-]?\d{3}[\s-]?\d{4}|0?9\d{9})',
+      caseSensitive: false,
+    );
+    final destMatch = destinationPattern.firstMatch(text);
+    if (destMatch != null) {
+      final raw = destMatch.group(1)!.replaceAll(RegExp(r'[^0-9]'), '');
+      final normalized = _normalizeAccountDigits(raw);
+      if (normalized != null) {
+        return (value: normalized, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // Detect Source number — OCR reads two-column layouts with labels first, values later.
+    // Source is the user's own wallet; we want to skip it and pick the Destination instead.
+    // Match the spaced phone that appears near/after 'My Wallet' or 'Source' keyword.
+    final sourceNumPattern = RegExp(
+      r'(?:source|my wallet)[^\n]{0,40}(\+63[\s-]9\d{2}[\s-]\d{3}[\s-]\d{4}|\+639\d{9}|\b0?9\d{9}\b)',
+      caseSensitive: false,
+    );
+    final sourceNumMatch = sourceNumPattern.firstMatch(text);
+    final sourceNumber = sourceNumMatch != null
+        ? sourceNumMatch.group(1)!.replaceAll(RegExp(r'[^0-9]'), '')
+        : null;
+
+    // For Maya "Sent money" receipts: the Destination phone is always compact (+639...)
+    // while the Source is spaced (+63 9xx xxx xxxx). Try compact first so we don't
+    // accidentally return the source number.
+    final hasMayaSentLayout =
+        text.toLowerCase().contains('destination') ||
+        text.toLowerCase().contains('sent money');
+
+    if (hasMayaSentLayout) {
+      // 1a. Try compact format first (Destination is always compact in Maya Sent Money)
+      final intlCompactFirst = RegExp(r'\+639\d{9}');
+      for (final m in intlCompactFirst.allMatches(text)) {
+        final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
+        if (sourceNumber != null && digits == sourceNumber) continue;
+        final normalized = _normalizeAccountDigits(digits);
+        if (normalized != null) {
+          return (value: normalized, confidence: _FieldConfidence.high);
+        }
+      }
+    }
+
     // 1. International format with spaces: +63 975 307 9315 or +63-975-307-9315
+    //    Skip if it's the same as the "Source" (user's own wallet number)
     final intlSpaced = RegExp(r'\+63[\s-]?9\d{2}[\s-]\d{3}[\s-]\d{4}');
-    final intlSpacedMatch = intlSpaced.firstMatch(text);
-    if (intlSpacedMatch != null) {
-      final digits = intlSpacedMatch
-          .group(0)!
-          .replaceAll(RegExp(r'[^0-9]'), '');
+    for (final m in intlSpaced.allMatches(text)) {
+      final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
+      if (sourceNumber != null && digits == sourceNumber) continue;
       final normalized = _normalizeAccountDigits(digits);
       if (normalized != null) {
         return (value: normalized, confidence: _FieldConfidence.high);
@@ -1677,12 +1810,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
 
     // 2. International format compact: +639753079315
+    //    Skip if it's the same as the "Source" (user's own wallet number)
     final intlCompact = RegExp(r'\+639\d{9}');
-    final intlCompactMatch = intlCompact.firstMatch(text);
-    if (intlCompactMatch != null) {
-      final digits = intlCompactMatch
-          .group(0)!
-          .replaceAll(RegExp(r'[^0-9]'), '');
+    for (final m in intlCompact.allMatches(text)) {
+      final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
+      if (sourceNumber != null && digits == sourceNumber) continue;
       final normalized = _normalizeAccountDigits(digits);
       if (normalized != null) {
         return (value: normalized, confidence: _FieldConfidence.high);
@@ -1701,8 +1833,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
 
     // 4. Contextual keyword search (use raw text to keep keywords intact)
+    // Handles SMS format: "sent PHP 100.00 to +639101706761"
     final contextualPattern = RegExp(
-      r'(?:mobile|account|number|recipient|to|from)[^0-9]{0,20}(\+?6?3?9\d{2}[\s-]?\d{3}[\s-]?\d{4}|0?9\d{9})',
+      r'(?:mobile|account|number|recipient|to|from|sent\s+(?:php|₱)?\s*[\d.]+\s+to)[^0-9]{0,20}(\+?6?3?9\d{2}[\s-]?\d{3}[\s-]?\d{4}|0?9\d{9})',
       caseSensitive: false,
     );
     final contextMatch = contextualPattern.firstMatch(text);
@@ -1713,6 +1846,115 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       );
       if (normalized != null) {
         return (value: normalized, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // 5. Maya QR merchant receipts: use Payment ID as account identifier
+    //    e.g. "Payment ID  E115 8DF2 812E"
+    final paymentIdPattern = RegExp(
+      r'payment\s+id[:\s]+([A-Z0-9]{4}(?:\s+[A-Z0-9]{4}){2}|[A-Z0-9]{12,16})',
+      caseSensitive: false,
+    );
+    final paymentIdMatch = paymentIdPattern.firstMatch(text);
+    if (paymentIdMatch != null) {
+      final value = paymentIdMatch
+          .group(1)!
+          .trim()
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .toUpperCase();
+      if (!value.startsWith('MAYA ')) {
+        return (value: value, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // 5a. OCR two-column fallback for Payment ID:
+    // labels and values can be separated, so scan all ID-like tokens and pick
+    // the best candidate nearest to "payment id", excluding reference values.
+    final lower = text.toLowerCase();
+    if (lower.contains('payment id')) {
+      final referenceCanonical = _extractLikelyReference(
+        text,
+      ).value?.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+
+      final spacedIdPattern = RegExp(
+        r'\b([A-Z0-9]{4}(?:\s+[A-Z0-9]{4}){2})\b',
+        caseSensitive: false,
+      );
+      final compactIdPattern = RegExp(r'\b([A-Z0-9]{12,24})\b');
+
+      final candidates = <({String value, int start})>[];
+
+      for (final m in spacedIdPattern.allMatches(text)) {
+        final token = (m.group(1) ?? '').trim();
+        final canonical = token.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+        if (canonical.length < 12 || canonical.length > 24) continue;
+        final hasLetter = RegExp(r'[A-Z]').hasMatch(canonical);
+        final hasDigit = RegExp(r'\d').hasMatch(canonical);
+        if (!hasLetter || !hasDigit) continue;
+        if (canonical.startsWith('MAYA')) continue;
+        if (referenceCanonical != null && canonical == referenceCanonical) {
+          continue;
+        }
+        candidates.add((value: token.toUpperCase(), start: m.start));
+      }
+
+      for (final m in compactIdPattern.allMatches(text.toUpperCase())) {
+        final token = (m.group(1) ?? '').trim();
+        if (token.length < 12 || token.length > 24) continue;
+        final hasLetter = RegExp(r'[A-Z]').hasMatch(token);
+        final hasDigit = RegExp(r'\d').hasMatch(token);
+        if (!hasLetter || !hasDigit) continue;
+        if (token.startsWith('MAYA')) continue;
+        if (referenceCanonical != null && token == referenceCanonical) continue;
+        // Avoid filename-like artifacts
+        if (token.startsWith('SCALED') || token.startsWith('IMG')) continue;
+        candidates.add((value: token, start: m.start));
+      }
+
+      if (candidates.isNotEmpty) {
+        final paymentPos = lower.indexOf('payment id');
+
+        candidates.sort((a, b) {
+          final aAfter = a.start >= paymentPos;
+          final bAfter = b.start >= paymentPos;
+          if (aAfter != bAfter) return aAfter ? -1 : 1;
+          final da = (a.start - paymentPos).abs();
+          final db = (b.start - paymentPos).abs();
+          return da.compareTo(db);
+        });
+
+        final best = candidates.first.value.replaceAll(RegExp(r'\s+'), ' ');
+        return (value: best, confidence: _FieldConfidence.medium);
+      }
+    }
+
+    // 6. Merchant ID fallback for QR Ph / merchant receipts (no phone number)
+    //    e.g. "Merchant ID  777148000000062"
+    final merchantIdPattern = RegExp(
+      r'merchant\s+id[:\s]+(\d{8,20})',
+      caseSensitive: false,
+    );
+    final merchantIdMatch = merchantIdPattern.firstMatch(text);
+    if (merchantIdMatch != null) {
+      final value = merchantIdMatch.group(1)!.trim();
+      return (value: value, confidence: _FieldConfidence.medium);
+    }
+
+    // 6a. Merchant ID in OCR two-column layouts may have label/value split.
+    // Prefer any long digit sequence when Merchant ID label is present,
+    // excluding obvious non-account contexts.
+    if (text.toLowerCase().contains('merchant id')) {
+      final longDigits = RegExp(r'\b\d{12,20}\b');
+      for (final m in longDigits.allMatches(text)) {
+        final start = m.start > 50 ? m.start - 50 : 0;
+        final context = text.substring(start, m.start).toLowerCase();
+        final isExcludedContext =
+            context.contains('reference id') ||
+            context.contains('payment id') ||
+            context.contains('invoice');
+        if (!isExcludedContext) {
+          return (value: m.group(0)!, confidence: _FieldConfidence.medium);
+        }
       }
     }
 
@@ -1757,7 +1999,99 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     String text,
   ) {
     // Collect all digit groups after any ref keyword, allowing spaces within the number
-    // Handles: "Ref No. 2039 688 926688", "Ref No. 2039688926688", "Reference: ABC123"
+    // Handles: "Ref No. 2039 688 926688", "Ref No. 2039688926688", "Ref. No. 2040543627864", "Reference: ABC123"
+
+    // Maya format: "Reference ID 1D6D BA77 DA29" — on the same or next line
+    // Fix: do NOT use \s in capture group (it eats newlines and grabs wrong content).
+    // Try same-line first, then next-line variant.
+    debugPrint('[Reference] Looking for Maya Reference ID pattern...');
+
+    // 1a. Standalone Maya-style reference: 4-char groups separated by spaces e.g. "1D6D BA77 DA29"
+    //     Look for this FIRST anywhere in the text — it's the most distinctive pattern.
+    final mayaStandalonePattern = RegExp(
+      r'\b([A-Z0-9]{4} [A-Z0-9]{4} [A-Z0-9]{4})\b',
+      caseSensitive: false,
+    );
+    final mayaStandaloneMatch = mayaStandalonePattern.firstMatch(text);
+    if (mayaStandaloneMatch != null) {
+      final raw = mayaStandaloneMatch.group(1)!.trim();
+      final value = raw.replaceAll(' ', '');
+      debugPrint('[Reference] Maya standalone pattern: $value');
+      return (value: value, confidence: _FieldConfidence.high);
+    }
+
+    // 1a2. Compact Maya reference: 12-char uppercase alphanumeric after "Reference ID"
+    //      e.g. "Reference ID  1D6DBA77DA29" (no spaces in the ID)
+    final mayaCompactPattern = RegExp(
+      r'reference\s+id\s+([A-Z0-9]{9,15})(?:\s|$)',
+      caseSensitive: false,
+    );
+    final mayaCompactMatch = mayaCompactPattern.firstMatch(text);
+    if (mayaCompactMatch != null) {
+      final value = mayaCompactMatch.group(1)!.trim();
+      debugPrint('[Reference] Maya compact pattern: $value');
+      return (value: value, confidence: _FieldConfidence.high);
+    }
+
+    // 1b. "Reference ID" followed by alphanumeric on same line
+    final referenceIdSameLine = RegExp(
+      r'reference\s+(?:id|no)[:\s]+([A-Z0-9][A-Z0-9 ]{3,24}?)(?=\s*(?:Sent|money|to|Share|$|\n))',
+      caseSensitive: false,
+    );
+    final refSameLineMatch = referenceIdSameLine.firstMatch(text);
+    if (refSameLineMatch != null) {
+      final raw = refSameLineMatch.group(1)?.trim() ?? '';
+      final value = raw.replaceAll(RegExp(r'\s+'), '');
+      final isCommon = RegExp(
+        r'^(Sent|money|to|Share|Completed)$',
+        caseSensitive: false,
+      ).hasMatch(value);
+      if (value.length >= 6 &&
+          value.length <= 30 &&
+          RegExp(r'^[A-Z0-9]+$').hasMatch(value) &&
+          !isCommon) {
+        debugPrint('[Reference] Maya same-line pattern: $value');
+        return (value: value, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // 1c. "Reference ID" on one line, actual ID on the NEXT line
+    final referenceIdNextLine = RegExp(
+      r'reference\s+(?:id|no)\s*\n\s*([A-Z0-9][A-Z0-9 ]{3,24})',
+      caseSensitive: false,
+    );
+    final refNextLineMatch = referenceIdNextLine.firstMatch(text);
+    if (refNextLineMatch != null) {
+      final raw = refNextLineMatch.group(1)?.trim() ?? '';
+      final value = raw.replaceAll(RegExp(r'\s+'), '');
+      if (value.length >= 6 &&
+          value.length <= 30 &&
+          RegExp(r'^[A-Z0-9]+$').hasMatch(value)) {
+        debugPrint('[Reference] Maya next-line pattern: $value');
+        return (value: value, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // First try explicit "Ref. No." pattern (common in SMS receipts)
+    final refNoPattern = RegExp(
+      r'ref\.?\s+no\.[\s:.-]*([\d][\d\s\-]{7,})',
+      caseSensitive: false,
+    );
+    final refNoMatch = refNoPattern.firstMatch(text);
+    if (refNoMatch != null) {
+      final raw = refNoMatch.group(1) ?? '';
+      final digitGroups = RegExp(r'\d+');
+      final allDigits = digitGroups
+          .allMatches(raw.split(RegExp(r'[A-Za-z]')).first)
+          .map((m) => m.group(0)!)
+          .join();
+      if (allDigits.length >= 8) {
+        debugPrint('[Reference] Found via Ref. No. pattern: $allDigits');
+        return (value: allDigits, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // Then try generic ref keyword pattern
     final refKeywordPattern = RegExp(
       r'(?:ref(?:erence)?(?:\s*no\.?|\s*num(?:ber)?|\s*#|\s*id)?|transaction\s*(?:no\.?|id|num(?:ber)?)?|trx\s*(?:no\.?|id)?|trace\s*(?:no\.?|num(?:ber)?)?|control\s*(?:no\.?|num(?:ber)?)?|receipt\s*(?:no\.?|num(?:ber)?)?|or\s*(?:no\.?|num(?:ber)?)?|o\.r\.?\s*(?:no\.?|num(?:ber)?)?|txn\s*(?:no\.?|id)?|approval\s*(?:no\.?|code)?|auth(?:orization)?\s*(?:no\.?|code)?|rrn|stan)[\s:.-]*([\d][\d\s\-]{7,})',
       caseSensitive: false,
@@ -1772,31 +2106,268 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           .map((m) => m.group(0)!)
           .join();
       if (allDigits.length >= 8) {
+        debugPrint('[Reference] Found via keyword pattern: $allDigits');
         return (value: allDigits, confidence: _FieldConfidence.high);
       }
     }
 
     // Alphanumeric reference codes after keyword (e.g. "Ref: ABC123456", "Approval Code: XYZ")
+    // Alphanumeric reference codes after keyword (e.g. "Ref: ABC123456", "Approval Code: XYZ")
+    // Use \b word boundary to prevent matching partial words like 'erence' from 'Reference'
     final alphaRefPattern = RegExp(
-      r'(?:ref(?:erence)?(?:\s*no\.?|\s*num(?:ber)?|\s*#|\s*id)?|transaction\s*(?:no\.?|id|num(?:ber)?)?|trx\s*(?:no\.?|id)?|trace\s*(?:no\.?)?|control\s*(?:no\.?)?|receipt\s*(?:no\.?)?|or\s*(?:no\.?)?|txn\s*(?:no\.?|id)?|approval\s*(?:no\.?|code)?|auth(?:orization)?\s*(?:code)?)[\s:.-]*([A-Z0-9][A-Z0-9\-]{5,})',
+      r'\b(?:reference|ref)\b(?:\s*(?:no\.?|num(?:ber)?|#|id))?[\s:.-]*([A-Z0-9][A-Z0-9\-]{5,})',
       caseSensitive: false,
     );
     final alphaMatch = alphaRefPattern.firstMatch(text);
     if (alphaMatch != null) {
       final value = alphaMatch.group(1)?.trim();
-      if (value != null && value.isNotEmpty) {
+      // Reject common words that are not reference IDs
+      final isCommonWord = RegExp(
+        r'^(sent|money|share|initial|capital|completed|from|to|help|erence)$',
+        caseSensitive: false,
+      ).hasMatch(value ?? '');
+      if (value != null && value.isNotEmpty && !isCommonWord) {
+        debugPrint('[Reference] Found via alpha pattern: $value');
         return (value: value, confidence: _FieldConfidence.medium);
       }
     }
 
     // Any long digit-only sequence (12+ digits) that looks like a transaction ID
+    // But skip phone numbers: don't match if it's 10-13 digits or starts with 63/09
     final longDigits = RegExp(r'\b(\d{12,})\b');
-    final longMatch = longDigits.firstMatch(text);
-    if (longMatch != null) {
+    for (final longMatch in longDigits.allMatches(text)) {
       final value = longMatch.group(1)!;
-      // Skip if it looks like a timestamp/date or phone
-      if (!value.startsWith('0') && value.length <= 20) {
+
+      // Skip phone number patterns: 10–13 digits, or starts with 63/09, or contains typical phone spacing
+      final isPhonePatternStart =
+          value.startsWith('0') ||
+          value.startsWith('63') ||
+          value.startsWith('639');
+      final isPhoneLength = value.length >= 10 && value.length <= 13;
+      final looksLikePhone = isPhonePatternStart || isPhoneLength;
+
+      // Skip if it looks like a timestamp/date
+      final isYearLike =
+          value.startsWith('2') &&
+          ((value.length == 8 &&
+                  int.tryParse(value.substring(4)) != null) || // YYYYMMDD
+              (value.length == 10 && value.endsWith('00')) // timestamp seconds
+              );
+
+      if (looksLikePhone || isYearLike) {
+        continue;
+      }
+
+      if (value.length <= 20) {
         return (value: value, confidence: _FieldConfidence.low);
+      }
+    }
+
+    // Standalone mixed alphanumeric token (letters + digits, 9–15 chars)
+    // This catches Maya reference IDs like "1D6DBA77DA29" that OCR places anywhere
+    // in the text due to two-column layout scrambling (not adjacent to "Reference ID").
+    // Rules: must contain both letters and digits, not be a phone number, not a known word.
+    final standaloneAlphaNum = RegExp(
+      r'\b([A-Z0-9]{9,15})\b',
+      caseSensitive: false,
+    );
+    final commonWords = RegExp(
+      r'^(completed|destination|transaction|reference|my wallet|sent|money|details|initial|capital|contacts|wallet|source|share|add)$',
+      caseSensitive: false,
+    );
+    for (final m in standaloneAlphaNum.allMatches(text)) {
+      final token = m.group(1)!;
+      // Must have both letters and digits (not purely numeric = phone/amount, not purely alpha = word)
+      final hasLetters = RegExp(r'[A-Za-z]').hasMatch(token);
+      final hasDigits = RegExp(r'[0-9]').hasMatch(token);
+      if (!hasLetters || !hasDigits) continue;
+      // Skip if it looks like a phone number
+      if (token.startsWith('639') || token.startsWith('09')) continue;
+      // Skip common words/labels
+      if (commonWords.hasMatch(token)) continue;
+      debugPrint('[Reference] Found via standalone alphanumeric: $token');
+      return (value: token.toUpperCase(), confidence: _FieldConfidence.medium);
+    }
+
+    debugPrint('[Reference] Not found');
+    return (value: null, confidence: _FieldConfidence.unknown);
+  }
+
+  ({String? value, _FieldConfidence confidence}) _extractLikelyAccountName(
+    String text,
+  ) {
+    // Maya QR Ph "Purchased from" receipts: merchant name is the short label
+    // that appears right after the amount line (e.g. "JNT", "JOLLIBEE").
+    // In OCR it appears as: "-₱220.00\nJNT\nFeb 27, 2026..."
+    final purchasedFromTitle = RegExp(
+      r'purchased\s+from',
+      caseSensitive: false,
+    );
+    if (purchasedFromTitle.hasMatch(text)) {
+      // OCR often reads amount + name on the SAME line: "-P220.00 JNT Paid using..."
+      // Extract the short merchant name between the amount and "Paid using" / "You may".
+      final sameLinePattern = RegExp(
+        r'[-–]\s*[₱P]\s*[\d,]+\.?\d*\s+([A-Z0-9][A-Z0-9&\.]{0,29}(?:\s+[A-Z0-9&\.]{1,20}){0,3}?)\s+(?:Paid\s+using|You\s+may)',
+        caseSensitive: false,
+      );
+      final sameLineMatch = sameLinePattern.firstMatch(text);
+      if (sameLineMatch != null) {
+        final name = sameLineMatch.group(1)?.trim();
+        if (name != null &&
+            name.isNotEmpty &&
+            name.length >= 2 &&
+            name.length <= 50) {
+          return (value: name, confidence: _FieldConfidence.high);
+        }
+      }
+
+      // Common Maya layout: "Purchased from" then merchant token nearby.
+      final purchasedFromInline = RegExp(
+        r'purchased\s+from[^A-Za-z0-9]{0,12}([A-Za-z][A-Za-z0-9&\.\-]{1,39})(?:\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{4}|paid\s+using|merchant\s+id|you\s+may)|$)',
+        caseSensitive: false,
+      );
+      final purchasedInlineMatch = purchasedFromInline.firstMatch(text);
+      if (purchasedInlineMatch != null) {
+        final name = purchasedInlineMatch.group(1)?.trim();
+        if (name != null &&
+            name.isNotEmpty &&
+            name.length >= 2 &&
+            name.length <= 50) {
+          return (value: name, confidence: _FieldConfidence.high);
+        }
+      }
+
+      // Fallback: grab the line immediately after the amount sign line
+      final lines = text.split(RegExp(r'[\r\n]+'));
+      for (var i = 0; i < lines.length - 1; i++) {
+        final line = lines[i].trim();
+        final nextLine = lines[i + 1].trim();
+        // Amount line: starts with - and contains ₱ or P followed by digits
+        final isAmountLine = RegExp(r'^[-–]\s*[₱P]?\s*\d').hasMatch(line);
+        if (isAmountLine && nextLine.isNotEmpty && nextLine.length <= 50) {
+          // Next line after amount = merchant name (short label like "JNT")
+          final isDate = RegExp(
+            r'\d{4}|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b',
+            caseSensitive: false,
+          ).hasMatch(nextLine);
+          final isUiText = RegExp(
+            r'completed|confirm|paid|fee|reference|payment|invoice|merchant|bank|qr',
+            caseSensitive: false,
+          ).hasMatch(nextLine);
+          if (!isDate && !isUiText && RegExp(r'[A-Za-z]').hasMatch(nextLine)) {
+            return (value: nextLine, confidence: _FieldConfidence.high);
+          }
+        }
+      }
+    }
+
+    // GCash receipt header format: name on one line, phone on next
+    // E.g. "M.. TE......A A.\n+63 981 167 2398" or "M.. TE......A A.\nSent via GCash"
+    final lineList = text.split(RegExp(r'[\r\n]+'));
+    for (var i = 0; i < lineList.length - 1; i++) {
+      final line = lineList[i].trim();
+      final nextLine = lineList[i + 1].trim();
+
+      // Check if next line contains a phone number pattern
+      final hasPhoneNext = RegExp(r'\+?63|09\d{2}').hasMatch(nextLine);
+
+      // Skip lines that contain currency symbols or look like amounts
+      final hasCurrency = RegExp(r'[₱P\-][\s]?\d').hasMatch(line);
+      final looksLikeAmount = line.contains(RegExp(r'^\s*[-₱PI]'));
+
+      // Skip known Maya/wallet UI labels that are not real names
+      final isUiLabel = RegExp(
+        r'^(my wallet|source|destination|transaction|reference|completed|add to contacts|get help|share|sent money)$',
+        caseSensitive: false,
+      ).hasMatch(line);
+
+      if (!looksLikeAmount &&
+          !hasCurrency &&
+          !isUiLabel &&
+          hasPhoneNext &&
+          line.isNotEmpty &&
+          line.length >= 2 &&
+          line.length <= 100 &&
+          RegExp(r'[A-Za-z]').hasMatch(line) &&
+          (line.contains('.') ||
+              line.contains('*') ||
+              RegExp(r'\s').hasMatch(line))) {
+        // Looks like a masked/formatted name (has dots, asterisks, or spaces)
+        // and is followed by a phone number, but NOT an amount or UI label
+        return (value: line, confidence: _FieldConfidence.high);
+      }
+    }
+
+    // SMS format: "sent PHP 100.00 to JO*E A. +639101706761"
+    // Pattern: after "to" (or "sent to"), grab text before the phone number
+    final toPattern = RegExp(
+      r'(?:sent\s+(?:php|₱)?[\d.\s]+)?to\s+([A-Za-z\s\.\*\-]+?)(?:\s+\+?63|\s+09)',
+      caseSensitive: false,
+    );
+    final toMatch = toPattern.firstMatch(text);
+    if (toMatch != null) {
+      final name = toMatch.group(1)?.trim();
+      if (name != null &&
+          name.isNotEmpty &&
+          name.length >= 2 &&
+          name.length <= 100) {
+        // Ensure it's not just digits or special chars
+        if (RegExp(r'[A-Za-z]').hasMatch(name)) {
+          return (value: name, confidence: _FieldConfidence.high);
+        }
+      }
+    }
+
+    // Alternative: "received from", "cash from", "payment from", or just "from NAME"
+    final fromPattern = RegExp(
+      r'(?:received\s+from|cash\s+from|payment\s+from|transfer\s+from|money\s+from|-\s+from|from)\s+([A-Za-z\s\.\*\-]{2,}?)(?:\s*[\+0-9]|\.|$|\n)',
+      caseSensitive: false,
+    );
+    final fromMatch = fromPattern.firstMatch(text);
+    if (fromMatch != null) {
+      final name = fromMatch.group(1)?.trim();
+      if (name != null &&
+          name.isNotEmpty &&
+          name.length >= 2 &&
+          name.length <= 100) {
+        if (RegExp(r'[A-Za-z]').hasMatch(name)) {
+          return (value: name, confidence: _FieldConfidence.high);
+        }
+      }
+    }
+
+    // Contextual keyword with name: "recipient: NAME", "account holder: NAME"
+    final recipientPattern = RegExp(
+      r'(?:recipient|account\s+holder|account\s+name|full\s+name|from)[\s:.-]+([A-Za-z\s\.\*\-]{2,}?)(?:\s*[\+0-9]|$)',
+      caseSensitive: false,
+    );
+    final recipientMatch = recipientPattern.firstMatch(text);
+    if (recipientMatch != null) {
+      final name = recipientMatch.group(1)?.trim();
+      if (name != null &&
+          name.isNotEmpty &&
+          name.length >= 2 &&
+          name.length <= 100) {
+        if (RegExp(r'[A-Za-z]').hasMatch(name)) {
+          return (value: name, confidence: _FieldConfidence.medium);
+        }
+      }
+    }
+
+    // Pattern: name-like text that appears right before a phone number
+    // Extract capitalized words before the account number
+    final beforePhonePattern = RegExp(
+      r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*[\*\.]?\s*(?:A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z)[\.\s]*(?:\+?639|09)\d',
+      caseSensitive: true,
+    );
+    final beforePhoneMatch = beforePhonePattern.firstMatch(text);
+    if (beforePhoneMatch != null) {
+      final name = beforePhoneMatch.group(1)?.trim();
+      if (name != null &&
+          name.isNotEmpty &&
+          name.length >= 2 &&
+          name.length <= 100) {
+        return (value: name, confidence: _FieldConfidence.medium);
       }
     }
 
@@ -1922,6 +2493,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ),
             const SizedBox(height: 6),
             Text(
+              'Account Name: ${draft.accountName != null ? draft.accountName : 'Not found'}',
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Confidence: ${_confidenceLabel(draft.accountNameConfidence)}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
               'Reference: ${draft.reference != null ? draft.reference : 'Not found'}',
             ),
             const SizedBox(height: 2),
@@ -2020,6 +2603,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         onTap: () async {
           final registered = await _openPartyRegistrationPopup(
             prefilledAccountNumber: _accountController.text.trim(),
+            prefilledAccountName: _lastScannedAccountName,
           );
           if (!mounted) {
             return;
@@ -2623,6 +3207,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       );
       final registered = await _openPartyRegistrationPopup(
         prefilledAccountNumber: accountNumber,
+        prefilledAccountName: _lastScannedAccountName,
       );
       if (!registered) {
         return;
@@ -2785,6 +3370,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   Future<bool> _openPartyRegistrationPopup({
     required String prefilledAccountNumber,
+    String? prefilledAccountName,
   }) async {
     if (!mounted) return false;
 
@@ -2796,6 +3382,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       barrierDismissible: false,
       builder: (_) => _PartyRegistrationDialog(
         prefilledAccountNumber: prefilledAccountNumber,
+        prefilledAccountName: prefilledAccountName,
         repository: _partyRepository,
       ),
     );
@@ -2914,6 +3501,8 @@ class _ReceiptDraft {
     this.amountConfidence = _FieldConfidence.unknown,
     this.accountNumber,
     this.accountConfidence = _FieldConfidence.unknown,
+    this.accountName,
+    this.accountNameConfidence = _FieldConfidence.unknown,
     this.reference,
     this.referenceConfidence = _FieldConfidence.unknown,
     this.walletSelection,
@@ -2925,6 +3514,8 @@ class _ReceiptDraft {
   final _FieldConfidence amountConfidence;
   final String? accountNumber;
   final _FieldConfidence accountConfidence;
+  final String? accountName;
+  final _FieldConfidence accountNameConfidence;
   final String? reference;
   final _FieldConfidence referenceConfidence;
   final _WalletSelection? walletSelection;
@@ -2950,6 +3541,7 @@ class _ReceiptDraft {
   bool get hasAnySignal {
     return amount != null ||
         accountNumber != null ||
+        accountName != null ||
         reference != null ||
         walletSelection != null ||
         flowDirection != null;
@@ -3733,10 +4325,12 @@ class _PartyPickerEmptyState extends StatelessWidget {
 class _PartyRegistrationDialog extends StatefulWidget {
   const _PartyRegistrationDialog({
     required this.prefilledAccountNumber,
+    this.prefilledAccountName,
     required this.repository,
   });
 
   final String prefilledAccountNumber;
+  final String? prefilledAccountName;
   final PartyRepository repository;
 
   @override
@@ -3753,7 +4347,9 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
   @override
   void initState() {
     super.initState();
-    _fullNameController = TextEditingController();
+    _fullNameController = TextEditingController(
+      text: widget.prefilledAccountName ?? '',
+    );
     _accountController = TextEditingController(
       text: widget.prefilledAccountNumber,
     );
