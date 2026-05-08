@@ -228,147 +228,186 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ),
         centerTitle: false,
       ),
-      body: ListView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.all(24),
+      body: Stack(
         children: [
-          Text(
-            'Record Transaction',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppColors.onSurface,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 24),
-          _buildCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDropdownField(
-                  label: 'Transaction Type',
-                  value:
-                      _selectedTypeId != null &&
-                          _transactionTypes.any(
-                            (type) => type.id == _selectedTypeId,
-                          )
-                      ? _selectedTypeId
-                      : null,
-                  items: _transactionTypes,
-                  hintText: 'Choose Transaction Type',
-                  onChanged: _isLoadingTransactionTypes
-                      ? null
-                      : (val) {
-                          setState(() {
-                            _applyTypeSelection(val);
-                          });
-                        },
-                  onAddPressed: _showAddTransactionTypeDialog,
-                  onManagePressed: _showManageTransactionTypesDialog,
-                  isRequired: true,
-                  hasError: _isTypeMissing,
+          ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text(
+                'Record Transaction',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: AppColors.onSurface,
+                  fontWeight: FontWeight.bold,
                 ),
-                if (_isLoadingTransactionTypes) ...[
-                  const SizedBox(height: 8),
-                  const LinearProgressIndicator(minHeight: 2),
-                ],
-                const SizedBox(height: 16),
-                _buildTypeProfilePreview(),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _accountController,
-                  label: 'Account Number',
-                  hint: 'Search or enter account number',
-                  suffixIcon: Icons.search_rounded,
-                  onSuffixPressed: _openAccountSearchPicker,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onChanged: _resolvePartyFromAccount,
-                  isRequired: true,
-                  hasError: _isAccountNumberMissing,
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: _isScanningReceipt
-                        ? null
-                        : _scanReceiptAndAutofill,
-                    icon: _isScanningReceipt
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.document_scanner_outlined, size: 16),
-                    label: Text(
-                      _isScanningReceipt
-                          ? 'Scanning receipt...'
-                          : 'Scan Receipt (Camera/Gallery)',
+              ),
+              const SizedBox(height: 24),
+              _buildCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDropdownField(
+                      label: 'Transaction Type',
+                      value:
+                          _selectedTypeId != null &&
+                              _transactionTypes.any(
+                                (type) => type.id == _selectedTypeId,
+                              )
+                          ? _selectedTypeId
+                          : null,
+                      items: _transactionTypes,
+                      hintText: 'Choose Transaction Type',
+                      onChanged: _isLoadingTransactionTypes
+                          ? null
+                          : (val) {
+                              setState(() {
+                                _applyTypeSelection(val);
+                              });
+                            },
+                      onAddPressed: _showAddTransactionTypeDialog,
+                      onManagePressed: _showManageTransactionTypesDialog,
+                      isRequired: true,
+                      hasError: _isTypeMissing,
                     ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: AppColors.primary.withValues(alpha: 0.25),
+                    if (_isLoadingTransactionTypes) ...[
+                      const SizedBox(height: 8),
+                      const LinearProgressIndicator(minHeight: 2),
+                    ],
+                    const SizedBox(height: 16),
+                    _buildTypeProfilePreview(),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _accountController,
+                      label: 'Account Number',
+                      hint: 'Search or enter account number',
+                      suffixIcon: Icons.search_rounded,
+                      onSuffixPressed: _openAccountSearchPicker,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onChanged: _resolvePartyFromAccount,
+                      isRequired: true,
+                      hasError: _isAccountNumberMissing,
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _isScanningReceipt
+                            ? null
+                            : _scanReceiptAndAutofill,
+                        icon: _isScanningReceipt
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.document_scanner_outlined,
+                                size: 16,
+                              ),
+                        label: Text(
+                          _isScanningReceipt
+                              ? 'Scanning receipt...'
+                              : 'Scan Receipt (Camera/Gallery)',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: AppColors.primary.withValues(alpha: 0.25),
+                          ),
+                          foregroundColor: AppColors.primary,
+                        ),
                       ),
-                      foregroundColor: AppColors.primary,
                     ),
-                  ),
-                ),
-                if (_hasTypedAccount && _isRegisteredAccount) ...[
-                  const SizedBox(height: 8),
-                  _buildPartyFoundBanner(_matchedParty!.name),
-                ],
-                if (_hasTypedAccount && !_isRegisteredAccount) ...[
-                  const SizedBox(height: 8),
-                  _buildPartyNotRegisteredAlert(),
-                ],
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _principalController,
-                  label: 'Transaction Amount',
-                  hint: '0.00',
-                  prefixText: '₱  ',
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    TextInputFormatter.withFunction((oldValue, newValue) {
-                      final text = newValue.text;
-                      if (text.isEmpty) return newValue;
-                      if (text.startsWith('.')) return oldValue;
-                      final dotCount = '.'.allMatches(text).length;
-                      if (dotCount > 1) return oldValue;
-                      return newValue;
-                    }),
+                    if (_hasTypedAccount && _isRegisteredAccount) ...[
+                      const SizedBox(height: 8),
+                      _buildPartyFoundBanner(_matchedParty!.name),
+                    ],
+                    if (_hasTypedAccount && !_isRegisteredAccount) ...[
+                      const SizedBox(height: 8),
+                      _buildPartyNotRegisteredAlert(),
+                    ],
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _principalController,
+                      label: 'Transaction Amount',
+                      hint: '0.00',
+                      prefixText: '₱  ',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        TextInputFormatter.withFunction((oldValue, newValue) {
+                          final text = newValue.text;
+                          if (text.isEmpty) return newValue;
+                          if (text.startsWith('.')) return oldValue;
+                          final dotCount = '.'.allMatches(text).length;
+                          if (dotCount > 1) return oldValue;
+                          return newValue;
+                        }),
+                      ],
+                      onChanged: _onPrincipalChanged,
+                      isRequired: true,
+                      hasError: _isPrincipalMissing,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _referenceController,
+                      label: 'Reference',
+                      hint: 'Enter receipt / reference number',
+                      inputFormatters: [LengthLimitingTextInputFormatter(80)],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildChargeHandlingSelector(),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _notesController,
+                      label: 'Notes',
+                      hint: 'Optional notes...',
+                      maxLines: 3,
+                      inputFormatters: [LengthLimitingTextInputFormatter(300)],
+                    ),
                   ],
-                  onChanged: _onPrincipalChanged,
-                  isRequired: true,
-                  hasError: _isPrincipalMissing,
                 ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _referenceController,
-                  label: 'Reference',
-                  hint: 'Enter receipt / reference number',
-                  inputFormatters: [LengthLimitingTextInputFormatter(80)],
-                ),
-                const SizedBox(height: 12),
-                _buildChargeHandlingSelector(),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _notesController,
-                  label: 'Notes',
-                  hint: 'Optional notes...',
-                  maxLines: 3,
-                  inputFormatters: [LengthLimitingTextInputFormatter(300)],
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              _buildCalculationPreview(context),
+              const SizedBox(height: 24),
+              _buildSaveButton(context),
+              const SizedBox(height: 40),
+            ],
           ),
-          const SizedBox(height: 16),
-          _buildCalculationPreview(context),
-          const SizedBox(height: 24),
-          _buildSaveButton(context),
-          const SizedBox(height: 40),
+          if (_isScanningReceipt) ...[
+            const ModalBarrier(dismissible: false, color: Colors.transparent),
+            Container(color: Colors.black.withValues(alpha: 0.45)),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 28,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Scanning receipt…',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1050,6 +1089,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       final suggestedTypeId = _pickBestTransactionTypeId(draft);
 
       stage = 'field autofill';
+
+      // Auto-fill notes with receipt summary if field is empty
+      final noteText = _buildReceiptNote(draft);
+      if (noteText.isNotEmpty && _notesController.text.trim().isEmpty) {
+        _notesController.text = noteText;
+      }
+
       setState(() {
         if (draft.accountNumber != null && draft.accountNumber!.isNotEmpty) {
           _accountController.text = draft.accountNumber!;
@@ -2409,24 +2455,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return bestScore >= 4 ? bestId : null;
   }
 
-  TransactionTypeRecord? _findTransactionTypeById(int id) {
-    for (final type in _transactionTypes) {
-      if (type.id == id) {
-        return type;
-      }
-    }
-    return null;
-  }
-
-  String _confidenceLabel(_FieldConfidence confidence) {
-    return switch (confidence) {
-      _FieldConfidence.high => 'High',
-      _FieldConfidence.medium => 'Medium',
-      _FieldConfidence.low => 'Low',
-      _FieldConfidence.unknown => 'Unknown',
-    };
-  }
-
   String _formatScannedAmountForInput(double amount) {
     if (!amount.isFinite || amount <= 0) {
       return '';
@@ -2451,11 +2479,32 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
-  Future<bool> _confirmReceiptAutofill(_ReceiptDraft draft) async {
-    final suggestedTypeId = _pickBestTransactionTypeId(draft);
-    final suggestedType = suggestedTypeId != null
-        ? _findTransactionTypeById(suggestedTypeId)
+  /// Extracts a human-readable date/time string from raw OCR text.
+  /// Matches formats like "Feb 27, 2026, 04:48 pm" or "Jan 15, 2025".
+  String? _extractReceiptDate(String text) {
+    final datePattern = RegExp(
+      r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}(?:,?\s+\d{1,2}:\d{2}\s*(?:am|pm))?\b',
+      caseSensitive: false,
+    );
+    return datePattern.firstMatch(text)?.group(0)?.trim();
+  }
+
+  /// Builds a short plain-English note summarising the receipt scan result.
+  String _buildReceiptNote(_ReceiptDraft draft) {
+    final parts = <String>[];
+    final date = draft.rawOcrPreview != null
+        ? _extractReceiptDate(draft.rawOcrPreview!)
         : null;
+    if (date != null) parts.add('Transaction on $date');
+    if (draft.walletLabel != null) parts.add('via ${draft.walletLabel}');
+    if (draft.accountName != null) parts.add('to ${draft.accountName}');
+    if (draft.accountNumber != null) parts.add('(${draft.accountNumber})');
+    if (draft.reference != null) parts.add('Ref: ${draft.reference}');
+    return parts.join(' ');
+  }
+
+  Future<bool> _confirmReceiptAutofill(_ReceiptDraft draft) async {
+    final noteText = _buildReceiptNote(draft);
 
     final result = await showDialog<bool>(
       context: context,
@@ -2463,84 +2512,84 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Apply Scanned Receipt Data?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Amount: ${draft.amount != null ? _formatScannedAmountForDisplay(draft.amount!) : 'Not found'}',
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Confidence: ${_confidenceLabel(draft.amountConfidence)}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Account: ${draft.accountNumber != null ? draft.accountNumber : 'Not found'}',
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Confidence: ${_confidenceLabel(draft.accountConfidence)}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Account Name: ${draft.accountName != null ? draft.accountName : 'Not found'}',
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Confidence: ${_confidenceLabel(draft.accountNameConfidence)}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Reference: ${draft.reference != null ? draft.reference : 'Not found'}',
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Confidence: ${_confidenceLabel(draft.referenceConfidence)}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text('Wallet: ${draft.walletLabel ?? 'Not found'}'),
-            const SizedBox(height: 6),
-            Text('Flow: ${draft.flowLabel ?? 'Not found'}'),
-            const SizedBox(height: 6),
-            Text(
-              'Suggested Type: ${suggestedType?.name ?? 'No confident match'}',
-            ),
-            const SizedBox(height: 10),
-            if (draft.rawOcrPreview != null &&
-                draft.rawOcrPreview!.trim().isNotEmpty)
-              Text(
-                'OCR Preview: ${_summarizeOcrPreview(draft.rawOcrPreview!)}',
-                style: const TextStyle(
-                  fontSize: 11,
+        title: const Text('Receipt Scan Result'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Here's what was found on your receipt:",
+                style: TextStyle(
+                  fontSize: 13,
                   color: AppColors.onSurfaceVariant,
                 ),
               ),
-            if (draft.rawOcrPreview != null &&
-                draft.rawOcrPreview!.trim().isNotEmpty)
-              const SizedBox(height: 8),
-            const Text(
-              'Always review values before saving. Receipt formats vary by app and version.',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
-            ),
-          ],
+              const SizedBox(height: 12),
+              if (draft.amount != null)
+                _receiptInfoRow(
+                  'Amount',
+                  _formatScannedAmountForDisplay(draft.amount!),
+                ),
+              if (draft.accountName != null)
+                _receiptInfoRow('Account / Name', draft.accountName!),
+              if (draft.accountNumber != null)
+                _receiptInfoRow('Account / ID', draft.accountNumber!),
+              if (draft.reference != null)
+                _receiptInfoRow('Reference No.', draft.reference!),
+              if (draft.walletLabel != null)
+                _receiptInfoRow('Wallet', draft.walletLabel!),
+              if (draft.amount == null &&
+                  draft.accountNumber == null &&
+                  draft.reference == null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'No recognizable data was found on this receipt.',
+                    style: TextStyle(color: AppColors.onSurfaceVariant),
+                  ),
+                ),
+              const SizedBox(height: 14),
+              if (noteText.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Note that will be added:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        noteText,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              const Text(
+                'Review and edit the filled fields before saving.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -2558,12 +2607,31 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return result ?? false;
   }
 
-  String _summarizeOcrPreview(String raw) {
-    final normalized = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (normalized.length <= 180) {
-      return normalized;
-    }
-    return '${normalized.substring(0, 180)}...';
+  Widget _receiptInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildPartyFoundBanner(String name) {
