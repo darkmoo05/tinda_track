@@ -11,6 +11,7 @@ import 'dart:io';
 
 import '../../core/app_theme.dart';
 import '../../core/data/app_database.dart';
+import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import 'widgets/activity_tile.dart';
@@ -68,7 +69,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         key: _scaffoldKey,
         drawer: const AppSideDrawer(),
         appBar: ArchitectAppBar(
-          title: 'PocketLedger',
+          title: context.l10n.appTitle,
           onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         body: FutureBuilder<List<_HistoryRow>>(
@@ -126,9 +127,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           fontSize: 12,
           letterSpacing: 1.0,
         ),
-        tabs: const [
-          Tab(text: 'TRANSACTIONS'),
-          Tab(text: 'OWNER MOVEMENTS'),
+        tabs: [
+          Tab(text: context.l10n.transactions),
+          Tab(text: context.l10n.ownerMovements),
         ],
       ),
     );
@@ -152,9 +153,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           _buildSearchAndFilter(showWalletFilters: showWalletFilters),
           const SizedBox(height: 20),
           _buildEmptyState(
-            title: 'No matching transactions',
-            message:
-                'Try searching by title, account number, reference ID, notes, or date.',
+            title: context.l10n.noMatchingTransactions,
+            message: context.l10n.trySearchingBy,
           ),
           const SizedBox(height: 100),
         ],
@@ -170,9 +170,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           _buildSearchAndFilter(showWalletFilters: showWalletFilters),
           const SizedBox(height: 20),
           _buildEmptyState(
-            title: 'No history yet',
-            message:
-                'New entries will appear here once you save transactions or owner movements.',
+            title: context.l10n.noHistoryYet,
+            message: context.l10n.newEntriesWillAppear,
           ),
           const SizedBox(height: 100),
         ],
@@ -230,9 +229,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
-          'Movements',
-          style: TextStyle(
+        Text(
+          context.l10n.movements,
+          style: const TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
             color: AppColors.onSurface,
@@ -241,7 +240,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         FilledButton.icon(
           onPressed: _openLedgerReportSheet,
           icon: const Icon(Icons.assessment_outlined, size: 18),
-          label: const Text('Reports'),
+          label: Text(context.l10n.reports),
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: AppColors.onPrimary,
@@ -276,7 +275,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                     });
                   },
                   decoration: InputDecoration(
-                    hintText: 'Search account, ref ID, party, or note',
+                    hintText: context.l10n.searchAccountRefParty,
                     hintStyle: const TextStyle(
                       fontSize: 14,
                       color: AppColors.onSurfaceVariant,
@@ -335,7 +334,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             children: [
               Expanded(
                 child: _buildWalletFilterCard(
-                  label: 'GCash',
+                  label: context.l10n.gcash,
                   icon: Icons.account_balance_wallet_outlined,
                   color: AppColors.primary,
                   walletKey: 'gcash',
@@ -344,7 +343,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _buildWalletFilterCard(
-                  label: 'Maya',
+                  label: context.l10n.maya,
                   icon: Icons.wallet_rounded,
                   color: AppColors.secondary,
                   walletKey: 'maya',
@@ -353,7 +352,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _buildWalletFilterCard(
-                  label: 'On-hand',
+                  label: context.l10n.onHand,
                   icon: Icons.payments_outlined,
                   color: const Color(0xFF8E6C00),
                   walletKey: 'on_hand',
@@ -423,7 +422,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 icon: const Icon(Icons.event_available_rounded, size: 16),
                 label: Text(
                   _beginDateFilter == null
-                      ? 'Beginning Date'
+                      ? context.l10n.beginningDate
                       : _fullDateFormat.format(_beginDateFilter!),
                 ),
               ),
@@ -435,7 +434,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 icon: const Icon(Icons.event_rounded, size: 16),
                 label: Text(
                   _endDateFilter == null
-                      ? 'End Date'
+                      ? context.l10n.endDate
                       : _fullDateFormat.format(_endDateFilter!),
                 ),
               ),
@@ -869,7 +868,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                             foregroundColor: AppColors.onPrimary,
                           ),
                           onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Close'),
+                          child: Text(context.l10n.close),
                         ),
                       ),
                     ),
@@ -1137,13 +1136,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                     ),
                     const SizedBox(height: 16),
                     _buildDatePickerTile(
-                      label: 'Beginning Date',
+                      label: context.l10n.beginningDate,
                       value: _fullDateFormat.format(beginDate),
                       onTap: pickBeginDate,
                     ),
                     const SizedBox(height: 10),
                     _buildDatePickerTile(
-                      label: 'End Date',
+                      label: context.l10n.endDate,
                       value: _fullDateFormat.format(endDate),
                       onTap: pickEndDate,
                     ),
@@ -1162,14 +1161,14 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       runSpacing: 8,
                       children: [
                         ChoiceChip(
-                          label: const Text('PDF'),
+                          label: Text(context.l10n.pdf),
                           selected: selectedType == _ReportFileType.pdf,
                           onSelected: (_) => setSheetState(() {
                             selectedType = _ReportFileType.pdf;
                           }),
                         ),
                         ChoiceChip(
-                          label: const Text('Excel'),
+                          label: Text(context.l10n.excel),
                           selected: selectedType == _ReportFileType.excel,
                           onSelected: (_) => setSheetState(() {
                             selectedType = _ReportFileType.excel;
@@ -1192,7 +1191,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                               ),
                             ),
                             onPressed: () => Navigator.of(sheetContext).pop(),
-                            child: const Text('Cancel'),
+                            child: Text(context.l10n.cancel),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1214,7 +1213,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                               );
                             },
                             icon: const Icon(Icons.download_rounded, size: 16),
-                            label: const Text('Generate'),
+                            label: Text(context.l10n.generate),
                           ),
                         ),
                       ],

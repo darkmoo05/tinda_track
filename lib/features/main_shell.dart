@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../core/app_theme.dart';
+import '../core/l10n_extension.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'activity/activity_history_screen.dart';
 import 'parties/party_management_screen.dart';
@@ -132,14 +133,14 @@ class _MainShellState extends State<MainShell> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildSubFab(
-                          label: 'Record Owner Movement',
+                          label: context.l10n.recordOwnerMovementFab,
                           icon: Icons.swap_horiz_rounded,
                           color: AppColors.secondary,
                           onTap: _openOwnerMovement,
                         ),
                         const SizedBox(height: 12),
                         _buildSubFab(
-                          label: 'Transaction',
+                          label: context.l10n.transaction,
                           icon: Icons.receipt_long_rounded,
                           color: AppColors.primary,
                           onTap: _openTransaction,

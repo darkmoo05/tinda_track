@@ -965,6 +965,12 @@ class FixedTransactionType {
       isOutflow: false,
     ),
     FixedTransactionType(
+      key: 'gcash_qrpayment',
+      label: 'GCash QR Payment',
+      wallet: 'GCash',
+      isOutflow: false,
+    ),
+    FixedTransactionType(
       key: 'maya_cashin',
       label: 'Maya Cash-In',
       wallet: 'Maya Wallet',
@@ -985,6 +991,12 @@ class FixedTransactionType {
     FixedTransactionType(
       key: 'maya_paybills',
       label: 'Maya Pay Bills',
+      wallet: 'Maya Wallet',
+      isOutflow: false,
+    ),
+    FixedTransactionType(
+      key: 'maya_qrpayment',
+      label: 'Maya QR Payment',
       wallet: 'Maya Wallet',
       isOutflow: false,
     ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/data/app_database.dart';
 import '../../core/app_theme.dart';
+import '../../core/l10n_extension.dart';
 
 class AddOwnerMovementScreen extends StatefulWidget {
   const AddOwnerMovementScreen({
@@ -77,24 +78,25 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   bool get _usesMayaWallet => _destination == 'Maya Wallet';
 
-  String get _accountLabel {
+  String _accountLabel(BuildContext context) {
     if (_isBorrowing) {
-      return 'Borrow From';
+      return context.l10n.borrowFrom;
     }
     if (_isRepayment) {
-      return 'Repay To';
+      return context.l10n.repayTo;
     }
-    return _isInflow ? 'Destination' : 'Source Account';
+    return _isInflow ? context.l10n.destination : context.l10n.sourceAccount;
   }
 
-  String get _autoDirectionLabel => _isInflow ? 'Cash In' : 'Cash Out';
+  String _autoDirectionLabel(BuildContext context) =>
+      _isInflow ? context.l10n.cashIn : context.l10n.cashOut;
 
-  String get _movementSummaryLabel {
+  String _movementSummaryLabel(BuildContext context) {
     if (_movementType == null) {
-      return 'Movement Type Pending';
+      return context.l10n.movementTypePending;
     }
     if (_isPersonalExpense) {
-      final categoryLabel = _selectedCategory ?? 'Category Pending';
+      final categoryLabel = _selectedCategory ?? context.l10n.categoryPending;
       return '$_movementType • $categoryLabel';
     }
     return '$_movementType • $_destinationLabel';
@@ -102,13 +104,13 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   String get _movementDescription {
     if (_isPersonalExpense) {
-      return 'You took cash from $_destinationLabel for personal use. This will be recorded as a debt you owe the business.';
+      return 'You took money from $_destinationLabel for personal use. This reduces your business wallet balance.';
     }
     if (_isBorrowing) {
-      return 'You borrowed money from $_destinationLabel. This adds to what you owe the business.';
+      return 'You borrowed money from $_destinationLabel. This reduces your business wallet balance.';
     }
     if (_isRepayment) {
-      return 'You returned money to $_destinationLabel. This reduces what you owe the business.';
+      return 'You returned money to $_destinationLabel. This adds back to your business wallet balance.';
     }
     return 'You added funds to $_destinationLabel to keep the business running.';
   }
@@ -203,9 +205,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
           icon: const Icon(Icons.close_rounded, color: AppColors.onSurface),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'New Owner Movement',
-          style: TextStyle(
+        title: Text(
+          context.l10n.newOwnerMovement,
+          style: const TextStyle(
             color: AppColors.onSurfaceVariant,
             fontSize: 13,
             fontWeight: FontWeight.w500,
@@ -217,16 +219,19 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         padding: const EdgeInsets.all(24),
         children: [
           Text(
-            'Record Owner Movement',
+            context.l10n.recordOwnerMovement,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               color: AppColors.onSurface,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Phase 3 tracks owner borrowing and repayment directly against wallet or on-hand cash to monitor owner credit and payback.',
-            style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
+          Text(
+            context.l10n.phase3Description,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 24),
           _buildCard(
@@ -234,11 +239,11 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildDropdownField(
-                  label: 'Movement Type',
+                  label: context.l10n.movementType,
                   value: _movementType,
                   items: _movementTypes,
                   onChanged: _onMovementTypeChanged,
-                  hintText: 'Choose Movement Type',
+                  hintText: context.l10n.chooseMovementType,
                   isRequired: true,
                   hasError: _isMovementTypeMissing,
                 ),
@@ -248,7 +253,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                 const SizedBox(height: 20),
 
                 _buildDropdownField(
-                  label: _accountLabel,
+                  label: _accountLabel(context),
                   value: _destination,
                   items: _destinations,
                   onChanged: (val) {
@@ -280,15 +285,15 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
                 _buildTextField(
                   controller: _referenceController,
-                  label: 'Reference (Optional)',
+                  label: context.l10n.referenceOptional,
                   hint: _referenceHint,
                 ),
                 const SizedBox(height: 16),
 
                 _buildTextField(
                   controller: _notesController,
-                  label: 'Notes (Optional)',
-                  hint: 'Additional details...',
+                  label: context.l10n.notesOptional,
+                  hint: context.l10n.additionalDetails,
                   maxLines: 3,
                 ),
               ],
@@ -335,7 +340,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Money Direction',
+                  context.l10n.moneyDirection,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -344,7 +349,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$_autoDirectionLabel • $_ownerScope funds',
+                  _autoDirectionLabel(context),
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.onSurfaceVariant,
@@ -373,19 +378,19 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         Row(
           children: [
             _fieldLabel(
-              'Expense Category',
+              context.l10n.expenseCategory,
               isRequired: true,
               showErrorIndicator: _isCategoryMissing,
             ),
             const Spacer(),
             _buildCategoryAction(
-              label: 'Add',
+              label: context.l10n.add,
               icon: Icons.add_rounded,
               onTap: _showAddCategoryDialog,
             ),
             const SizedBox(width: 8),
             _buildCategoryAction(
-              label: 'Manage',
+              label: context.l10n.manage,
               icon: Icons.settings_rounded,
               onTap: _showManageCategoriesDialog,
             ),
@@ -402,17 +407,23 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               color: AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text(
-              'Add at least one personal expense category before saving this entry.',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+            child: Text(
+              context.l10n.addCategoryFirst,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
           )
         else
           DropdownButtonFormField<String>(
             value: _selectedCategory,
-            hint: const Text(
-              'Choose Expense Category',
-              style: TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+            hint: Text(
+              context.l10n.chooseExpenseCategory,
+              style: const TextStyle(
+                color: AppColors.outlineVariant,
+                fontSize: 13,
+              ),
             ),
             onChanged: (value) {
               if (value == null) {
@@ -454,7 +465,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isEditing ? 'Rename Category' : 'Add Category',
+            isEditing ? context.l10n.renameCategory : context.l10n.addCategory,
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -466,7 +477,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
             controller: _categoryNameController,
             textCapitalization: TextCapitalization.words,
             decoration: _inputDecoration().copyWith(
-              hintText: 'Category name',
+              hintText: context.l10n.categoryName,
               suffixIcon: _categoryNameController.text.trim().isEmpty
                   ? null
                   : IconButton(
@@ -485,12 +496,14 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               FilledButton.icon(
                 onPressed: _submitCategoryEdit,
                 icon: Icon(isEditing ? Icons.save_rounded : Icons.add_rounded),
-                label: Text(isEditing ? 'Save' : 'Add'),
+                label: Text(isEditing ? context.l10n.save : context.l10n.add),
               ),
               const SizedBox(width: 8),
               TextButton(
                 onPressed: _cancelCategoryManagement,
-                child: Text(isEditing ? 'Cancel' : 'Done'),
+                child: Text(
+                  isEditing ? context.l10n.cancel : context.l10n.done,
+                ),
               ),
             ],
           ),
@@ -498,9 +511,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
             const SizedBox(height: 14),
             const Divider(height: 1),
             const SizedBox(height: 10),
-            const Text(
-              'Existing Categories',
-              style: TextStyle(
+            Text(
+              context.l10n.existingCategories,
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: AppColors.onSurface,
@@ -519,13 +532,13 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                       onPressed: () => _startEditingCategory(category),
                       icon: const Icon(Icons.edit_outlined),
                       color: AppColors.primary,
-                      tooltip: 'Rename',
+                      tooltip: context.l10n.rename,
                     ),
                     IconButton(
                       onPressed: () => _deleteExpenseCategory(category),
                       icon: const Icon(Icons.delete_outline_rounded),
                       color: AppColors.error,
-                      tooltip: 'Delete',
+                      tooltip: context.l10n.delete,
                     ),
                   ],
                 ),
@@ -596,7 +609,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _movementSummaryLabel,
+                  _movementSummaryLabel(context),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -767,7 +780,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                 ),
               )
             : const Text(
-                'SAVE MOVEMENT',
+                'SAVE RECORD',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -789,7 +802,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     if (_movementType == null) {
       _showSnackBar(
         messenger,
-        'Please choose a movement type before saving.',
+        'Please choose what happened before saving.',
         isError: true,
       );
       return;
@@ -840,7 +853,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       if (totalBorrowed <= 0) {
         _showSnackBar(
           messenger,
-          'No borrowing transaction found. Record a borrowing first before making a repayment.',
+          'No borrowing recorded yet. Add a borrowing entry before repaying.',
           isError: true,
         );
         return;
@@ -848,7 +861,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       if (amount > outstanding) {
         _showSnackBar(
           messenger,
-          'Repayment amount (₱ ${amount.toStringAsFixed(2)}) exceeds outstanding borrowing balance (₱ ${outstanding.toStringAsFixed(2)}). Adjust the amount.',
+          'Repayment amount (₱ ${amount.toStringAsFixed(2)}) is more than what is still owed (₱ ${outstanding.toStringAsFixed(2)}). Adjust the amount.',
           isError: true,
         );
         return;
@@ -867,7 +880,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     if (!saved) {
       _showSnackBar(
         messenger,
-        'Unable to save owner movement. Please try again.',
+        'Unable to save. Please try again.',
         isError: true,
       );
       return;
@@ -1073,14 +1086,14 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       _editingCategory = null;
       _categoryNameController.clear();
     }
-    _showSnackBar(messenger, 'Category deleted.');
+    _showSnackBar(messenger, context.l10n.categoryDeleted);
   }
 
   Future<void> _submitCategoryEdit() async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final normalized = _categoryNameController.text.trim();
     if (normalized.isEmpty) {
-      _showSnackBar(messenger, 'Enter a category name.', isError: true);
+      _showSnackBar(messenger, context.l10n.enterCategoryName, isError: true);
       return;
     }
 

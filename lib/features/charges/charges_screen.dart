@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/data/app_database.dart';
+import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import 'data/charge_repository.dart';
@@ -21,6 +22,14 @@ class ChargesScreen extends StatefulWidget {
 }
 
 class _ChargesScreenState extends State<ChargesScreen> {
+  static const List<MapEntry<String, String>> _serviceOptions = [
+    MapEntry('cashin', 'Cash-In'),
+    MapEntry('cashout', 'Cash-Out'),
+    MapEntry('load', 'Load'),
+    MapEntry('paybills', 'Pay Bills'),
+    MapEntry('qrpayment', 'QR Payment'),
+  ];
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _lowerBoundController = TextEditingController();
   final _upperBoundController = TextEditingController();
@@ -51,14 +60,14 @@ class _ChargesScreenState extends State<ChargesScreen> {
       key: _scaffoldKey,
       drawer: const AppSideDrawer(),
       appBar: ArchitectAppBar(
-        title: 'PocketLedger',
+        title: context.l10n.appTitle,
         onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
         actions: [
           if (widget.launchedFromTransaction)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: IconButton.filledTonal(
-                tooltip: 'Back to transaction',
+                tooltip: context.l10n.backToTransaction,
                 onPressed: () => Navigator.of(context).pop(),
                 style: IconButton.styleFrom(
                   backgroundColor: AppColors.surfaceContainerLow,
@@ -74,7 +83,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: IconButton.filledTonal(
-                tooltip: 'Open menu',
+                tooltip: context.l10n.openMenu,
                 onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                 style: IconButton.styleFrom(
                   backgroundColor: AppColors.surfaceContainerLow,
@@ -118,9 +127,9 @@ class _ChargesScreenState extends State<ChargesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Configure Fees For',
-          style: TextStyle(
+        Text(
+          context.l10n.configureFeesFor,
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
             color: AppColors.onSurfaceVariant,
@@ -132,7 +141,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
             Expanded(
               child: _buildWalletToggle(
                 'gcash',
-                'GCash',
+                context.l10n.gcashWalletOption,
                 AppColors.primary,
                 walletPrefix == 'gcash',
                 Icons.account_balance_wallet_outlined,
@@ -143,7 +152,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
             Expanded(
               child: _buildWalletToggle(
                 'maya',
-                'Maya Wallet',
+                context.l10n.mayaWalletOption,
                 AppColors.secondary,
                 walletPrefix == 'maya',
                 Icons.wallet_rounded,
@@ -153,16 +162,9 @@ class _ChargesScreenState extends State<ChargesScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            _buildServiceChip('cashin', 'Cash-In', service, walletPrefix),
-            const SizedBox(width: 6),
-            _buildServiceChip('cashout', 'Cash-Out', service, walletPrefix),
-            const SizedBox(width: 6),
-            _buildServiceChip('load', 'Load', service, walletPrefix),
-            const SizedBox(width: 6),
-            _buildServiceChip('paybills', 'Pay Bills', service, walletPrefix),
-          ],
+        _buildServiceDropdown(
+          currentService: service,
+          walletPrefix: walletPrefix,
         ),
       ],
     );
@@ -222,49 +224,81 @@ class _ChargesScreenState extends State<ChargesScreen> {
     );
   }
 
-  Widget _buildServiceChip(
-    String service,
-    String label,
-    String currentService,
-    String walletPrefix,
-  ) {
-    final selected = currentService == service;
+  Widget _buildServiceDropdown({
+    required String currentService,
+    required String walletPrefix,
+  }) {
     final color = walletPrefix == 'maya'
         ? AppColors.secondary
         : AppColors.primary;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _selectedTypeKey = '${walletPrefix}_$service';
-            _lowerBoundController.clear();
-            _upperBoundController.clear();
-            _chargeAmountController.clear();
-          });
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: selected
-                ? color.withValues(alpha: 0.12)
-                : AppColors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected
-                  ? color.withValues(alpha: 0.45)
-                  : AppColors.outlineVariant.withValues(alpha: 0.35),
-            ),
+    final currentLabel = _serviceOptions
+        .firstWhere((option) => option.key == currentService)
+        .value;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: currentService,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(16),
+          dropdownColor: AppColors.surfaceContainerLowest,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: color),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: selected ? color : AppColors.onSurfaceVariant,
-            ),
-          ),
+          selectedItemBuilder: (context) {
+            return _serviceOptions
+                .map((option) {
+                  final isCurrent = option.key == currentService;
+                  return Row(
+                    children: [
+                      Icon(Icons.tune_rounded, size: 16, color: color),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isCurrent
+                              ? 'Select fee type: $currentLabel'
+                              : 'Select fee type: ${option.value}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                })
+                .toList(growable: false);
+          },
+          items: _serviceOptions
+              .map((option) {
+                return DropdownMenuItem<String>(
+                  value: option.key,
+                  child: Text(option.value),
+                );
+              })
+              .toList(growable: false),
+          onChanged: (value) {
+            if (value == null) {
+              return;
+            }
+            setState(() {
+              _selectedTypeKey = '${walletPrefix}_$value';
+              _lowerBoundController.clear();
+              _upperBoundController.clear();
+              _chargeAmountController.clear();
+            });
+          },
         ),
       ),
     );
@@ -283,7 +317,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Set service fee brackets for each transaction type separately.',
+          context.l10n.setServiceFeeBrackets,
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(color: AppColors.onSurfaceVariant),
@@ -318,7 +352,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Add New Bracket',
+                context.l10n.addNewBracket,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: AppColors.onSurface,
                   fontWeight: FontWeight.w700,
@@ -329,22 +363,22 @@ class _ChargesScreenState extends State<ChargesScreen> {
           const SizedBox(height: 20),
           _buildInputField(
             controller: _lowerBoundController,
-            label: 'Lower Bound (PHP)',
-            hint: 'e.g. 1000',
+            label: context.l10n.lowerBound,
+            hint: context.l10n.lowerBoundHint,
             keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 12),
           _buildInputField(
             controller: _upperBoundController,
-            label: 'Upper Bound (PHP)',
-            hint: 'e.g. 1500',
+            label: context.l10n.upperBound,
+            hint: context.l10n.upperBoundHint,
             keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 12),
           _buildInputField(
             controller: _chargeAmountController,
-            label: 'Charge Amount (PHP)',
-            hint: 'e.g. 25.00',
+            label: context.l10n.chargeAmount,
+            hint: context.l10n.chargeAmountHint,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
           const SizedBox(height: 20),
@@ -689,7 +723,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
                     ),
                   ),
                   onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.cancel),
                 ),
               ),
               const SizedBox(width: 10),
@@ -911,22 +945,22 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
           const SizedBox(height: 16),
           _dialogField(
             controller: _lowerBoundController,
-            label: 'Lower Bound (PHP)',
-            hint: 'e.g. 1000',
+            label: context.l10n.lowerBound,
+            hint: context.l10n.lowerBoundHint,
             keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 12),
           _dialogField(
             controller: _upperBoundController,
-            label: 'Upper Bound (PHP)',
-            hint: 'e.g. 1500',
+            label: context.l10n.upperBound,
+            hint: context.l10n.upperBoundHint,
             keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 12),
           _dialogField(
             controller: _chargeAmountController,
-            label: 'Charge Amount (PHP)',
-            hint: 'e.g. 25.00',
+            label: context.l10n.chargeAmount,
+            hint: context.l10n.chargeAmountHint,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
           if (_errorText != null) ...[
@@ -955,7 +989,7 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
                   ),
                 ),
                 onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text(context.l10n.cancel),
               ),
             ),
             const SizedBox(width: 10),

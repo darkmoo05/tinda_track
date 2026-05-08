@@ -195,6 +195,11 @@ class ChargeRepository {
     if (chargeAmount < 0) {
       return 'Charge amount cannot be negative.';
     }
+    final maxAllowed = upperBound * 0.5;
+    if (chargeAmount > maxAllowed) {
+      return 'Charge amount cannot exceed 50% of the upper bound '
+          '(max ₱${maxAllowed.toStringAsFixed(2)} for a ₱$upperBound upper bound).';
+    }
     return null;
   }
 

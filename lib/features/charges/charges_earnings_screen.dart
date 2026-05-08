@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../dashboard/data/dashboard_repository.dart';
 import '../dashboard/widgets/analytics_card.dart';
@@ -77,12 +78,12 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
 
     return Scaffold(
       appBar: ArchitectAppBar(
-        title: 'PocketLedger',
+        title: context.l10n.appTitle,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: IconButton.filledTonal(
-              tooltip: 'Go back',
+              tooltip: context.l10n.goBack,
               onPressed: () => Navigator.of(context).pop(),
               style: IconButton.styleFrom(
                 backgroundColor: AppColors.surfaceContainerLow,
@@ -99,9 +100,9 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
         children: [
-          const Text(
-            'Charges Earnings',
-            style: TextStyle(
+          Text(
+            context.l10n.chargesEarnings,
+            style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
               color: AppColors.onSurface,
@@ -281,19 +282,19 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
           Row(
             children: [
               _buildHeroChip(
-                label: 'On-hand',
+                label: context.l10n.onHand,
                 amount: widget.chargesToOnHand,
                 icon: Icons.payments_outlined,
               ),
               const SizedBox(width: 8),
               _buildHeroChip(
-                label: 'GCash',
+                label: context.l10n.gcash,
                 amount: widget.chargesToGcash,
                 icon: Icons.account_balance_wallet_rounded,
               ),
               const SizedBox(width: 8),
               _buildHeroChip(
-                label: 'Maya',
+                label: context.l10n.maya,
                 amount: widget.chargesToMaya,
                 icon: Icons.account_balance_rounded,
               ),
@@ -371,7 +372,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
     }
 
     return ArchitectAnalyticsCard(
-      title: 'Daily Earnings Trend',
+      title: context.l10n.dailyEarningsTrend,
       value: _fmt(widget.totalEarnings),
       trend: '${widget.transactionCount} transactions',
       subtitle: '',
@@ -581,15 +582,15 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
     if (dest.contains('maya')) {
       chipColor = AppColors.secondary;
       chipIcon = Icons.account_balance_rounded;
-      destLabel = 'Maya';
+      destLabel = context.l10n.maya;
     } else if (dest.contains('gcash')) {
       chipColor = AppColors.primary;
       chipIcon = Icons.account_balance_wallet_rounded;
-      destLabel = 'GCash';
+      destLabel = context.l10n.gcash;
     } else {
       chipColor = const Color(0xFF8E6C00);
       chipIcon = Icons.payments_outlined;
-      destLabel = 'On-hand';
+      destLabel = context.l10n.onHand;
     }
 
     return Container(

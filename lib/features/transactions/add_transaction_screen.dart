@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../core/data/app_database.dart';
 import '../../core/app_theme.dart';
+import '../../core/l10n_extension.dart';
 import '../charges/data/charge_repository.dart';
 import '../charges/charges_screen.dart';
 import '../parties/data/party_repository.dart';
@@ -32,6 +33,14 @@ class AddTransactionScreen extends StatefulWidget {
 }
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
+  static const List<MapEntry<String, String>> _serviceOptions = [
+    MapEntry('cashin', 'Cash-In'),
+    MapEntry('cashout', 'Cash-Out'),
+    MapEntry('load', 'Load'),
+    MapEntry('paybills', 'Pay Bills'),
+    MapEntry('qrpayment', 'QR Payment'),
+  ];
+
   final _accountController = TextEditingController();
   final _referenceController = TextEditingController();
   final _principalController = TextEditingController();
@@ -206,9 +215,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           icon: const Icon(Icons.close_rounded, color: AppColors.onSurface),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'New Entry',
-          style: TextStyle(
+        title: Text(
+          context.l10n.newEntry,
+          style: const TextStyle(
             color: AppColors.onSurfaceVariant,
             fontSize: 13,
             fontWeight: FontWeight.w500,
@@ -223,7 +232,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               Text(
-                'Record Transaction',
+                context.l10n.recordTransaction,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: AppColors.onSurface,
                   fontWeight: FontWeight.bold,
@@ -238,8 +247,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     const SizedBox(height: 16),
                     _buildTextField(
                       controller: _accountController,
-                      label: 'Account Number',
-                      hint: 'Search or enter account number',
+                      label: context.l10n.accountNumber,
+                      hint: context.l10n.searchOrEnterAccountNumber,
                       suffixIcon: Icons.search_rounded,
                       onSuffixPressed: _openAccountSearchPicker,
                       keyboardType: TextInputType.number,
@@ -269,8 +278,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                               ),
                         label: Text(
                           _isScanningReceipt
-                              ? 'Scanning receipt...'
-                              : 'Scan Receipt (Camera/Gallery)',
+                              ? context.l10n.scanningReceipt
+                              : context.l10n.scanReceiptButton,
                         ),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
@@ -291,8 +300,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     const SizedBox(height: 16),
                     _buildTextField(
                       controller: _principalController,
-                      label: 'Transaction Amount',
-                      hint: '0.00',
+                      label: context.l10n.transactionAmount,
+                      hint: context.l10n.amountHint,
                       prefixText: '$_pesoLabel ',
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
@@ -314,8 +323,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     const SizedBox(height: 16),
                     _buildTextField(
                       controller: _referenceController,
-                      label: 'Reference',
-                      hint: 'Enter receipt / reference number',
+                      label: context.l10n.reference,
+                      hint: context.l10n.enterReferenceNumber,
                       inputFormatters: [LengthLimitingTextInputFormatter(80)],
                     ),
                     if (_canCustomizeFeeHandling) ...[
@@ -325,8 +334,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     const SizedBox(height: 16),
                     _buildTextField(
                       controller: _notesController,
-                      label: 'Notes',
-                      hint: 'Optional notes...',
+                      label: context.l10n.notes,
+                      hint: context.l10n.optionalNotes,
                       maxLines: 3,
                       inputFormatters: [LengthLimitingTextInputFormatter(300)],
                     ),
@@ -353,14 +362,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   color: AppColors.surfaceContainerLowest,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Column(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
                     Text(
-                      'Scanning receiptâ€¦',
-                      style: TextStyle(
+                      context.l10n.scanningReceipt,
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
@@ -431,16 +440,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            _buildServiceChip('cashin', 'Cash-In', service, walletColor),
-            const SizedBox(width: 6),
-            _buildServiceChip('cashout', 'Cash-Out', service, walletColor),
-            const SizedBox(width: 6),
-            _buildServiceChip('load', 'Load', service, walletColor),
-            const SizedBox(width: 6),
-            _buildServiceChip('paybills', 'Pay Bills', service, walletColor),
-          ],
+        _buildServiceDropdown(
+          currentService: service,
+          walletPrefix: walletPrefix,
+          walletColor: walletColor,
         ),
         const SizedBox(height: 8),
         _buildTypeProfilePreview(),
@@ -500,45 +503,81 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Widget _buildServiceChip(
-    String service,
-    String label,
-    String currentService,
-    Color walletColor,
-  ) {
-    final selected = currentService == service;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          final prefix = _selectedTypeKey.startsWith('maya') ? 'maya' : 'gcash';
-          setState(() {
-            _selectedTypeKey = '${prefix}_$service';
-            _missingRangeAlertShownForCurrentInput = false;
-          });
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            color: selected
-                ? walletColor.withValues(alpha: 0.12)
-                : AppColors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected
-                  ? walletColor.withValues(alpha: 0.45)
-                  : AppColors.outlineVariant.withValues(alpha: 0.35),
-            ),
+  Widget _buildServiceDropdown({
+    required String currentService,
+    required String walletPrefix,
+    required Color walletColor,
+  }) {
+    final currentLabel = _serviceOptions
+        .firstWhere((option) => option.key == currentService)
+        .value;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: walletColor.withValues(alpha: 0.24)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: currentService,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(16),
+          dropdownColor: AppColors.surfaceContainerLowest,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: walletColor),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: selected ? walletColor : AppColors.onSurfaceVariant,
-            ),
-          ),
+          selectedItemBuilder: (context) {
+            return _serviceOptions
+                .map((option) {
+                  final isCurrent = option.key == currentService;
+                  return Row(
+                    children: [
+                      Icon(
+                        Icons.swap_horiz_rounded,
+                        size: 16,
+                        color: walletColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isCurrent
+                              ? 'Select service: $currentLabel'
+                              : 'Select service: ${option.value}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                })
+                .toList(growable: false);
+          },
+          items: _serviceOptions
+              .map((option) {
+                return DropdownMenuItem<String>(
+                  value: option.key,
+                  child: Text(option.value),
+                );
+              })
+              .toList(growable: false),
+          onChanged: (value) {
+            if (value == null) {
+              return;
+            }
+            setState(() {
+              _selectedTypeKey = '${walletPrefix}_$value';
+              _missingRangeAlertShownForCurrentInput = false;
+            });
+          },
         ),
       ),
     );
@@ -625,7 +664,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ? (onSuffixPressed != null
                       ? IconButton(
                           onPressed: onSuffixPressed,
-                          tooltip: 'Search contacts',
+                          tooltip: context.l10n.searchContacts,
                           icon: Icon(
                             suffixIcon,
                             color: AppColors.onSurfaceVariant,
@@ -1073,22 +1112,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('Use Camera'),
-              subtitle: const Text('Take a photo of the receipt'),
+              title: Text(context.l10n.useCamera),
+              subtitle: Text(context.l10n.takePicture),
               onTap: () =>
                   Navigator.of(context).pop(_ReceiptImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Pick from Gallery'),
-              subtitle: const Text('Choose existing screenshot/photo'),
+              title: Text(context.l10n.pickFromGallery),
+              subtitle: Text(context.l10n.chooseExistingPhoto),
               onTap: () =>
                   Navigator.of(context).pop(_ReceiptImageSource.gallery),
             ),
             ListTile(
               leading: const Icon(Icons.folder_open_outlined),
-              title: const Text('Browse Files'),
-              subtitle: const Text('Pick from any folder'),
+              title: Text(context.l10n.browseFiles),
+              subtitle: Text(context.l10n.pickFromAnyFolder),
               onTap: () => Navigator.of(context).pop(_ReceiptImageSource.file),
             ),
           ],
@@ -2176,14 +2215,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Receipt Scan Result'),
+        title: Text(context.l10n.receiptScanResult),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "Here's what was found on your receipt:",
+              Text(
+                context.l10n.receiptScanDescription,
                 style: TextStyle(
                   fontSize: 13,
                   color: AppColors.onSurfaceVariant,
@@ -2192,25 +2231,25 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               const SizedBox(height: 12),
               if (draft.amount != null)
                 _receiptInfoRow(
-                  'Amount',
+                  context.l10n.amount,
                   _formatScannedAmountForDisplay(draft.amount!),
                 ),
               if (draft.accountName != null)
-                _receiptInfoRow('Account / Name', draft.accountName!),
+                _receiptInfoRow(context.l10n.accountName, draft.accountName!),
               if (draft.accountNumber != null)
-                _receiptInfoRow('Account / ID', draft.accountNumber!),
+                _receiptInfoRow(context.l10n.accountId, draft.accountNumber!),
               if (draft.reference != null)
-                _receiptInfoRow('Reference No.', draft.reference!),
+                _receiptInfoRow(context.l10n.referenceNo, draft.reference!),
               if (draft.walletLabel != null)
-                _receiptInfoRow('Wallet', draft.walletLabel!),
+                _receiptInfoRow(context.l10n.walletLabel, draft.walletLabel!),
               if (draft.amount == null &&
                   draft.accountNumber == null &&
                   draft.reference == null)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    'No recognizable data was found on this receipt.',
-                    style: TextStyle(color: AppColors.onSurfaceVariant),
+                    context.l10n.noRecognizableData,
+                    style: const TextStyle(color: AppColors.onSurfaceVariant),
                   ),
                 ),
               const SizedBox(height: 14),
@@ -2256,9 +2295,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
                 const SizedBox(height: 10),
               ],
-              const Text(
-                'Review and edit the filled fields before saving.',
-                style: TextStyle(
+              Text(
+                context.l10n.reviewAndEdit,
+                style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.onSurfaceVariant,
                 ),
@@ -2269,11 +2308,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Apply'),
+            child: Text(context.l10n.apply),
           ),
         ],
       ),
@@ -2621,7 +2660,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           SizedBox(width: 6),
           Expanded(
             child: Text(
-              'No fee range set for this amount. Fee shown as â‚±0. Create a fee range first.',
+              'No fee range set for this amount. Fee shown as ₱0. Create a fee range first.',
               style: TextStyle(
                 fontSize: 11,
                 color: AppColors.error,
@@ -2645,7 +2684,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           runSpacing: 8,
           children: [
             ChoiceChip(
-              label: const Text('Customer Pays the Fee'),
+              label: Text(context.l10n.customerPaysFee),
               selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
               onSelected: (_) {
                 setState(() {
@@ -2654,7 +2693,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               },
             ),
             ChoiceChip(
-              label: const Text('Deduct Fee from Sent Amount'),
+              label: Text(context.l10n.deductFeeFromSent),
               selected:
                   _chargeHandlingMode ==
                   _ChargeHandlingMode.deductFromEnteredAmount,
@@ -2829,7 +2868,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   ),
                   onPressed: () => Navigator.of(dialogContext).pop(true),
                   icon: const Icon(Icons.payments_outlined, size: 16),
-                  label: const Text('Go to Charges'),
+                  label: Text(context.l10n.goToCharges),
                 ),
               ),
             ],
@@ -2930,7 +2969,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final available = isOutflow ? onHandBalance : selectedWalletBalance;
     if (requiredSourceAmount > available) {
       _showMessage(
-        'Insufficient $sourceLabel balance. Available: â‚± ${available.toStringAsFixed(2)}',
+        'Insufficient $sourceLabel balance. Available: ₱ ${available.toStringAsFixed(2)}',
         isError: true,
       );
       return;
@@ -2962,13 +3001,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (!mounted) return;
 
       if (_isRegisteredAccount) {
-        _showMessage(
-          'Party registered. Saving transaction now...',
-          messenger: messenger,
-        );
+        _showMessage(context.l10n.partyRegisteredSaving, messenger: messenger);
       } else {
         _showMessage(
-          'Unable to verify registration. Please try again.',
+          context.l10n.unableToVerifyRegistration,
           isError: true,
           messenger: messenger,
         );
@@ -2982,7 +3018,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (!saved) {
       if (!mounted) return;
       _showMessage(
-        'Unable to save transaction. Please try again.',
+        context.l10n.unableToSaveTransaction,
         isError: true,
         messenger: messenger,
       );
@@ -2992,7 +3028,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (!mounted) return;
 
     _showMessage(
-      'Transaction saved for ${_matchedParty!.name}.',
+      context.l10n.transactionSaved(_matchedParty!.name),
       messenger: messenger,
     );
     Navigator.of(context).pop(true);
@@ -3409,14 +3445,14 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
               const SizedBox(height: 12),
               Expanded(
                 child: widget.parties.isEmpty
-                    ? const _PartyPickerEmptyState(
-                        title: 'No contacts found',
+                    ? _PartyPickerEmptyState(
+                        title: context.l10n.noContactsFound,
                         subtitle:
                             'Register a party first, then use search to pick an account.',
                       )
                     : (filtered.isEmpty
-                          ? const _PartyPickerEmptyState(
-                              title: 'No matching contact',
+                          ? _PartyPickerEmptyState(
+                              title: context.l10n.noMatchingContact,
                               subtitle:
                                   'Try searching with a different name or account number.',
                             )
@@ -3657,14 +3693,14 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
           const SizedBox(height: 16),
           _dialogField(
             controller: _fullNameController,
-            label: 'Full Name / Entity',
-            hint: 'Enter party full name',
+            label: context.l10n.fullNameEntity,
+            hint: context.l10n.enterPartyFullName,
           ),
           const SizedBox(height: 12),
           _dialogField(
             controller: _accountController,
-            label: 'Account Number',
-            hint: 'Enter account number',
+            label: context.l10n.accountNumber,
+            hint: context.l10n.enterAccountNumber,
             keyboardType: TextInputType.number,
           ),
           if (_errorText != null) ...[
@@ -3695,7 +3731,7 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
                 onPressed: _isSaving
                     ? null
                     : () => Navigator.of(context).pop(null),
-                child: const Text('Cancel'),
+                child: Text(context.l10n.cancel),
               ),
             ),
             const SizedBox(width: 10),

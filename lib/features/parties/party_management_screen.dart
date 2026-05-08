@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import 'data/party_repository.dart';
@@ -51,7 +52,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
       key: _scaffoldKey,
       drawer: const AppSideDrawer(),
       appBar: ArchitectAppBar(
-        title: 'PocketLedger',
+        title: context.l10n.appTitle,
         onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       body: ListView(
@@ -103,7 +104,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Registered Parties',
+          context.l10n.registeredParties,
           style: Theme.of(context).textTheme.displayMedium?.copyWith(
             fontSize: 24,
             fontWeight: FontWeight.bold,
@@ -111,7 +112,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Manage your customer ecosystem and entity associations.',
+          context.l10n.manageParties,
           style: Theme.of(context).textTheme.labelMedium,
         ),
       ],
@@ -123,7 +124,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          'ACTIVE ENTITIES',
+          context.l10n.activeEntities,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
             fontWeight: FontWeight.bold,
             letterSpacing: 1.0,
@@ -132,7 +133,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
         ElevatedButton.icon(
           onPressed: _onAddParty,
           icon: const Icon(Icons.add_rounded, size: 18),
-          label: const Text('ADD PARTY'),
+          label: Text(context.l10n.addParty),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -169,8 +170,8 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
             const SizedBox(height: 12),
             Text(
               hasActiveSearch
-                  ? 'No matching parties found'
-                  : 'No parties saved yet',
+                  ? context.l10n.noMatchingParties
+                  : context.l10n.noPartiesSaved,
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -178,8 +179,8 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
             const SizedBox(height: 6),
             Text(
               hasActiveSearch
-                  ? 'Try a different keyword for name, entity ID, account, or description.'
-                  : 'This screen now shows only records stored in your local database.',
+                  ? context.l10n.tryDifferentKeyword
+                  : context.l10n.localDatabaseInfo,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: AppColors.onSurfaceVariant,
@@ -283,10 +284,10 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
-                'Delete Party',
+              Text(
+                context.l10n.deleteParty,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: AppColors.onSurface,
@@ -294,7 +295,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Are you sure you want to delete "${party.name}"? This action cannot be undone.',
+                context.l10n.deletePartyConfirm(party.name),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
@@ -318,7 +319,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
                     ),
                   ),
                   onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.cancel),
                 ),
               ),
               const SizedBox(width: 10),
@@ -525,7 +526,7 @@ class _EditPartyDialogState extends State<_EditPartyDialog> {
                   ),
                 ),
                 onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text(context.l10n.cancel),
               ),
             ),
             const SizedBox(width: 10),
@@ -760,7 +761,7 @@ class _AddPartyDialogState extends State<_AddPartyDialog> {
                   ),
                 ),
                 onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text(context.l10n.cancel),
               ),
             ),
             const SizedBox(width: 10),
@@ -788,7 +789,9 @@ class _AddPartyDialogState extends State<_AddPartyDialog> {
                         size: 16,
                         color: Colors.white,
                       ),
-                label: Text(_isSaving ? 'Saving…' : 'Add Party'),
+                label: Text(
+                  _isSaving ? context.l10n.saving : context.l10n.addParty,
+                ),
               ),
             ),
           ],

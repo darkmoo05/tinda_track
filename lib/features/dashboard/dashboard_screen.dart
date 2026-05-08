@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import '../activity/activity_history_screen.dart';
@@ -55,7 +56,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             key: _scaffoldKey,
             drawer: const AppSideDrawer(),
             appBar: ArchitectAppBar(
-              title: 'PocketLedger',
+              title: context.l10n.appTitle,
               onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
             body: const Center(child: CircularProgressIndicator()),
@@ -67,12 +68,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             key: _scaffoldKey,
             drawer: const AppSideDrawer(),
             appBar: ArchitectAppBar(
-              title: 'PocketLedger',
+              title: context.l10n.appTitle,
               onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
-            body: const Center(
-              child: Text('Unable to load dashboard right now.'),
-            ),
+            body: Center(child: Text(context.l10n.unableToLoadDashboard)),
           );
         }
 
@@ -82,10 +81,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             key: _scaffoldKey,
             drawer: const AppSideDrawer(),
             appBar: ArchitectAppBar(
-              title: 'PocketLedger',
+              title: context.l10n.appTitle,
               onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
-            body: const Center(child: Text('No dashboard data available yet.')),
+            body: Center(child: Text(context.l10n.noDashboardData)),
           );
         }
 
@@ -93,7 +92,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           key: _scaffoldKey,
           drawer: const AppSideDrawer(),
           appBar: ArchitectAppBar(
-            title: 'PocketLedger',
+            title: context.l10n.appTitle,
             onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
           body: ListView(
@@ -115,9 +114,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 24),
               _buildRecentActivityHeader(context),
               const SizedBox(height: 16),
-              _buildActivityTabs(),
+              _buildActivityTabs(context),
               const SizedBox(height: 16),
-              _buildRecentActivityList(dashboard),
+              _buildRecentActivityList(context, dashboard),
               const SizedBox(height: 100),
             ],
           ),
@@ -207,7 +206,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Wallet Overview',
+          context.l10n.walletOverview,
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w700,
             color: AppColors.onSurface,
@@ -227,11 +226,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     _buildWalletMetricTile(
                       width: tileWidth,
-                      title: 'GCASH WALLET',
+                      title: context.l10n.gcashWallet,
                       value: _dashboardRepository.formatCurrency(
                         dashboard.walletBalance,
                       ),
-                      caption: 'Available balance',
+                      caption: context.l10n.availableBalance,
                       icon: Icons.account_balance_wallet_rounded,
                       backgroundColor: AppColors.primary,
                       onTap: () => _openWalletPerspectiveHistory(
@@ -240,11 +239,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     _buildWalletMetricTile(
                       width: tileWidth,
-                      title: 'MAYA WALLET',
+                      title: context.l10n.mayaWallet,
                       value: _dashboardRepository.formatCurrency(
                         dashboard.mayaWalletBalance,
                       ),
-                      caption: 'Available balance',
+                      caption: context.l10n.availableBalance,
                       icon: Icons.account_balance_rounded,
                       backgroundColor: AppColors.secondary,
                       onTap: () => _openWalletPerspectiveHistory(
@@ -253,11 +252,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     _buildWalletMetricTile(
                       width: tileWidth,
-                      title: 'ON-HAND CASH',
+                      title: context.l10n.onHandCash,
                       value: _dashboardRepository.formatCurrency(
                         dashboard.onHandCash,
                       ),
-                      caption: 'Physical cash',
+                      caption: context.l10n.physicalCash,
                       icon: Icons.payments_outlined,
                       backgroundColor: const Color(0xFF8E6C00),
                       onTap: () => _openWalletPerspectiveHistory(
@@ -266,7 +265,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     _buildWalletMetricTile(
                       width: tileWidth,
-                      title: 'CHARGES EARNINGS',
+                      title: context.l10n.chargesEarnings,
                       value: _dashboardRepository.formatCurrency(
                         dashboard.recordedFlow,
                       ),
@@ -280,7 +279,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                _buildTotalFundsTile(dashboard),
+                _buildTotalFundsTile(context, dashboard),
               ],
             );
           },
@@ -388,7 +387,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildTotalFundsTile(DashboardSnapshot dashboard) {
+  Widget _buildTotalFundsTile(
+    BuildContext context,
+    DashboardSnapshot dashboard,
+  ) {
     final totalCapital = dashboard.businessFundingTotal;
     final chargeEarnings = dashboard.recordedFlow;
     final computedTotalFunds = totalCapital + chargeEarnings;
@@ -413,9 +415,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'TOTAL FUNDS',
-                style: TextStyle(
+              Text(
+                context.l10n.totalFunds,
+                style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
@@ -470,9 +472,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (!hasTrendData) {
       return _buildChartPlaceholder(
-        title: 'Wallet and Cash Balance Trend',
-        message:
-            'Trend data will appear once wallet activity has been recorded.',
+        title: context.l10n.walletCashBalanceTrend,
+        message: context.l10n.walletTrendPlaceholder,
       );
     }
 
@@ -518,7 +519,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildRecentActivityHeader(BuildContext context) {
     return Text(
-      'Recent Activities',
+      context.l10n.recentActivities,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.w700,
         color: AppColors.onSurface,
@@ -526,34 +527,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildActivityTabs() {
+  Widget _buildActivityTabs(BuildContext context) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         _buildPillTab(
-          'All',
+          context.l10n.filterAll,
           _activityFilter == _DashboardActivityFilter.all,
           () {
             setState(() => _activityFilter = _DashboardActivityFilter.all);
           },
         ),
         _buildPillTab(
-          'Business',
+          context.l10n.filterBusiness,
           _activityFilter == _DashboardActivityFilter.business,
           () {
             setState(() => _activityFilter = _DashboardActivityFilter.business);
           },
         ),
         _buildPillTab(
-          'Personal',
+          context.l10n.filterPersonal,
           _activityFilter == _DashboardActivityFilter.personal,
           () {
             setState(() => _activityFilter = _DashboardActivityFilter.personal);
           },
         ),
         _buildPillTab(
-          'Transactions',
+          context.l10n.filterTransactions,
           _activityFilter == _DashboardActivityFilter.transactions,
           () {
             setState(
@@ -587,7 +588,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentActivityList(DashboardSnapshot dashboard) {
+  Widget _buildRecentActivityList(
+    BuildContext context,
+    DashboardSnapshot dashboard,
+  ) {
     final activities =
         dashboard.activities
             .where((activity) {
@@ -618,9 +622,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(18),
         decoration: _minimalCardDecoration(),
-        child: const Text(
-          'No activities match the selected filter yet.',
-          style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
+        child: Text(
+          context.l10n.noActivitiesFilter,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -657,7 +664,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Borrowing Status',
+            context.l10n.borrowingStatus,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
@@ -668,8 +675,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             runSpacing: 12,
             children: [
               _buildSplitCard(
-                title: 'Borrowed',
-                subtitle: 'Total personal funds taken by owner',
+                title: context.l10n.borrowed,
+                subtitle: context.l10n.totalPersonalFundsTaken,
                 value: _dashboardRepository.formatCurrency(
                   dashboard.totalBorrowed,
                 ),
@@ -677,8 +684,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: Icons.call_received_rounded,
               ),
               _buildSplitCard(
-                title: 'Repaid',
-                subtitle: 'Total personal funds returned to business',
+                title: context.l10n.repaid,
+                subtitle: context.l10n.totalPersonalFundsReturned,
                 value: _dashboardRepository.formatCurrency(
                   dashboard.totalRepaid,
                 ),
@@ -689,7 +696,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Owner Credit Outstanding: ${_dashboardRepository.formatCurrency(outstanding)}',
+            context.l10n.ownerCreditOutstanding(
+              _dashboardRepository.formatCurrency(outstanding),
+            ),
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,

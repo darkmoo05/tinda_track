@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/data/sync_config.dart';
 import '../../core/data/sync_service.dart';
+import '../../core/l10n_extension.dart';
 
 class BackupDataScreen extends StatefulWidget {
   const BackupDataScreen({super.key});
@@ -43,7 +44,7 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Server URL saved.')));
+    ).showSnackBar(SnackBar(content: Text(context.l10n.serverUrlSaved)));
   }
 
   Future<void> _syncNow() async {
@@ -59,7 +60,7 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Sync completed — pushed ${result.pushed}, pulled ${result.pulled}.',
+            context.l10n.syncCompleted(result.pushed, result.pulled),
           ),
         ),
       );
@@ -67,7 +68,7 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Sync failed: $error'),
+          content: Text(context.l10n.syncFailed(error)),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -80,7 +81,7 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Backup & Sync'),
+        title: Text(context.l10n.backupSync),
         backgroundColor: AppColors.background,
       ),
       body: Padding(
@@ -89,18 +90,19 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Server connection',
+              context.l10n.serverConnection,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: AppColors.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Enter the base URL of your Tinda Tracker server. '
-              'Use your local IP (e.g. http://192.168.1.24:8080/api) '
-              'when the device is on the same Wi-Fi as your computer.',
-              style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
+            Text(
+              context.l10n.serverUrlInstruction,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 12),
             if (_urlLoaded)
@@ -113,8 +115,8 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         isDense: true,
-                        labelText: 'Server API URL',
-                        hintText: 'http://192.168.1.x:8080/api',
+                        labelText: context.l10n.serverApiUrl,
+                        hintText: context.l10n.serverApiUrlHint,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -130,7 +132,7 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
                   const SizedBox(width: 8),
                   IconButton.outlined(
                     icon: const Icon(Icons.save_rounded),
-                    tooltip: 'Save URL',
+                    tooltip: context.l10n.saveUrl,
                     onPressed: _isSyncing ? null : _saveUrl,
                   ),
                 ],
@@ -139,16 +141,19 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
               const LinearProgressIndicator(),
             const SizedBox(height: 20),
             Text(
-              'Sync data',
+              context.l10n.syncData,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: AppColors.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Push local changes to the server and pull updates from other devices.',
-              style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
+            Text(
+              context.l10n.syncInstruction,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
@@ -160,11 +165,13 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.sync_rounded),
-              label: Text(_isSyncing ? 'Syncing…' : 'Sync Now'),
+              label: Text(
+                _isSyncing ? context.l10n.syncing : context.l10n.syncNow,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
-              'Local backup',
+              context.l10n.localBackup,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: AppColors.onSurface,
                 fontWeight: FontWeight.w700,
@@ -174,13 +181,13 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
             FilledButton.icon(
               onPressed: () {},
               icon: const Icon(Icons.upload_file_rounded),
-              label: const Text('Export Backup'),
+              label: Text(context.l10n.exportBackup),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () {},
               icon: const Icon(Icons.download_rounded),
-              label: const Text('Restore Backup'),
+              label: Text(context.l10n.restoreBackup),
             ),
           ],
         ),
