@@ -12,6 +12,14 @@ class ArchitectAnalyticsCard extends StatefulWidget {
   final List<String>? xLabels;
   final List<DateTime>? dates;
 
+  /// When provided, the card uses this period instead of internal state
+  /// and hides the internal dropdown.
+  final int? selectedPeriod;
+  final void Function(int)? onPeriodChanged;
+
+  /// When false, the value / trend / subtitle stats block is hidden.
+  final bool showStats;
+
   const ArchitectAnalyticsCard({
     super.key,
     required this.title,
@@ -21,6 +29,9 @@ class ArchitectAnalyticsCard extends StatefulWidget {
     this.spots,
     this.xLabels,
     this.dates,
+    this.selectedPeriod,
+    this.onPeriodChanged,
+    this.showStats = true,
   });
 
   @override
@@ -55,7 +66,13 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
             Duration(days: allSpots.length - 1 - index),
           ),
         );
-    final filtered = _filteredSeries(allSpots, allLabels, allDates);
+    final activePeriod = widget.selectedPeriod ?? _selectedPeriod;
+    final refilteredFiltered = _filteredSeries(
+      allSpots,
+      allLabels,
+      allDates,
+      activePeriod,
+    );
 
     return ArchitectCard(
       padding: const EdgeInsets.all(20),
@@ -77,42 +94,51 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              _buildSegmentedControl(),
+              // Only show internal dropdown when not externally controlled
+              if (widget.selectedPeriod == null) ...[
+                const SizedBox(width: 8),
+                _buildSegmentedControl(),
+              ],
             ],
           ),
-          const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                widget.value,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+          if (widget.showStats) ...[
+            const SizedBox(height: 18),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  widget.value,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                widget.trend,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.secondary,
+                const SizedBox(width: 8),
+                Text(
+                  widget.trend,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.secondary,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            widget.subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceVariant,
+              ],
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              widget.subtitle,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
-          _buildChartPanel(context, filtered.spots, filtered.labels),
+          _buildChartPanel(
+            context,
+            refilteredFiltered.spots,
+            refilteredFiltered.labels,
+          ),
         ],
       ),
     );
@@ -166,7 +192,11 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                   if (value == null) {
                     return;
                   }
-                  setState(() => _selectedPeriod = value);
+                  if (widget.onPeriodChanged != null) {
+                    widget.onPeriodChanged!(value);
+                  } else {
+                    setState(() => _selectedPeriod = value);
+                  }
                 },
               ),
             ),
@@ -267,6 +297,7 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
     List<FlSpot> allSpots,
     List<String> allLabels,
     List<DateTime> allDates,
+    int period,
   ) {
     if (allSpots.isEmpty) {
       return const _FilteredSeries(spots: [], labels: []);
@@ -285,11 +316,11 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
       return const _FilteredSeries(spots: [], labels: []);
     }
 
-    final groups = _selectedPeriod == 0
+    final groups = period == 0
         ? _buildDailyGroups(points, 7)
-        : _selectedPeriod == 1
+        : period == 1
         ? _buildWeeklyGroups(points, 7)
-        : _selectedPeriod == 2
+        : period == 2
         ? _buildMonthlyGroups(points, 7)
         : _buildYearlyGroups(points, 7);
 

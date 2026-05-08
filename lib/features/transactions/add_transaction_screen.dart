@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,49 +41,26 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final AppDatabase _database = AppDatabase.instance;
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
-  bool _isLoadingTransactionTypes = true;
   bool _isScanningReceipt = false;
   String?
   _lastScannedAccountName; // Temporarily store account name from receipt scan
   bool _showRequiredIndicators = false;
   bool _isSaving = false;
   _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
-  _WalletSelection _selectedWallet = _WalletSelection.gcash;
-  _FlowDirection _selectedFlowDirection = _FlowDirection.inflow;
 
-  int? _selectedTypeId;
+  String _selectedTypeKey = 'gcash_cashin';
   PartyRecord? _matchedParty;
 
-  List<TransactionTypeRecord> _transactionTypes = const [];
-
-  void _applyTypeSelection(int? typeId) {
-    _selectedTypeId = typeId;
-    final selectedRecord = _selectedTransactionType;
-    if (selectedRecord == null) {
-      return;
-    }
-
-    _selectedWallet =
-        selectedRecord.walletAccount.toLowerCase().contains('maya')
+  _WalletSelection get _selectedWallet {
+    return FixedTransactionType.forKey(_selectedTypeKey).wallet == 'Maya Wallet'
         ? _WalletSelection.maya
         : _WalletSelection.gcash;
-    _selectedFlowDirection = selectedRecord.isOutflow
-        ? _FlowDirection.outflow
-        : _FlowDirection.inflow;
   }
 
-  TransactionTypeRecord? get _selectedTransactionType {
-    final selectedTypeId = _selectedTypeId;
-    if (selectedTypeId == null) {
-      return null;
-    }
-
-    for (final type in _transactionTypes) {
-      if (type.id == selectedTypeId) {
-        return type;
-      }
-    }
-    return null;
+  _FlowDirection get _selectedFlowDirection {
+    return FixedTransactionType.forKey(_selectedTypeKey).isOutflow
+        ? _FlowDirection.outflow
+        : _FlowDirection.inflow;
   }
 
   ChargeBracketRecord? get _matchedChargeBracket {
@@ -93,6 +70,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
 
     for (final bracket in _chargeRepository.brackets.value) {
+      if (bracket.transactionTypeKey != _selectedTypeKey) continue;
       if (principal >= bracket.lowerBound && principal <= bracket.upperBound) {
         return bracket;
       }
@@ -113,7 +91,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   double get _amountToSend {
-    if (_chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount) {
+    if (_effectiveChargeHandlingMode ==
+        _ChargeHandlingMode.deductFromEnteredAmount) {
       final amount = _enteredAmount - _chargeFee;
       return amount > 0 ? amount : 0;
     }
@@ -121,10 +100,29 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   double get _totalCollected {
-    if (_chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount) {
+    if (_effectiveChargeHandlingMode ==
+        _ChargeHandlingMode.deductFromEnteredAmount) {
       return _enteredAmount;
     }
     return _enteredAmount + _chargeFee;
+  }
+
+  String get _selectedService {
+    return _selectedTypeKey.replaceFirst(
+      _selectedTypeKey.startsWith('maya_') ? 'maya_' : 'gcash_',
+      '',
+    );
+  }
+
+  bool get _canCustomizeFeeHandling {
+    return _selectedService == 'cashin' || _selectedService == 'cashout';
+  }
+
+  _ChargeHandlingMode get _effectiveChargeHandlingMode {
+    if (_canCustomizeFeeHandling) {
+      return _chargeHandlingMode;
+    }
+    return _ChargeHandlingMode.addOnTop;
   }
 
   double get _netCashToDrawer {
@@ -148,9 +146,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _showRequiredIndicators &&
       (double.tryParse(_principalController.text.trim()) ?? 0) <= 0;
 
-  bool get _isTypeMissing =>
-      _showRequiredIndicators && _selectedTransactionType == null;
-
   bool get _isOutflowSelection =>
       _selectedFlowDirection == _FlowDirection.outflow;
 
@@ -170,18 +165,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         : 'Customer Sends to Wallet';
   }
 
-  String get _defaultTransactionTitle {
-    final walletLabel = _selectedWallet == _WalletSelection.maya
-        ? 'Maya'
-        : 'GCash';
-    final flowLabel = _isOutflowSelection ? 'Cash Out' : 'Cash In';
-    return '$walletLabel $flowLabel';
-  }
+  String get _pesoLabel => '\u20B1';
 
   @override
   void initState() {
     super.initState();
-    _loadTransactionTypes();
     _partyRepository.ensureLoaded().then((_) {
       if (!mounted) {
         return;
@@ -246,35 +234,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildDropdownField(
-                      label: 'Transaction Type',
-                      value:
-                          _selectedTypeId != null &&
-                              _transactionTypes.any(
-                                (type) => type.id == _selectedTypeId,
-                              )
-                          ? _selectedTypeId
-                          : null,
-                      items: _transactionTypes,
-                      hintText: 'Choose Transaction Type',
-                      onChanged: _isLoadingTransactionTypes
-                          ? null
-                          : (val) {
-                              setState(() {
-                                _applyTypeSelection(val);
-                              });
-                            },
-                      onAddPressed: _showAddTransactionTypeDialog,
-                      onManagePressed: _showManageTransactionTypesDialog,
-                      isRequired: true,
-                      hasError: _isTypeMissing,
-                    ),
-                    if (_isLoadingTransactionTypes) ...[
-                      const SizedBox(height: 8),
-                      const LinearProgressIndicator(minHeight: 2),
-                    ],
-                    const SizedBox(height: 16),
-                    _buildTypeProfilePreview(),
+                    _buildTypeSelector(),
                     const SizedBox(height: 16),
                     _buildTextField(
                       controller: _accountController,
@@ -333,7 +293,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       controller: _principalController,
                       label: 'Transaction Amount',
                       hint: '0.00',
-                      prefixText: '₱  ',
+                      prefixText: '$_pesoLabel ',
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
@@ -358,8 +318,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       hint: 'Enter receipt / reference number',
                       inputFormatters: [LengthLimitingTextInputFormatter(80)],
                     ),
-                    const SizedBox(height: 12),
-                    _buildChargeHandlingSelector(),
+                    if (_canCustomizeFeeHandling) ...[
+                      const SizedBox(height: 12),
+                      _buildChargeHandlingSelector(),
+                    ],
                     const SizedBox(height: 16),
                     _buildTextField(
                       controller: _notesController,
@@ -397,7 +359,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
                     Text(
-                      'Scanning receipt…',
+                      'Scanning receiptâ€¦',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -431,182 +393,151 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Widget _buildDropdownField({
-    required String label,
-    required int? value,
-    required List<TransactionTypeRecord> items,
-    String? hintText,
-    ValueChanged<int?>? onChanged,
-    VoidCallback? onAddPressed,
-    VoidCallback? onManagePressed,
-    bool isRequired = false,
-    bool hasError = false,
-  }) {
+  Widget _buildTypeSelector() {
+    final walletPrefix = _selectedTypeKey.startsWith('maya') ? 'maya' : 'gcash';
+    final service = _selectedTypeKey.replaceFirst('${walletPrefix}_', '');
+    final walletColor = walletPrefix == 'maya'
+        ? AppColors.secondary
+        : AppColors.primary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _fieldLabel('Transaction Type', isRequired: false),
+        const SizedBox(height: 8),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _fieldLabel(
-              label,
-              isRequired: isRequired,
-              showErrorIndicator: hasError,
+            Expanded(
+              child: _buildWalletToggle(
+                'gcash',
+                'GCash',
+                AppColors.primary,
+                walletPrefix == 'gcash',
+                Icons.account_balance_wallet_outlined,
+                service,
+              ),
             ),
-            const Spacer(),
-            if (onAddPressed != null)
-              _buildTypeActionButton(
-                label: 'Add Type',
-                icon: Icons.add_rounded,
-                color: AppColors.primary,
-                onTap: onAddPressed,
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildWalletToggle(
+                'maya',
+                'Maya Wallet',
+                AppColors.secondary,
+                walletPrefix == 'maya',
+                Icons.wallet_rounded,
+                service,
               ),
-            if (onManagePressed != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: _buildTypeActionButton(
-                  label: 'Manage',
-                  icon: Icons.settings_rounded,
-                  color: AppColors.onSurfaceVariant,
-                  onTap: onManagePressed,
-                ),
-              ),
+            ),
           ],
         ),
-        const SizedBox(height: 2),
-        DropdownButtonFormField<int>(
-          value: value,
-          isExpanded: true,
-          onChanged: onChanged,
-          decoration: _inputDecoration(
-            hasError: hasError,
-          ).copyWith(hintText: hintText),
-          icon: const Icon(
-            Icons.expand_more_rounded,
-            color: AppColors.onSurfaceVariant,
-          ),
-          selectedItemBuilder: (context) {
-            return items
-                .map(
-                  (t) => Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      t.name,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                )
-                .toList();
-          },
-          items: items
-              .map(
-                (t) => DropdownMenuItem(
-                  value: t.id,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 180),
-                        child: Text(
-                          t.name,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: t.isOutflow
-                              ? AppColors.error.withValues(alpha: 0.12)
-                              : AppColors.secondary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          t.isOutflow ? 'RECEIVE' : 'SEND',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: t.isOutflow
-                                ? AppColors.error
-                                : AppColors.secondary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: t.walletAccount.toLowerCase().contains('maya')
-                              ? AppColors.secondary.withValues(alpha: 0.14)
-                              : AppColors.primary.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          t.walletAccount.toLowerCase().contains('maya')
-                              ? 'MAYA'
-                              : 'GCASH',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color:
-                                t.walletAccount.toLowerCase().contains('maya')
-                                ? AppColors.secondary
-                                : AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-              .toList(),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _buildServiceChip('cashin', 'Cash-In', service, walletColor),
+            const SizedBox(width: 6),
+            _buildServiceChip('cashout', 'Cash-Out', service, walletColor),
+            const SizedBox(width: 6),
+            _buildServiceChip('load', 'Load', service, walletColor),
+            const SizedBox(width: 6),
+            _buildServiceChip('paybills', 'Pay Bills', service, walletColor),
+          ],
         ),
+        const SizedBox(height: 8),
+        _buildTypeProfilePreview(),
       ],
     );
   }
 
-  Widget _buildTypeActionButton({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(7),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+  Widget _buildWalletToggle(
+    String prefix,
+    String label,
+    Color color,
+    bool selected,
+    IconData icon,
+    String currentService,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTypeKey = '${prefix}_$currentService';
+          _missingRangeAlertShownForCurrentInput = false;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.12)
+              : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? color.withValues(alpha: 0.45)
+                : AppColors.outlineVariant.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? color : AppColors.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: selected ? color : AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServiceChip(
+    String service,
+    String label,
+    String currentService,
+    Color walletColor,
+  ) {
+    final selected = currentService == service;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          final prefix = _selectedTypeKey.startsWith('maya') ? 'maya' : 'gcash';
+          setState(() {
+            _selectedTypeKey = '${prefix}_$service';
+            _missingRangeAlertShownForCurrentInput = false;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 7),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(7),
+            color: selected
+                ? walletColor.withValues(alpha: 0.12)
+                : AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: AppColors.outlineVariant.withValues(alpha: 0.35),
+              color: selected
+                  ? walletColor.withValues(alpha: 0.45)
+                  : AppColors.outlineVariant.withValues(alpha: 0.35),
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ],
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: selected ? walletColor : AppColors.onSurfaceVariant,
+            ),
           ),
         ),
       ),
@@ -614,42 +545,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Widget _buildTypeProfilePreview() {
-    final selectedType = _selectedTransactionType;
-    final walletColor = _selectedWalletColor;
-
-    if (selectedType == null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: AppColors.outlineVariant.withValues(alpha: 0.4),
-          ),
-        ),
-        child: const Row(
-          children: [
-            Icon(
-              Icons.info_outline_rounded,
-              size: 16,
-              color: AppColors.onSurfaceVariant,
-            ),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Select a transaction type to auto-set wallet and flow.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
+    final type = FixedTransactionType.forKey(_selectedTypeKey);
+    final walletColor = type.wallet == 'Maya Wallet'
+        ? AppColors.secondary
+        : AppColors.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -660,7 +559,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       child: Row(
         children: [
           Icon(
-            _selectedWallet == _WalletSelection.maya
+            type.wallet == 'Maya Wallet'
                 ? Icons.wallet_rounded
                 : Icons.account_balance_wallet_outlined,
             size: 16,
@@ -669,7 +568,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '${selectedType.walletAccount} — ${selectedType.isOutflow ? 'Customer Receives' : 'Customer Sends'}',
+              '${type.wallet} \u2014 ${type.isOutflow ? 'Customer Receives' : 'Customer Sends'}',
               style: TextStyle(
                 fontSize: 12,
                 color: walletColor,
@@ -680,260 +579,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _loadTransactionTypes({int? preferSelectId}) async {
-    setState(() {
-      _isLoadingTransactionTypes = true;
-    });
-
-    final loadedTypes = await _database.loadTransactionTypeRecords();
-    if (!mounted) {
-      return;
-    }
-
-    int? nextSelectedId;
-    if (preferSelectId != null) {
-      if (loadedTypes.any((type) => type.id == preferSelectId)) {
-        nextSelectedId = preferSelectId;
-      }
-    } else if (_selectedTypeId != null &&
-        loadedTypes.any((type) => type.id == _selectedTypeId)) {
-      nextSelectedId = _selectedTypeId;
-    }
-
-    setState(() {
-      _transactionTypes = loadedTypes;
-      _applyTypeSelection(nextSelectedId);
-      _isLoadingTransactionTypes = false;
-    });
-  }
-
-  Future<void> _showAddTransactionTypeDialog() async {
-    final createdType = await showDialog<_TransactionTypeDraft>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.56),
-      builder: (_) =>
-          _UpsertTransactionTypeDialog(existingTypes: _transactionTypes),
-    );
-
-    if (createdType == null || createdType.name.trim().isEmpty) {
-      return;
-    }
-
-    final insertedId = await _database.insertTransactionType(
-      createdType.name,
-      isOutflow: createdType.isOutflow,
-      walletAccount: createdType.walletSelection == _WalletSelection.maya
-          ? 'Maya Wallet'
-          : 'GCash',
-    );
-    if (!mounted) {
-      return;
-    }
-
-    await _loadTransactionTypes(preferSelectId: insertedId);
-    if (!mounted) {
-      return;
-    }
-    _showMessage(
-      'Transaction type added: ${createdType.name.trim()} (${createdType.isOutflow ? 'Customer Receives' : 'Customer Sends'} • ${createdType.walletSelection == _WalletSelection.maya ? 'Maya Wallet' : 'GCash'})',
-    );
-  }
-
-  Future<void> _showManageTransactionTypesDialog() async {
-    if (_transactionTypes.isEmpty) {
-      _showMessage(
-        'No transaction types available. Add one first.',
-        isError: true,
-      );
-      return;
-    }
-
-    final selectedAction = await showDialog<_TypeActionPayload>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.56),
-      builder: (_) => _ManageTransactionTypesDialog(
-        types: _transactionTypes,
-        selectedTypeId: _selectedTypeId,
-      ),
-    );
-
-    if (selectedAction == null || !mounted) {
-      return;
-    }
-
-    switch (selectedAction.action) {
-      case _TypeAction.edit:
-        await _editTransactionType(selectedAction.type);
-        break;
-      case _TypeAction.delete:
-        await _deleteTransactionType(selectedAction.type);
-        break;
-    }
-  }
-
-  Future<void> _editTransactionType(TransactionTypeRecord type) async {
-    final result = await showDialog<_TransactionTypeDraft>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.56),
-      builder: (_) => _UpsertTransactionTypeDialog(
-        existingTypes: _transactionTypes,
-        initialName: type.name,
-        initialIsOutflow: type.isOutflow,
-        initialWalletSelection:
-            type.walletAccount.toLowerCase().contains('maya')
-            ? _WalletSelection.maya
-            : _WalletSelection.gcash,
-      ),
-    );
-
-    if (result == null || result.name.trim().isEmpty) {
-      return;
-    }
-
-    try {
-      await _database.updateTransactionType(
-        id: type.id,
-        name: result.name,
-        isOutflow: result.isOutflow,
-        walletAccount: result.walletSelection == _WalletSelection.maya
-            ? 'Maya Wallet'
-            : 'GCash',
-      );
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showMessage(
-        'Unable to update type. Name may already exist.',
-        isError: true,
-      );
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-    await _loadTransactionTypes(preferSelectId: type.id);
-    if (!mounted) {
-      return;
-    }
-    _showMessage('Transaction type updated.');
-  }
-
-  Future<void> _deleteTransactionType(TransactionTypeRecord type) async {
-    final shouldDelete = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.56),
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: AppColors.surfaceContainerLowest,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          titlePadding: EdgeInsets.zero,
-          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          title: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
-            child: Column(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.10),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.delete_outline_rounded,
-                    color: AppColors.error,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Delete Transaction Type',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Are you sure you want to delete "${type.name}"? This cannot be undone.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          content: const SizedBox.shrink(),
-          actions: [
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      side: const BorderSide(color: AppColors.outlineVariant),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: () => Navigator.of(dialogContext).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.error,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: () => Navigator.of(dialogContext).pop(true),
-                    icon: const Icon(
-                      Icons.delete_rounded,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                    label: const Text(
-                      'Delete',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldDelete != true) {
-      return;
-    }
-
-    await _database.deleteTransactionType(type.id);
-    if (!mounted) {
-      return;
-    }
-
-    await _loadTransactionTypes();
-    if (!mounted) {
-      return;
-    }
-    _showMessage('Transaction type deleted.');
   }
 
   Widget _buildTextField({
@@ -971,6 +616,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           decoration: _inputDecoration(hasError: hasError).copyWith(
             hintText: hint,
             prefixText: prefixText,
+            prefixStyle: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.onSurface,
+            ),
             suffixIcon: suffixIcon != null
                 ? (onSuffixPressed != null
                       ? IconButton(
@@ -1086,7 +736,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         return;
       }
 
-      final suggestedTypeId = _pickBestTransactionTypeId(draft);
+      final suggestedTypeKey = _pickBestTypeKey(draft);
 
       stage = 'field autofill';
 
@@ -1109,11 +759,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         if (draft.reference != null && draft.reference!.trim().isNotEmpty) {
           _referenceController.text = draft.reference!.trim();
         }
-        if (suggestedTypeId != null) {
-          _applyTypeSelection(suggestedTypeId);
-        } else if (draft.walletSelection != null &&
-            _selectedTransactionType == null) {
-          _selectedWallet = draft.walletSelection!;
+        if (suggestedTypeKey != null) {
+          _selectedTypeKey = suggestedTypeKey;
+        } else if (draft.walletSelection != null) {
+          final prefix = draft.walletSelection == _WalletSelection.maya
+              ? 'maya'
+              : 'gcash';
+          final service = _selectedTypeKey.replaceFirst(
+            _selectedTypeKey.startsWith('maya') ? 'maya_' : 'gcash_',
+            '',
+          );
+          _selectedTypeKey = '${prefix}_$service';
         }
       });
 
@@ -1242,7 +898,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
       final segmentTexts = <String>[];
 
-      // Preprocess one region: crop → grayscale → optional invert → upscale → contrast.
+      // Preprocess one region: crop â†’ grayscale â†’ optional invert â†’ upscale â†’ contrast.
       // invertIfDark: inverts regions with a predominantly dark/colored background
       // (e.g. GCash blue header) so ML Kit always sees dark text on white.
       Future<void> addSegment({
@@ -1277,7 +933,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
         if (invertIfDark) {
           // Sample average luminance in the centre strip to decide whether
-          // to invert (dark background → white text → invert for OCR).
+          // to invert (dark background â†’ white text â†’ invert for OCR).
           int totalLum = 0;
           final sampleY = (grayscale.height * 0.4).round();
           final sampleH = (grayscale.height * 0.2)
@@ -1294,7 +950,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           }
         }
 
-        // Upscale — ML Kit accuracy improves significantly at ≥3x
+        // Upscale â€” ML Kit accuracy improves significantly at â‰¥3x
         final resized = img.copyResize(
           grayscale,
           width: (grayscale.width * scale).round(),
@@ -1326,7 +982,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         invertIfDark: true,
       );
 
-      // Focused centre strip — covers the core data rows of most receipts
+      // Focused centre strip â€” covers the core data rows of most receipts
       // (amount, reference, account) without the often-noisy header/footer.
       await addSegment(
         x: 0.0,
@@ -1558,7 +1214,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (lower.contains('gcash') || lower.contains('g-cash')) {
       return _WalletSelection.gcash;
     }
-    // Other wallets/banks — map to nearest supported selection if available
+    // Other wallets/banks â€” map to nearest supported selection if available
     if (lower.contains('shopeepay') ||
         lower.contains('shopee pay') ||
         lower.contains('seabank')) {
@@ -1581,12 +1237,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
     final candidates = <({double value, int score})>[];
 
-    // Amount pattern: matches with OR without thousands comma, 1–2 decimal places
+    // Amount pattern: matches with OR without thousands comma, 1â€“2 decimal places
     // e.g. 5.00 / 5,000.00 / 5.0
     const _decimalAmt = r'\d{1,3}(?:,\d{3})*\.\d{1,2}';
 
-    // 0a. Special OCR misread: -PI00.00 where ₱ → P and digit 1 → I
-    // When OCR reads ₱100.00 as PI00.00, the '1' is absorbed into 'I'
+    // 0a. Special OCR misread: -PI00.00 where â‚± â†’ P and digit 1 â†’ I
+    // When OCR reads â‚±100.00 as PI00.00, the '1' is absorbed into 'I'
     // So we detect -PI followed by 2+ digits and prepend '1'
     final piMisreadPattern = RegExp(
       r'-PI(\d{2,}\.\d{1,2})',
@@ -1601,9 +1257,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
     }
 
-    // 0. Simple minus+currency pattern first (catches -PI100.00, -P100.00, -₱100.00)
+    // 0. Simple minus+currency pattern first (catches -PI100.00, -P100.00, -â‚±100.00)
     final simpleMinusPattern = RegExp(
-      '-\\s*(?:pi|p|php|₱)?\\s*($_decimalAmt)',
+      '-\\s*(?:pi|p|php|â‚±)?\\s*($_decimalAmt)',
       caseSensitive: false,
     );
     for (final m in simpleMinusPattern.allMatches(flat)) {
@@ -1613,9 +1269,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
     }
 
-    // 1. Minus-prefixed currency (Maya format: -₱100.00)
+    // 1. Minus-prefixed currency (Maya format: -â‚±100.00)
     final minusCurrencyPattern = RegExp(
-      '-\\s*(?:php|₱|PI|P)\\s*($_decimalAmt)',
+      '-\\s*(?:php|â‚±|PI|P)\\s*($_decimalAmt)',
       caseSensitive: false,
     );
     for (final m in minusCurrencyPattern.allMatches(flat)) {
@@ -1625,10 +1281,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
     }
 
-    // 2. Currency prefix: PHP / ₱ / P, with or without commas
-    // Highest priority — e.g. PHP 100.00, ₱5.00, P5.00, ₱5,000.00, ₱ 5.00
+    // 2. Currency prefix: PHP / â‚± / P, with or without commas
+    // Highest priority â€” e.g. PHP 100.00, â‚±5.00, P5.00, â‚±5,000.00, â‚± 5.00
     final currencyPattern = RegExp(
-      '(?:php|₱|PI|(?<![a-zA-Z])P)\\s*($_decimalAmt)',
+      '(?:php|â‚±|PI|(?<![a-zA-Z])P)\\s*($_decimalAmt)',
       caseSensitive: false,
     );
     for (final m in currencyPattern.allMatches(flat)) {
@@ -1640,7 +1296,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
 
     // 2. Keyword label + value on the NEXT line (ML Kit splits label/value rows)
-    // e.g. line "Total Amount Sent" followed by line "₱5.00"
+    // e.g. line "Total Amount Sent" followed by line "â‚±5.00"
     final lineList = text.split(RegExp(r'[\r\n]+'));
     for (var i = 0; i < lineList.length - 1; i++) {
       final lineLower = lineList[i].toLowerCase().trim();
@@ -1668,13 +1324,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           lineLower.startsWith('net amount:') ||
           lineLower.startsWith('transaction amount:');
       if (isAmountLabel) {
-        // Check next 1–2 lines for the value
+        // Check next 1â€“2 lines for the value
         for (var j = i + 1; j <= i + 2 && j < lineList.length; j++) {
           final nextLine = lineList[j].trim();
           // Extract isolated decimal tokens so phone/reference digits
           // cannot be concatenated into a fake large amount.
           final nextLineAmountTokens = RegExp(
-            r'(?:php|₱|P)?\s*(\d{1,3}(?:,\d{3})*\.\d{1,2})',
+            r'(?:php|â‚±|P)?\s*(\d{1,3}(?:,\d{3})*\.\d{1,2})',
             caseSensitive: false,
           );
           for (final token in nextLineAmountTokens.allMatches(nextLine)) {
@@ -1689,9 +1345,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
 
     // 3. Keyword + amount on SAME line, allow currency symbol between them
-    // Handles: "Amount 5.00", "Total Amount Sent ₱5.00", "Amount: 5.00", "sent PHP 100.00"
+    // Handles: "Amount 5.00", "Total Amount Sent â‚±5.00", "Amount: 5.00", "sent PHP 100.00"
     final keywordSameLine = RegExp(
-      '(?:sent|total\\s+amount\\s+sent|transaction\\s+amount|grand\\s+total|net\\s+amount|total\\s+amount|subtotal|total|amount|payment|paid|charge|price|fee)\\s{0,4}[:\\-]?\\s{0,4}(?:php|₱|P)?\\s{0,2}(\\d{1,3}(?:,\\d{3})*\\.\\d{1,2})',
+      '(?:sent|total\\s+amount\\s+sent|transaction\\s+amount|grand\\s+total|net\\s+amount|total\\s+amount|subtotal|total|amount|payment|paid|charge|price|fee)\\s{0,4}[:\\-]?\\s{0,4}(?:php|â‚±|P)?\\s{0,2}(\\d{1,3}(?:,\\d{3})*\\.\\d{1,2})',
       caseSensitive: false,
     );
     for (final m in keywordSameLine.allMatches(flat)) {
@@ -1701,7 +1357,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
     }
 
-    // 4. Comma-formatted amount anywhere (e.g. 5,000.00) — still reliable signal
+    // 4. Comma-formatted amount anywhere (e.g. 5,000.00) â€” still reliable signal
     final commaFormatted = RegExp(r'\b(\d{1,3}(?:,\d{3})+\.\d{1,2})\b');
     for (final m in commaFormatted.allMatches(flat)) {
       final parsed = _parseAmountToken(m.group(1));
@@ -1796,7 +1452,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   ({String? value, _FieldConfidence confidence}) _extractLikelyAccountNumber(
     String text,
   ) {
-    // 0. Prioritize "Destination:" label — Maya "Sent money" receipts show
+    // 0. Prioritize "Destination:" label â€” Maya "Sent money" receipts show
     //    Source (user's own wallet) then Destination (recipient). We want Destination.
     final destinationPattern = RegExp(
       r'destination[:\s]+(\+?6?3?9\d{2}[\s-]?\d{3}[\s-]?\d{4}|0?9\d{9})',
@@ -1811,7 +1467,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
     }
 
-    // Detect Source number — OCR reads two-column layouts with labels first, values later.
+    // Detect Source number â€” OCR reads two-column layouts with labels first, values later.
     // Source is the user's own wallet; we want to skip it and pick the Destination instead.
     // Match the spaced phone that appears near/after 'My Wallet' or 'Source' keyword.
     final sourceNumPattern = RegExp(
@@ -1881,7 +1537,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     // 4. Contextual keyword search (use raw text to keep keywords intact)
     // Handles SMS format: "sent PHP 100.00 to +639101706761"
     final contextualPattern = RegExp(
-      r'(?:mobile|account|number|recipient|to|from|sent\s+(?:php|₱)?\s*[\d.]+\s+to)[^0-9]{0,20}(\+?6?3?9\d{2}[\s-]?\d{3}[\s-]?\d{4}|0?9\d{9})',
+      r'(?:mobile|account|number|recipient|to|from|sent\s+(?:php|â‚±)?\s*[\d.]+\s+to)[^0-9]{0,20}(\+?6?3?9\d{2}[\s-]?\d{3}[\s-]?\d{4}|0?9\d{9})',
       caseSensitive: false,
     );
     final contextMatch = contextualPattern.firstMatch(text);
@@ -2047,13 +1703,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     // Collect all digit groups after any ref keyword, allowing spaces within the number
     // Handles: "Ref No. 2039 688 926688", "Ref No. 2039688926688", "Ref. No. 2040543627864", "Reference: ABC123"
 
-    // Maya format: "Reference ID 1D6D BA77 DA29" — on the same or next line
+    // Maya format: "Reference ID 1D6D BA77 DA29" â€” on the same or next line
     // Fix: do NOT use \s in capture group (it eats newlines and grabs wrong content).
     // Try same-line first, then next-line variant.
     debugPrint('[Reference] Looking for Maya Reference ID pattern...');
 
     // 1a. Standalone Maya-style reference: 4-char groups separated by spaces e.g. "1D6D BA77 DA29"
-    //     Look for this FIRST anywhere in the text — it's the most distinctive pattern.
+    //     Look for this FIRST anywhere in the text â€” it's the most distinctive pattern.
     final mayaStandalonePattern = RegExp(
       r'\b([A-Z0-9]{4} [A-Z0-9]{4} [A-Z0-9]{4})\b',
       caseSensitive: false,
@@ -2184,7 +1840,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     for (final longMatch in longDigits.allMatches(text)) {
       final value = longMatch.group(1)!;
 
-      // Skip phone number patterns: 10–13 digits, or starts with 63/09, or contains typical phone spacing
+      // Skip phone number patterns: 10â€“13 digits, or starts with 63/09, or contains typical phone spacing
       final isPhonePatternStart =
           value.startsWith('0') ||
           value.startsWith('63') ||
@@ -2209,7 +1865,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
     }
 
-    // Standalone mixed alphanumeric token (letters + digits, 9–15 chars)
+    // Standalone mixed alphanumeric token (letters + digits, 9â€“15 chars)
     // This catches Maya reference IDs like "1D6DBA77DA29" that OCR places anywhere
     // in the text due to two-column layout scrambling (not adjacent to "Reference ID").
     // Rules: must contain both letters and digits, not be a phone number, not a known word.
@@ -2244,7 +1900,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   ) {
     // Maya QR Ph "Purchased from" receipts: merchant name is the short label
     // that appears right after the amount line (e.g. "JNT", "JOLLIBEE").
-    // In OCR it appears as: "-₱220.00\nJNT\nFeb 27, 2026..."
+    // In OCR it appears as: "-â‚±220.00\nJNT\nFeb 27, 2026..."
     final purchasedFromTitle = RegExp(
       r'purchased\s+from',
       caseSensitive: false,
@@ -2253,7 +1909,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       // OCR often reads amount + name on the SAME line: "-P220.00 JNT Paid using..."
       // Extract the short merchant name between the amount and "Paid using" / "You may".
       final sameLinePattern = RegExp(
-        r'[-–]\s*[₱P]\s*[\d,]+\.?\d*\s+([A-Z0-9][A-Z0-9&\.]{0,29}(?:\s+[A-Z0-9&\.]{1,20}){0,3}?)\s+(?:Paid\s+using|You\s+may)',
+        r'[-â€“]\s*[â‚±P]\s*[\d,]+\.?\d*\s+([A-Z0-9][A-Z0-9&\.]{0,29}(?:\s+[A-Z0-9&\.]{1,20}){0,3}?)\s+(?:Paid\s+using|You\s+may)',
         caseSensitive: false,
       );
       final sameLineMatch = sameLinePattern.firstMatch(text);
@@ -2288,8 +1944,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       for (var i = 0; i < lines.length - 1; i++) {
         final line = lines[i].trim();
         final nextLine = lines[i + 1].trim();
-        // Amount line: starts with - and contains ₱ or P followed by digits
-        final isAmountLine = RegExp(r'^[-–]\s*[₱P]?\s*\d').hasMatch(line);
+        // Amount line: starts with - and contains â‚± or P followed by digits
+        final isAmountLine = RegExp(r'^[-â€“]\s*[â‚±P]?\s*\d').hasMatch(line);
         if (isAmountLine && nextLine.isNotEmpty && nextLine.length <= 50) {
           // Next line after amount = merchant name (short label like "JNT")
           final isDate = RegExp(
@@ -2318,8 +1974,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       final hasPhoneNext = RegExp(r'\+?63|09\d{2}').hasMatch(nextLine);
 
       // Skip lines that contain currency symbols or look like amounts
-      final hasCurrency = RegExp(r'[₱P\-][\s]?\d').hasMatch(line);
-      final looksLikeAmount = line.contains(RegExp(r'^\s*[-₱PI]'));
+      final hasCurrency = RegExp(r'[â‚±P\-][\s]?\d').hasMatch(line);
+      final looksLikeAmount = line.contains(RegExp(r'^\s*[-â‚±PI]'));
 
       // Skip known Maya/wallet UI labels that are not real names
       final isUiLabel = RegExp(
@@ -2347,7 +2003,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     // SMS format: "sent PHP 100.00 to JO*E A. +639101706761"
     // Pattern: after "to" (or "sent to"), grab text before the phone number
     final toPattern = RegExp(
-      r'(?:sent\s+(?:php|₱)?[\d.\s]+)?to\s+([A-Za-z\s\.\*\-]+?)(?:\s+\+?63|\s+09)',
+      r'(?:sent\s+(?:php|â‚±)?[\d.\s]+)?to\s+([A-Za-z\s\.\*\-]+?)(?:\s+\+?63|\s+09)',
       caseSensitive: false,
     );
     final toMatch = toPattern.firstMatch(text);
@@ -2420,39 +2076,28 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return (value: null, confidence: _FieldConfidence.unknown);
   }
 
-  int? _pickBestTransactionTypeId(_ReceiptDraft draft) {
-    if (_transactionTypes.isEmpty) {
-      return null;
-    }
-
-    int? bestId;
+  String? _pickBestTypeKey(_ReceiptDraft draft) {
+    String? bestKey;
     var bestScore = -1;
-    for (final type in _transactionTypes) {
+    for (final type in FixedTransactionType.all) {
       var score = 0;
       if (draft.walletSelection != null) {
-        final typeWallet = type.walletAccount.toLowerCase().contains('maya')
-            ? _WalletSelection.maya
-            : _WalletSelection.gcash;
-        if (typeWallet == draft.walletSelection) {
-          score += 3;
-        }
+        final typeIsGcash = type.wallet == 'GCash';
+        final draftIsGcash = draft.walletSelection == _WalletSelection.gcash;
+        if (typeIsGcash == draftIsGcash) score += 3;
       }
       if (draft.flowDirection != null) {
         final typeFlow = type.isOutflow
             ? _FlowDirection.outflow
             : _FlowDirection.inflow;
-        if (typeFlow == draft.flowDirection) {
-          score += 4;
-        }
+        if (typeFlow == draft.flowDirection) score += 4;
       }
-
       if (score > bestScore) {
         bestScore = score;
-        bestId = type.id;
+        bestKey = type.key;
       }
     }
-
-    return bestScore >= 4 ? bestId : null;
+    return bestScore >= 4 ? bestKey : null;
   }
 
   String _formatScannedAmountForInput(double amount) {
@@ -2491,16 +2136,35 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   /// Builds a short plain-English note summarising the receipt scan result.
   String _buildReceiptNote(_ReceiptDraft draft) {
-    final parts = <String>[];
+    final segments = <String>[];
+
     final date = draft.rawOcrPreview != null
         ? _extractReceiptDate(draft.rawOcrPreview!)
         : null;
-    if (date != null) parts.add('Transaction on $date');
-    if (draft.walletLabel != null) parts.add('via ${draft.walletLabel}');
-    if (draft.accountName != null) parts.add('to ${draft.accountName}');
-    if (draft.accountNumber != null) parts.add('(${draft.accountNumber})');
-    if (draft.reference != null) parts.add('Ref: ${draft.reference}');
-    return parts.join(' ');
+    if (date != null) segments.add('Transaction on $date');
+
+    if (draft.walletLabel != null) segments.add('via ${draft.walletLabel}');
+
+    if (draft.amount != null && draft.amount!.isFinite && draft.amount! > 0) {
+      segments.add('for ₱${draft.amount!.toStringAsFixed(2)}');
+    }
+
+    // Build party segment: combine name + number cleanly
+    if (draft.accountName != null && draft.accountNumber != null) {
+      segments.add('to ${draft.accountName} (${draft.accountNumber})');
+    } else if (draft.accountName != null) {
+      segments.add('to ${draft.accountName}');
+    } else if (draft.accountNumber != null) {
+      segments.add('account ${draft.accountNumber}');
+    }
+
+    if (draft.reference != null) segments.add('Ref: ${draft.reference}');
+
+    if (segments.isEmpty) return '';
+
+    // Join with commas; capitalise first letter of result
+    final joined = segments.join(', ');
+    return joined[0].toUpperCase() + joined.substring(1);
   }
 
   Future<bool> _confirmReceiptAutofill(_ReceiptDraft draft) async {
@@ -2550,7 +2214,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   ),
                 ),
               const SizedBox(height: 14),
-              if (noteText.isNotEmpty) ...[
+              if (noteText.length > 10) ...[
+                // guard trivial/empty notes
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
@@ -2561,12 +2226,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Note that will be added:',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.edit_note_rounded,
+                            size: 14,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Note that will be added:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -2651,7 +2326,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '$name — Verified account record found',
+              '$name â€” Verified account record found',
               style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.secondary,
@@ -2743,21 +2418,24 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           const SizedBox(height: 16),
           _buildPreviewRow(
             'Service Fee Mode',
-            _chargeHandlingMode == _ChargeHandlingMode.addOnTop
+            _effectiveChargeHandlingMode == _ChargeHandlingMode.addOnTop
                 ? 'Fee charged to customer'
                 : 'Fee taken from amount sent',
           ),
           const SizedBox(height: 4),
           _buildPreviewRow('Using Wallet', _selectedWalletAccount),
           const SizedBox(height: 4),
-          _buildPreviewRow('Service Fee', '₱ ${_chargeFee.toStringAsFixed(2)}'),
+          _buildPreviewRow(
+            'Service Fee',
+            '$_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
+          ),
           const SizedBox(height: 4),
           _buildPreviewRow('Fee Goes To', _chargeDestinationAccount),
           if (_matchedChargeBracket != null) ...[
             const SizedBox(height: 4),
             _buildPreviewRow(
               'Fee Bracket',
-              '₱ ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} – ₱ ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
+              '$_pesoLabel ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} - $_pesoLabel ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
             ),
           ],
           const SizedBox(height: 4),
@@ -2765,7 +2443,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             _isOutflowSelection
                 ? 'E-money Received from Customer'
                 : 'E-money You Send to Customer',
-            '₱ ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
+            '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
             _selectedWalletColor,
           ),
           if (_enteredAmount > 0 && _matchedChargeBracket == null) ...[
@@ -2793,7 +2471,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                '₱ ${_totalCollected.toStringAsFixed(2)}',
+                '$_pesoLabel ${_totalCollected.toStringAsFixed(2)}',
 
                 style: const TextStyle(
                   fontSize: 16,
@@ -2830,7 +2508,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ],
               ),
               Text(
-                '₱ ${_netCashToDrawer.toStringAsFixed(2)}',
+                '$_pesoLabel ${_netCashToDrawer.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -2841,9 +2519,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            _chargeHandlingMode == _ChargeHandlingMode.addOnTop
-                ? 'Service fee is added on top. Example: ₱100 transaction + ₱5 fee = collect ₱105 from customer, send ₱100.'
-                : 'Fee is deducted before sending. Example: ₱100 entered, ₱5 fee deducted = only ₱95 is sent to the customer\'s wallet.',
+            _effectiveChargeHandlingMode == _ChargeHandlingMode.addOnTop
+                ? 'Service fee is added on top. Example: ${_pesoLabel}100 transaction + ${_pesoLabel}5 fee = collect ${_pesoLabel}105 from customer, send ${_pesoLabel}100.'
+                : 'Fee is deducted before sending. Example: ${_pesoLabel}100 entered, ${_pesoLabel}5 fee deducted = only ${_pesoLabel}95 is sent to the customer\'s wallet.',
             style: TextStyle(
               fontSize: 11,
               color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
@@ -2943,7 +2621,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           SizedBox(width: 6),
           Expanded(
             child: Text(
-              'No fee range set for this amount. Fee shown as ₱0. Create a fee range first.',
+              'No fee range set for this amount. Fee shown as â‚±0. Create a fee range first.',
               style: TextStyle(
                 fontSize: 11,
                 color: AppColors.error,
@@ -3167,7 +2845,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const ChargesScreen(launchedFromTransaction: true),
+        builder: (_) => ChargesScreen(
+          launchedFromTransaction: true,
+          initialTypeKey: _selectedTypeKey,
+        ),
       ),
     );
 
@@ -3198,14 +2879,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   Future<void> _runSaveTransaction() async {
     final accountNumber = _accountController.text.trim();
     final principal = double.tryParse(_principalController.text.trim()) ?? 0;
-
-    if (_selectedTransactionType == null) {
-      _showMessage(
-        'Transaction type is required before saving.',
-        isError: true,
-      );
-      return;
-    }
 
     if (accountNumber.isEmpty) {
       _showMessage('Account number is required before saving.', isError: true);
@@ -3250,13 +2923,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         : gcashBalance;
     final sourceLabel = isOutflow ? 'On-hand Cash' : selectedWalletAccount;
     final requiredSourceAmount =
-        _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount
+        _effectiveChargeHandlingMode ==
+            _ChargeHandlingMode.deductFromEnteredAmount
         ? _enteredAmount - _chargeFee
         : _enteredAmount;
     final available = isOutflow ? onHandBalance : selectedWalletBalance;
     if (requiredSourceAmount > available) {
       _showMessage(
-        'Insufficient $sourceLabel balance. Available: ₱ ${available.toStringAsFixed(2)}',
+        'Insufficient $sourceLabel balance. Available: â‚± ${available.toStringAsFixed(2)}',
         isError: true,
       );
       return;
@@ -3336,13 +3010,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return false;
     }
 
-    final selectedType = _selectedTransactionType?.name.trim();
+    final selectedType = FixedTransactionType.forKey(_selectedTypeKey).label;
     final isOutflow = _isOutflowSelection;
     final walletAccount = _selectedWalletAccount;
     final usesMayaWallet = walletAccount == 'Maya Wallet';
     final amount = _enteredAmount;
     final isDeductFromAmount =
-        _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount;
+        _effectiveChargeHandlingMode ==
+        _ChargeHandlingMode.deductFromEnteredAmount;
 
     // Inflow (Cash In):  store sends e-money to customer, receives cash.
     //   wallet decreases, on-hand increases (all cash goes to on-hand).
@@ -3370,21 +3045,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final now = DateTime.now();
     final reference = referenceText.isNotEmpty ? referenceText : accountNumber;
     final iconKey = isOutflow ? 'cash_out' : 'cash_in';
-    final title = (selectedType != null && selectedType.isNotEmpty)
-        ? selectedType
-        : _defaultTransactionTitle;
+    final title = selectedType;
     final noteBase = notes.isEmpty
-        ? 'Account $accountNumber • ${_matchedParty!.name}'
+        ? 'Account $accountNumber \u2022 ${_matchedParty!.name}'
         : notes;
+    // Transaction note shows only wallet flow (no fee breakdown)
     final persistedNote =
-        '$noteBase • $_selectedFlowLabel • Wallet ${selectedWalletDelta >= 0 ? 'increased' : 'decreased'} by ₱${selectedWalletDelta.abs().toStringAsFixed(2)} • On-hand ${onHandDelta >= 0 ? 'increased' : 'decreased'} by ₱${onHandDelta.abs().toStringAsFixed(2)} • Fee ₱${chargeFee.toStringAsFixed(2)} • Fee goes to $_chargeDestinationAccount';
+        '$noteBase \u2022 $_selectedFlowLabel \u2022 Wallet ${selectedWalletDelta >= 0 ? 'increased' : 'decreased'} by \u20b1${selectedWalletDelta.abs().toStringAsFixed(2)} \u2022 On-hand ${onHandDelta >= 0 ? 'increased' : 'decreased'} by \u20b1${onHandDelta.abs().toStringAsFixed(2)}';
 
     final db = await _database.database;
     try {
       await _database.ensureWalletSchema(db);
       final deviceId = await _database.getOrCreateDeviceId();
       final nowMs = now.millisecondsSinceEpoch;
-      await db.insert(AppDatabase.ledgerTable, {
+      final transactionId = await db.insert(AppDatabase.ledgerTable, {
         'entry_type': 'transaction',
         'title': title,
         'note': persistedNote,
@@ -3404,6 +3078,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         AppDatabase.isDirtyColumn: 1,
         'created_at': now.toIso8601String(),
       });
+
+      // Save fee as separate record if fee exists
+      if (chargeFee > 0) {
+        await db.insert(AppDatabase.feeTransactionsTable, {
+          'related_transaction_id': transactionId,
+          'fee_amount': chargeFee,
+          'fee_type': title,
+          'charge_destination': _chargeDestinationAccount,
+          AppDatabase.syncIdColumn: AppDatabase.generateSyncId('fee'),
+          AppDatabase.deviceIdColumn: deviceId,
+          AppDatabase.updatedAtMsColumn: nowMs,
+          AppDatabase.isDeletedColumn: 0,
+          AppDatabase.isDirtyColumn: 1,
+          'created_at': now.toIso8601String(),
+        });
+      }
+
       return true;
     } on Exception catch (error, stackTrace) {
       debugPrint('Failed to save transaction record: $error\n$stackTrace');
@@ -3620,561 +3311,6 @@ class _ReceiptDraft {
   }
 }
 
-class _UpsertTransactionTypeDialog extends StatefulWidget {
-  const _UpsertTransactionTypeDialog({
-    required this.existingTypes,
-    this.initialName,
-    this.initialIsOutflow,
-    this.initialWalletSelection,
-  });
-
-  final List<TransactionTypeRecord> existingTypes;
-  final String? initialName;
-  final bool? initialIsOutflow;
-  final _WalletSelection? initialWalletSelection;
-
-  @override
-  State<_UpsertTransactionTypeDialog> createState() =>
-      _UpsertTransactionTypeDialogState();
-}
-
-class _UpsertTransactionTypeDialogState
-    extends State<_UpsertTransactionTypeDialog> {
-  String? _selectedPreset;
-  late bool _isOutflow;
-  late _WalletSelection _walletSelection;
-  String? _errorText;
-
-  static const Map<_WalletSelection, Map<bool, List<String>>> _presets = {
-    _WalletSelection.gcash: {
-      false: [
-        'GCash Cash-In',
-        'Cash In from Bank',
-        'Cash In via Partner',
-        'Payment Received',
-        'Bills Payment',
-        'Load Purchase / E-Load',
-        'Bank Transfer',
-      ],
-      true: ['GCash Cash-Out'],
-    },
-    _WalletSelection.maya: {
-      false: ['Maya Cash-In', 'Bank Transfer', 'Pay Bills', 'Load / Prepaid'],
-      true: ['Maya Cash-Out'],
-    },
-  };
-
-  List<String> get _currentPresets => _presets[_walletSelection]![_isOutflow]!;
-
-  bool get _isEditing => widget.initialName != null;
-
-  @override
-  void initState() {
-    super.initState();
-    _isOutflow = widget.initialIsOutflow ?? false;
-    _walletSelection = widget.initialWalletSelection ?? _WalletSelection.gcash;
-    _selectedPreset = widget.initialName;
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  void _onSave() {
-    if (_selectedPreset == null || _selectedPreset!.trim().isEmpty) {
-      setState(() {
-        _errorText = 'Please select a transaction type.';
-      });
-      return;
-    }
-
-    final raw = _selectedPreset!.trim();
-    final normalizedName = raw.toLowerCase();
-    final initialNameLower = (widget.initialName ?? '').trim().toLowerCase();
-    final initialIsOutflow = widget.initialIsOutflow ?? false;
-    final initialWallet =
-        widget.initialWalletSelection ?? _WalletSelection.gcash;
-
-    final hasExactDuplicate = widget.existingTypes.any((type) {
-      final typeNameLower = type.name.trim().toLowerCase();
-      final typeWallet = type.walletAccount.toLowerCase().contains('maya')
-          ? _WalletSelection.maya
-          : _WalletSelection.gcash;
-
-      final isSameAsEditedOriginal =
-          _isEditing &&
-          typeNameLower == initialNameLower &&
-          type.isOutflow == initialIsOutflow &&
-          typeWallet == initialWallet;
-      if (isSameAsEditedOriginal) {
-        return false;
-      }
-
-      return typeNameLower == normalizedName &&
-          type.isOutflow == _isOutflow &&
-          typeWallet == _walletSelection;
-    });
-
-    if (hasExactDuplicate) {
-      setState(() {
-        _errorText =
-            'This type name already exists for the same direction and wallet.';
-      });
-      return;
-    }
-
-    Navigator.of(context).pop(
-      _TransactionTypeDraft(
-        name: raw,
-        isOutflow: _isOutflow,
-        walletSelection: _walletSelection,
-      ),
-    );
-  }
-
-  void _setOutflow(bool value) {
-    setState(() {
-      _isOutflow = value;
-      _selectedPreset = null;
-      _errorText = null;
-    });
-  }
-
-  void _setWalletSelection(_WalletSelection value) {
-    setState(() {
-      _walletSelection = value;
-      _selectedPreset = null;
-      _errorText = null;
-    });
-  }
-
-  Widget _buildFlowOption({
-    required String label,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: Material(
-        color: selected
-            ? color.withValues(alpha: 0.12)
-            : AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selected
-                    ? color.withValues(alpha: 0.45)
-                    : AppColors.outlineVariant.withValues(alpha: 0.45),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      icon,
-                      size: 18,
-                      color: selected ? color : AppColors.onSurfaceVariant,
-                    ),
-                    const Spacer(),
-                    if (selected)
-                      Icon(Icons.check_circle_rounded, size: 18, color: color),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: selected ? color : AppColors.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      scrollable: true,
-      backgroundColor: AppColors.surfaceContainerLowest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      titlePadding: EdgeInsets.zero,
-      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      title: Container(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.06),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.category_outlined,
-                color: AppColors.primary,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                _isEditing ? 'Edit Transaction Type' : 'Add Transaction Type',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 16),
-          Builder(
-            builder: (context) {
-              final presets = _currentPresets;
-              final items = <String>[...presets];
-              // When editing, keep the original name in the list even if it
-              // doesn't match the current preset catalogue (legacy value).
-              if (_selectedPreset != null && !items.contains(_selectedPreset)) {
-                items.insert(0, _selectedPreset!);
-              }
-              return DropdownButtonFormField<String>(
-                value: _selectedPreset,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  hintText: 'Select a transaction type',
-                  errorText: _errorText,
-                  filled: true,
-                  fillColor: AppColors.surfaceContainerLow,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                items: items
-                    .map(
-                      (name) => DropdownMenuItem(
-                        value: name,
-                        child: Text(name, overflow: TextOverflow.ellipsis),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedPreset = value;
-                    _errorText = null;
-                  });
-                },
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Transaction Direction',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _buildFlowOption(
-                label: 'Customer Sends',
-                subtitle:
-                    'Customer gives you cash, you send e-money to their wallet.',
-                icon: Icons.call_made_rounded,
-                color: AppColors.secondary,
-                selected: !_isOutflow,
-                onTap: () => _setOutflow(false),
-              ),
-              const SizedBox(width: 10),
-              _buildFlowOption(
-                label: 'Customer Receives',
-                subtitle:
-                    'Customer receives cash from you, you get e-money from their wallet.',
-                icon: Icons.call_received_rounded,
-                color: AppColors.error,
-                selected: _isOutflow,
-                onTap: () => _setOutflow(true),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Use Which Wallet',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _buildFlowOption(
-                label: 'GCash',
-                subtitle: 'This transaction goes through GCash.',
-                icon: Icons.account_balance_wallet_outlined,
-                color: AppColors.primary,
-                selected: _walletSelection == _WalletSelection.gcash,
-                onTap: () => _setWalletSelection(_WalletSelection.gcash),
-              ),
-              const SizedBox(width: 10),
-              _buildFlowOption(
-                label: 'Maya',
-                subtitle: 'This transaction goes through Maya.',
-                icon: Icons.wallet_rounded,
-                color: AppColors.secondary,
-                selected: _walletSelection == _WalletSelection.maya,
-                onTap: () => _setWalletSelection(_WalletSelection.maya),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Choosing this type will automatically set direction to ${_isOutflow ? 'Customer Receives' : 'Customer Sends'} via ${_walletSelection == _WalletSelection.maya ? 'Maya Wallet' : 'GCash'}.',
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(height: 4),
-        ],
-      ),
-      actions: [
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: AppColors.outlineVariant),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: _onSave,
-                child: Text(_isEditing ? 'Update' : 'Save'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _ManageTransactionTypesDialog extends StatelessWidget {
-  const _ManageTransactionTypesDialog({
-    required this.types,
-    required this.selectedTypeId,
-  });
-
-  final List<TransactionTypeRecord> types;
-  final int? selectedTypeId;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.surfaceContainerLowest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      titlePadding: EdgeInsets.zero,
-      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      title: Container(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.06),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.tune_rounded,
-                color: AppColors.primary,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Manage Transaction Types',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
-              ),
-            ),
-          ],
-        ),
-      ),
-      content: SizedBox(
-        width: 420,
-        child: ListView.separated(
-          shrinkWrap: true,
-          itemCount: types.length,
-          separatorBuilder: (_, __) => const Divider(height: 12),
-          itemBuilder: (context, index) {
-            final type = types[index];
-            final isSelected = type.id == selectedTypeId;
-            return Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        type.name,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${type.isOutflow ? 'Outflow' : 'Inflow'} • ${type.walletAccount.toLowerCase().contains('maya') ? 'Maya Wallet' : 'GCash'}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: type.isOutflow
-                              ? AppColors.error
-                              : AppColors.secondary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Edit',
-                  onPressed: () {
-                    Navigator.of(context).pop(
-                      _TypeActionPayload(action: _TypeAction.edit, type: type),
-                    );
-                  },
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                ),
-                IconButton(
-                  tooltip: 'Delete',
-                  onPressed: () {
-                    Navigator.of(context).pop(
-                      _TypeActionPayload(
-                        action: _TypeAction.delete,
-                        type: type,
-                      ),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.delete_outline_rounded,
-                    size: 18,
-                    color: AppColors.error,
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-      actions: [
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              side: const BorderSide(color: AppColors.outlineVariant),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TransactionTypeDraft {
-  const _TransactionTypeDraft({
-    required this.name,
-    required this.isOutflow,
-    required this.walletSelection,
-  });
-
-  final String name;
-  final bool isOutflow;
-  final _WalletSelection walletSelection;
-}
-
-enum _TypeAction { edit, delete }
-
-class _TypeActionPayload {
-  const _TypeActionPayload({required this.action, required this.type});
-
-  final _TypeAction action;
-  final TransactionTypeRecord type;
-}
-
 class _PartyContactPickerSheet extends StatefulWidget {
   const _PartyContactPickerSheet({
     required this.parties,
@@ -4382,14 +3518,6 @@ class _PartyPickerEmptyState extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Extracted StatefulWidget for party registration dialog.
-// Using a proper StatefulWidget ensures that `mounted` and `setState` are
-// reliably tied to this widget's own element — avoiding the RenderObject
-// 'attached' assertion that occurs when StatefulBuilder's setState is called
-// after an async gap during dialog overlay transitions.
-// ---------------------------------------------------------------------------
-
 class _PartyRegistrationDialog extends StatefulWidget {
   const _PartyRegistrationDialog({
     required this.prefilledAccountNumber,
@@ -4471,7 +3599,6 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
       return;
     }
 
-    // Pop and return the registered account number to the caller.
     Navigator.of(context).pop(accountNumber);
   }
 
@@ -4596,7 +3723,7 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
                         size: 16,
                         color: Colors.white,
                       ),
-                label: Text(_isSaving ? 'Saving…' : 'Register Party'),
+                label: Text(_isSaving ? 'Saving\u2026' : 'Register Party'),
               ),
             ),
           ],

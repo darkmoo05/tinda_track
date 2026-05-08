@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/data/app_database.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import 'data/charge_repository.dart';
 
 class ChargesScreen extends StatefulWidget {
-  const ChargesScreen({super.key, this.launchedFromTransaction = false});
+  const ChargesScreen({
+    super.key,
+    this.launchedFromTransaction = false,
+    this.initialTypeKey,
+  });
 
   final bool launchedFromTransaction;
+  final String? initialTypeKey;
 
   @override
   State<ChargesScreen> createState() => _ChargesScreenState();
@@ -20,10 +26,13 @@ class _ChargesScreenState extends State<ChargesScreen> {
   final _upperBoundController = TextEditingController();
   final _chargeAmountController = TextEditingController();
   final ChargeRepository _chargeRepository = ChargeRepository.instance;
+  late String _selectedTypeKey;
 
   @override
   void initState() {
     super.initState();
+    _selectedTypeKey =
+        widget.initialTypeKey ?? FixedTransactionType.all.first.key;
     _chargeRepository.ensureLoaded();
   }
 
@@ -37,6 +46,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedType = FixedTransactionType.forKey(_selectedTypeKey);
     return Scaffold(
       key: _scaffoldKey,
       drawer: const AppSideDrawer(),
@@ -82,17 +92,180 @@ class _ChargesScreenState extends State<ChargesScreen> {
         padding: const EdgeInsets.all(24),
         children: [
           _buildPageHeader(context),
+          const SizedBox(height: 20),
+          _buildTypeSelector(selectedType),
           const SizedBox(height: 24),
           _buildAddBracketCard(context),
           const SizedBox(height: 24),
           ValueListenableBuilder<List<ChargeBracketRecord>>(
             valueListenable: _chargeRepository.brackets,
             builder: (context, brackets, child) {
-              return _buildActiveBracketsSection(context, brackets);
+              final filtered = brackets
+                  .where((b) => b.transactionTypeKey == _selectedTypeKey)
+                  .toList();
+              return _buildActiveBracketsSection(context, filtered);
             },
           ),
           const SizedBox(height: 100),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTypeSelector(FixedTransactionType selectedType) {
+    final walletPrefix = _selectedTypeKey.startsWith('maya') ? 'maya' : 'gcash';
+    final service = _selectedTypeKey.replaceFirst('${walletPrefix}_', '');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Configure Fees For',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildWalletToggle(
+                'gcash',
+                'GCash',
+                AppColors.primary,
+                walletPrefix == 'gcash',
+                Icons.account_balance_wallet_outlined,
+                service,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildWalletToggle(
+                'maya',
+                'Maya Wallet',
+                AppColors.secondary,
+                walletPrefix == 'maya',
+                Icons.wallet_rounded,
+                service,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _buildServiceChip('cashin', 'Cash-In', service, walletPrefix),
+            const SizedBox(width: 6),
+            _buildServiceChip('cashout', 'Cash-Out', service, walletPrefix),
+            const SizedBox(width: 6),
+            _buildServiceChip('load', 'Load', service, walletPrefix),
+            const SizedBox(width: 6),
+            _buildServiceChip('paybills', 'Pay Bills', service, walletPrefix),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWalletToggle(
+    String prefix,
+    String label,
+    Color color,
+    bool selected,
+    IconData icon,
+    String currentService,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTypeKey = '${prefix}_$currentService';
+          _lowerBoundController.clear();
+          _upperBoundController.clear();
+          _chargeAmountController.clear();
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.12)
+              : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? color.withValues(alpha: 0.45)
+                : AppColors.outlineVariant.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? color : AppColors.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: selected ? color : AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServiceChip(
+    String service,
+    String label,
+    String currentService,
+    String walletPrefix,
+  ) {
+    final selected = currentService == service;
+    final color = walletPrefix == 'maya'
+        ? AppColors.secondary
+        : AppColors.primary;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedTypeKey = '${walletPrefix}_$service';
+            _lowerBoundController.clear();
+            _upperBoundController.clear();
+            _chargeAmountController.clear();
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? color.withValues(alpha: 0.12)
+                : AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? color.withValues(alpha: 0.45)
+                  : AppColors.outlineVariant.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: selected ? color : AppColors.onSurfaceVariant,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -110,7 +283,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Configure service fee structures and monitor architectural fund flows.',
+          'Set service fee brackets for each transaction type separately.',
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(color: AppColors.onSurfaceVariant),
@@ -417,6 +590,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
       lowerBound: lowerBound,
       upperBound: upperBound,
       chargeAmount: chargeAmount,
+      transactionTypeKey: _selectedTypeKey,
     );
 
     if (!mounted) {

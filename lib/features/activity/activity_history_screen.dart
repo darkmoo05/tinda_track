@@ -1021,6 +1021,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             createdAt: DateTime.parse(row['created_at'] as String),
             ownerMovementType: row['owner_movement_type'] as String?,
             onHandDelta: (row['on_hand_delta'] as num?)?.toDouble() ?? 0,
+            walletDelta: (row['wallet_delta'] as num?)?.toDouble() ?? 0,
+            mayaWalletDelta:
+                (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0,
             chargeAmount: _extractChargeAmountFromNote(note),
             chargeDestinationKey: _extractChargeDestinationKeyFromNote(note),
           );
@@ -1860,25 +1863,23 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       return item.amount;
     }
 
-    final destinationKey = item.chargeDestinationKey;
-    final isOnHandPerspective = _selectedWalletFilter == 'on_hand';
-    final walletKey = _normalizeWalletKey(item.walletAccount);
-    final shouldExcludeCharge = isOnHandPerspective
-        ? item.chargeAmount > 0 &&
-              destinationKey != null &&
-              destinationKey.isNotEmpty &&
-              destinationKey != 'on_hand'
-        : item.chargeAmount > 0 &&
-              destinationKey != null &&
-              destinationKey.isNotEmpty &&
-              destinationKey != walletKey;
+    // Use the actual delta columns to derive the net transaction amount
+    // (excluding the store's service fee).
+    //
+    // For cash-in: wallet/maya delta is smaller (fee kept as on-hand)
+    // For cash-out: on-hand delta is smaller (fee kept from wallet)
+    // In both cases, the net amount = min(abs(walletOrMaya), abs(onHand)).
+    final walletOrMayaAbs = item.walletDelta != 0
+        ? item.walletDelta.abs()
+        : item.mayaWalletDelta.abs();
+    final onHandAbs = item.onHandDelta.abs();
 
-    if (!shouldExcludeCharge) {
-      return item.amount;
+    if (walletOrMayaAbs > 0 && onHandAbs > 0) {
+      return walletOrMayaAbs < onHandAbs ? walletOrMayaAbs : onHandAbs;
     }
 
-    final adjustedAmount = item.amount - item.chargeAmount;
-    return adjustedAmount > 0 ? adjustedAmount : 0;
+    // Fallback for edge cases (zero-fee or partial data).
+    return item.amount;
   }
 
   IconData _iconFor(String iconKey) {
@@ -1937,6 +1938,8 @@ class _HistoryRow {
     required this.iconKey,
     required this.createdAt,
     required this.onHandDelta,
+    required this.walletDelta,
+    required this.mayaWalletDelta,
     required this.chargeAmount,
     required this.chargeDestinationKey,
     this.accountNumber,
@@ -1956,6 +1959,8 @@ class _HistoryRow {
   final DateTime createdAt;
   final String? ownerMovementType;
   final double onHandDelta;
+  final double walletDelta;
+  final double mayaWalletDelta;
   final double chargeAmount;
   final String? chargeDestinationKey;
 }

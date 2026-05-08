@@ -23,11 +23,16 @@ class DashboardSnapshot {
     required this.netBorrowOutstanding,
     required this.flowTrendLabel,
     required this.flowCaption,
+    required this.chargesToOnHand,
+    required this.chargesToGcash,
+    required this.chargesToMaya,
+    required this.transactionCount,
     required this.alertTitle,
     required this.alertMessage,
     required this.alertActionLabel,
     required this.showAlertCard,
     required this.activities,
+    required this.chargeTransactions,
     required this.walletSpots,
     required this.mayaSpots,
     required this.cashSpots,
@@ -53,11 +58,16 @@ class DashboardSnapshot {
   final double netBorrowOutstanding;
   final String flowTrendLabel;
   final String flowCaption;
+  final double chargesToOnHand;
+  final double chargesToGcash;
+  final double chargesToMaya;
+  final int transactionCount;
   final String alertTitle;
   final String alertMessage;
   final String alertActionLabel;
   final bool showAlertCard;
   final List<DashboardActivity> activities;
+  final List<ChargeTransaction> chargeTransactions;
   final List<FlSpot> walletSpots;
   final List<FlSpot> mayaSpots;
   final List<FlSpot> cashSpots;
@@ -87,6 +97,20 @@ class DashboardActivity {
   final DateTime createdAt;
   final IconData icon;
   final Color iconColor;
+}
+
+class ChargeTransaction {
+  const ChargeTransaction({
+    required this.title,
+    required this.createdAt,
+    required this.chargeAmount,
+    required this.chargeDestination,
+  });
+
+  final String title;
+  final DateTime createdAt;
+  final double chargeAmount;
+  final String chargeDestination;
 }
 
 class DashboardRepository {
@@ -137,6 +161,7 @@ class DashboardRepository {
     final flowDates = <DateTime>[];
     final xLabels = <String>[];
     final chargesByDay = <DateTime, double>{};
+    final chargeTransactions = <ChargeTransaction>[];
     final walletClosingByDay = <DateTime, double>{};
     final mayaWalletClosingByDay = <DateTime, double>{};
     final cashClosingByDay = <DateTime, double>{};
@@ -216,6 +241,14 @@ class DashboardRepository {
           } else {
             chargesToOnHand += chargeAmount;
           }
+          chargeTransactions.add(
+            ChargeTransaction(
+              title: (row['title'] as String?) ?? 'Transaction',
+              createdAt: createdAt,
+              chargeAmount: chargeAmount,
+              chargeDestination: chargeDestination,
+            ),
+          );
         }
         transactionCount++;
         chargesByDay.update(
@@ -314,11 +347,16 @@ class DashboardRepository {
       flowTrendLabel: '$transactionCount transactions',
       flowCaption:
           'Charges routed • On-hand: ${formatCurrency(chargesToOnHand)} • GCash: ${formatCurrency(chargesToGcash)} • Maya: ${formatCurrency(chargesToMaya)}',
+      chargesToOnHand: chargesToOnHand,
+      chargesToGcash: chargesToGcash,
+      chargesToMaya: chargesToMaya,
+      transactionCount: transactionCount,
       alertTitle: alertContent.title,
       alertMessage: alertContent.message,
       alertActionLabel: alertContent.actionLabel,
       showAlertCard: alertContent.show,
       activities: activities,
+      chargeTransactions: chargeTransactions,
       walletSpots: walletSpots,
       mayaSpots: mayaSpots,
       cashSpots: cashSpots,
@@ -538,11 +576,31 @@ class DashboardRepository {
       activityColor = _colorFor(iconKey);
     }
 
+    // For transactions, show the net amount (excluding the store's service fee)
+    // using the delta columns, which already reflect the actual money movement.
+    final double displayAmount;
+    if (entryType == 'transaction') {
+      final walletDelta = (row['wallet_delta'] as num?)?.toDouble() ?? 0;
+      final mayaWalletDelta =
+          (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0;
+      final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
+      final walletOrMayaAbs = walletDelta != 0
+          ? walletDelta.abs()
+          : mayaWalletDelta.abs();
+      final onHandAbs = onHandDelta.abs();
+      displayAmount = (walletOrMayaAbs > 0 && onHandAbs > 0)
+          ? (walletOrMayaAbs < onHandAbs ? walletOrMayaAbs : onHandAbs)
+          : amount;
+    } else {
+      displayAmount = amount;
+    }
+
     return DashboardActivity(
       title: row['title'] as String,
       subtitle:
           '${walletAccount != null && walletAccount.isNotEmpty ? '$walletAccount • ' : ''}$subtitleRef • ${_activityDateFormat.format(createdAt)}',
-      amount: '${isNegative ? '-' : '+'}${_currencyFormat.format(amount)}',
+      amount:
+          '${isNegative ? '-' : '+'}${_currencyFormat.format(displayAmount)}',
       tag: _activityTag(row),
       scope: scope,
       createdAt: createdAt,

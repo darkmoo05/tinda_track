@@ -4,11 +4,11 @@ import '../../core/app_theme.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import '../activity/activity_history_screen.dart';
+import '../charges/charges_earnings_screen.dart';
 import '../transactions/add_owner_movement_screen.dart';
 import 'data/dashboard_repository.dart';
 import 'widgets/activity_item.dart';
 import 'widgets/alert_card.dart';
-import 'widgets/analytics_card.dart';
 import 'widgets/income_architecture_card.dart';
 
 enum _DashboardActivityFilter { all, business, personal, transactions }
@@ -111,8 +111,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 16),
               _buildBalanceTrendSection(dashboard),
               const SizedBox(height: 16),
-              _buildChargesAnalyticsSection(dashboard),
-              const SizedBox(height: 16),
               _buildBorrowingRepaymentCard(context, dashboard),
               const SizedBox(height: 24),
               _buildRecentActivityHeader(context),
@@ -164,6 +162,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       widget.onDataChanged?.call();
       _reloadDashboardSnapshot();
     }
+  }
+
+  Future<void> _openChargesEarnings(DashboardSnapshot dashboard) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChargesEarningsScreen(
+          totalEarnings: dashboard.recordedFlow,
+          transactionCount: dashboard.transactionCount,
+          chargesToOnHand: dashboard.chargesToOnHand,
+          chargesToGcash: dashboard.chargesToGcash,
+          chargesToMaya: dashboard.chargesToMaya,
+          flowSpots: dashboard.flowSpots,
+          flowLabels: dashboard.flowLabels,
+          flowDates: dashboard.flowDates,
+          chargeTransactions: dashboard.chargeTransactions,
+        ),
+      ),
+    );
   }
 
   Future<void> _openWalletPerspectiveHistory(
@@ -257,8 +273,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       caption: dashboard.flowTrendLabel,
                       icon: Icons.trending_up_rounded,
                       backgroundColor: AppColors.primaryContainer,
-                      titleFontSize: 11,
-                      titleLetterSpacing: 0.8,
+                      titleMaxLines: 2,
+                      titleSpacerHeight: 16,
+                      onTap: () => _openChargesEarnings(dashboard),
                     ),
                   ],
                 ),
@@ -281,6 +298,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required Color backgroundColor,
     double titleFontSize = 12,
     double titleLetterSpacing = 1.2,
+    int titleMaxLines = 1,
+    double titleSpacerHeight = 40,
     VoidCallback? onTap,
   }) {
     final foregroundColor = AppColors.onPrimary;
@@ -318,7 +337,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Expanded(
                         child: Text(
                           title,
-                          maxLines: 1,
+                          maxLines: titleMaxLines,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: mutedForegroundColor,
@@ -332,7 +351,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Icon(icon, color: mutedForegroundColor, size: 22),
                     ],
                   ),
-                  const SizedBox(height: 40),
+                  SizedBox(height: titleSpacerHeight),
                   SizedBox(
                     width: double.infinity,
                     child: FittedBox(
@@ -465,31 +484,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildChargesAnalyticsSection(DashboardSnapshot dashboard) {
-    final safeLength = [
-      dashboard.flowSpots.length,
-      dashboard.flowLabels.length,
-      dashboard.flowDates.length,
-    ].reduce((a, b) => a < b ? a : b);
-
-    if (safeLength == 0) {
-      return _buildChartPlaceholder(
-        title: 'Charges Collected',
-        message: 'Charges analytics will appear after transactions are added.',
-      );
-    }
-
-    return ArchitectAnalyticsCard(
-      title: 'Charges\nCollected',
-      value: _dashboardRepository.formatCurrency(dashboard.recordedFlow),
-      trend: dashboard.flowTrendLabel,
-      subtitle: dashboard.flowCaption,
-      spots: dashboard.flowSpots.take(safeLength).toList(growable: false),
-      xLabels: dashboard.flowLabels.take(safeLength).toList(growable: false),
-      dates: dashboard.flowDates.take(safeLength).toList(growable: false),
-    );
-  }
-
   Widget _buildChartPlaceholder({
     required String title,
     required String message,
@@ -617,7 +611,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return a.title.toLowerCase().compareTo(b.title.toLowerCase());
           });
 
-    final recentActivities = activities.take(5).toList(growable: false);
+    final recentActivities = activities.take(3).toList(growable: false);
 
     if (recentActivities.isEmpty) {
       return Container(

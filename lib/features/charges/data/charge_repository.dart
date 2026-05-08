@@ -7,12 +7,14 @@ class ChargeBracketRecord {
   final int lowerBound;
   final int upperBound;
   final double chargeAmount;
+  final String transactionTypeKey;
 
   const ChargeBracketRecord({
     required this.id,
     required this.lowerBound,
     required this.upperBound,
     required this.chargeAmount,
+    required this.transactionTypeKey,
   });
 }
 
@@ -42,6 +44,7 @@ class ChargeRepository {
     required int lowerBound,
     required int upperBound,
     required double chargeAmount,
+    required String transactionTypeKey,
   }) async {
     final validationError = _validateRange(
       lowerBound: lowerBound,
@@ -53,8 +56,12 @@ class ChargeRepository {
     }
 
     await ensureLoaded();
-    if (_hasOverlappingRange(lowerBound, upperBound)) {
-      return 'This range overlaps with an existing charge bracket.';
+    if (_hasOverlappingRange(
+      lowerBound,
+      upperBound,
+      typeKey: transactionTypeKey,
+    )) {
+      return 'This range overlaps with an existing charge bracket for this type.';
     }
 
     final db = await _database.database;
@@ -64,6 +71,7 @@ class ChargeRepository {
       'lower_bound': lowerBound,
       'upper_bound': upperBound,
       'charge_amount': chargeAmount,
+      AppDatabase.transactionTypeKeyColumn: transactionTypeKey,
       AppDatabase.syncIdColumn: AppDatabase.generateSyncId('charge'),
       AppDatabase.deviceIdColumn: deviceId,
       AppDatabase.updatedAtMsColumn: nowMs,
@@ -92,8 +100,15 @@ class ChargeRepository {
     }
 
     await ensureLoaded();
-    if (_hasOverlappingRange(lowerBound, upperBound, excludedId: id)) {
-      return 'This range overlaps with an existing charge bracket.';
+    final existing = brackets.value.where((b) => b.id == id).firstOrNull;
+    if (existing != null &&
+        _hasOverlappingRange(
+          lowerBound,
+          upperBound,
+          excludedId: id,
+          typeKey: existing.transactionTypeKey,
+        )) {
+      return 'This range overlaps with an existing charge bracket for this type.';
     }
 
     final db = await _database.database;
@@ -148,7 +163,8 @@ class ChargeRepository {
     final rows = await db.query(
       AppDatabase.chargesTable,
       where: '${AppDatabase.isDeletedColumn} = 0',
-      orderBy: 'lower_bound ASC, upper_bound ASC',
+      orderBy:
+          '${AppDatabase.transactionTypeKeyColumn} ASC, lower_bound ASC, upper_bound ASC',
     );
     brackets.value = rows
         .map(
@@ -157,6 +173,9 @@ class ChargeRepository {
             lowerBound: (row['lower_bound'] as num).toInt(),
             upperBound: (row['upper_bound'] as num).toInt(),
             chargeAmount: (row['charge_amount'] as num).toDouble(),
+            transactionTypeKey:
+                (row[AppDatabase.transactionTypeKeyColumn] as String?) ??
+                'gcash_cashin',
           ),
         )
         .toList(growable: false);
@@ -179,8 +198,14 @@ class ChargeRepository {
     return null;
   }
 
-  bool _hasOverlappingRange(int lowerBound, int upperBound, {int? excludedId}) {
+  bool _hasOverlappingRange(
+    int lowerBound,
+    int upperBound, {
+    int? excludedId,
+    required String typeKey,
+  }) {
     for (final bracket in brackets.value) {
+      if (bracket.transactionTypeKey != typeKey) continue;
       if (excludedId != null && bracket.id == excludedId) {
         continue;
       }

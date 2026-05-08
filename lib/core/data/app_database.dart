@@ -9,6 +9,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const String ledgerTable = 'ledger_entries';
+  static const String feeTransactionsTable = 'fee_transactions';
   static const String partiesTable = 'parties';
   static const String chargesTable = 'charges';
   static const String transactionTypesTable = 'transaction_types';
@@ -16,6 +17,7 @@ class AppDatabase {
       'owner_movement_categories';
   static const String syncStateTable = 'sync_state';
 
+  static const String transactionTypeKeyColumn = 'transaction_type_key';
   static const String syncIdColumn = 'sync_id';
   static const String deviceIdColumn = 'device_id';
   static const String updatedAtMsColumn = 'updated_at_ms';
@@ -43,9 +45,10 @@ class AppDatabase {
     _database = await databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 12,
+        version: 14,
         onCreate: (db, version) async {
           await _createLedgerTable(db);
+          await _createFeeTransactionsTable(db);
           await _createPartiesTable(db);
           await _createChargesTable(db);
           await _createTransactionTypesTable(db);
@@ -241,6 +244,21 @@ class AppDatabase {
             await ensureSyncSchema(db);
             await _backfillSyncMetadata(db);
           }
+          if (oldVersion < 13) {
+            final hasTypeKeyColumn = await _columnExists(
+              db,
+              chargesTable,
+              transactionTypeKeyColumn,
+            );
+            if (!hasTypeKeyColumn) {
+              await db.execute(
+                "ALTER TABLE $chargesTable ADD COLUMN $transactionTypeKeyColumn TEXT NOT NULL DEFAULT 'gcash_cashin'",
+              );
+            }
+          }
+          if (oldVersion < 14) {
+            await _createFeeTransactionsTable(db);
+          }
         },
         onOpen: (db) async {
           await ensureWalletSchema(db);
@@ -335,11 +353,30 @@ class AppDatabase {
         lower_bound INTEGER NOT NULL,
         upper_bound INTEGER NOT NULL,
         charge_amount REAL NOT NULL,
+        $transactionTypeKeyColumn TEXT NOT NULL DEFAULT 'gcash_cashin',
         $syncIdColumn TEXT UNIQUE,
         $deviceIdColumn TEXT NOT NULL DEFAULT '',
         $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0,
         $isDeletedColumn INTEGER NOT NULL DEFAULT 0,
         $isDirtyColumn INTEGER NOT NULL DEFAULT 1
+      )
+    ''');
+  }
+
+  Future<void> _createFeeTransactionsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $feeTransactionsTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        related_transaction_id INTEGER,
+        fee_amount REAL NOT NULL,
+        fee_type TEXT NOT NULL,
+        charge_destination TEXT NOT NULL,
+        $syncIdColumn TEXT UNIQUE,
+        $deviceIdColumn TEXT NOT NULL DEFAULT '',
+        $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0,
+        $isDeletedColumn INTEGER NOT NULL DEFAULT 0,
+        $isDirtyColumn INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
       )
     ''');
   }
@@ -887,6 +924,75 @@ class OwnerBorrowBalanceRecord {
   final double totalRepaid;
 
   double get outstandingBalance => totalBorrowed - totalRepaid;
+}
+
+class FixedTransactionType {
+  const FixedTransactionType({
+    required this.key,
+    required this.label,
+    required this.wallet,
+    required this.isOutflow,
+  });
+
+  final String key;
+  final String label;
+  final String wallet;
+  final bool isOutflow;
+
+  static const List<FixedTransactionType> all = [
+    FixedTransactionType(
+      key: 'gcash_cashin',
+      label: 'GCash Cash-In',
+      wallet: 'GCash',
+      isOutflow: false,
+    ),
+    FixedTransactionType(
+      key: 'gcash_cashout',
+      label: 'GCash Cash-Out',
+      wallet: 'GCash',
+      isOutflow: true,
+    ),
+    FixedTransactionType(
+      key: 'gcash_load',
+      label: 'GCash Load',
+      wallet: 'GCash',
+      isOutflow: false,
+    ),
+    FixedTransactionType(
+      key: 'gcash_paybills',
+      label: 'GCash Pay Bills',
+      wallet: 'GCash',
+      isOutflow: false,
+    ),
+    FixedTransactionType(
+      key: 'maya_cashin',
+      label: 'Maya Cash-In',
+      wallet: 'Maya Wallet',
+      isOutflow: false,
+    ),
+    FixedTransactionType(
+      key: 'maya_cashout',
+      label: 'Maya Cash-Out',
+      wallet: 'Maya Wallet',
+      isOutflow: true,
+    ),
+    FixedTransactionType(
+      key: 'maya_load',
+      label: 'Maya Load',
+      wallet: 'Maya Wallet',
+      isOutflow: false,
+    ),
+    FixedTransactionType(
+      key: 'maya_paybills',
+      label: 'Maya Pay Bills',
+      wallet: 'Maya Wallet',
+      isOutflow: false,
+    ),
+  ];
+
+  static FixedTransactionType forKey(String key) {
+    return all.firstWhere((t) => t.key == key, orElse: () => all.first);
+  }
 }
 
 class _DefaultTransactionType {
