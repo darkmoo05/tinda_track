@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'statement_entry.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/data/app_database.dart';
@@ -19,6 +20,12 @@ class DashboardSnapshot {
     required this.personalExpenseTotal,
     required this.totalBorrowed,
     required this.totalRepaid,
+    required this.borrowingAmount,
+    required this.borrowingRepaymentAmount,
+    required this.borrowingOutstanding,
+    required this.personalExpenseAmount,
+    required this.personalExpensePaymentAmount,
+    required this.personalExpenseOutstanding,
     required this.ownerCreditAdjustment,
     required this.netBorrowOutstanding,
     required this.flowTrendLabel,
@@ -26,6 +33,10 @@ class DashboardSnapshot {
     required this.chargesToOnHand,
     required this.chargesToGcash,
     required this.chargesToMaya,
+    required this.remainingWithdrawableOnHand,
+    required this.remainingWithdrawableGcash,
+    required this.remainingWithdrawableMaya,
+    required this.remainingWithdrawableTotal,
     required this.transactionCount,
     required this.alertTitle,
     required this.alertMessage,
@@ -54,6 +65,12 @@ class DashboardSnapshot {
   final double personalExpenseTotal;
   final double totalBorrowed;
   final double totalRepaid;
+  final double borrowingAmount;
+  final double borrowingRepaymentAmount;
+  final double borrowingOutstanding;
+  final double personalExpenseAmount;
+  final double personalExpensePaymentAmount;
+  final double personalExpenseOutstanding;
   final double ownerCreditAdjustment;
   final double netBorrowOutstanding;
   final String flowTrendLabel;
@@ -61,6 +78,10 @@ class DashboardSnapshot {
   final double chargesToOnHand;
   final double chargesToGcash;
   final double chargesToMaya;
+  final double remainingWithdrawableOnHand;
+  final double remainingWithdrawableGcash;
+  final double remainingWithdrawableMaya;
+  final double remainingWithdrawableTotal;
   final int transactionCount;
   final String alertTitle;
   final String alertMessage;
@@ -127,6 +148,56 @@ class DashboardRepository {
   final DateFormat _chartDateFormat = DateFormat('dd MMM');
   static const double _lowBalanceRatio = 0.10;
 
+  Future<List<StatementEntry>> loadStatementEntries() async {
+    final db = await _database.database;
+    final rows = await db.query(
+      AppDatabase.ledgerTable,
+      columns: ['amount', 'created_at', 'owner_movement_type', 'note'],
+      where: "entry_type = ? AND owner_movement_type IS NOT NULL",
+      whereArgs: ['owner_movement'],
+      orderBy: 'created_at DESC, id DESC',
+    );
+
+    final entries = <StatementEntry>[];
+    for (final row in rows) {
+      final movementType = ((row['owner_movement_type'] as String?) ?? '')
+          .trim();
+      if (movementType.isEmpty) {
+        continue;
+      }
+
+      final normalizedType = movementType.toLowerCase();
+      final isDebit =
+          normalizedType == 'borrowing' || normalizedType == 'personal expense';
+      final isRepayment =
+          normalizedType == 'borrowing repayment' ||
+          normalizedType == 'personal expense payment';
+
+      if (!isDebit && !isRepayment) {
+        continue;
+      }
+
+      final createdAtRaw = row['created_at'] as String?;
+      final createdAt = createdAtRaw == null
+          ? null
+          : DateTime.tryParse(createdAtRaw);
+      final amount = (row['amount'] as num?)?.toDouble() ?? 0;
+
+      entries.add(
+        StatementEntry(
+          date: createdAt == null ? '' : _activityDateFormat.format(createdAt),
+          createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+          type: movementType,
+          amount: '${isRepayment ? '-' : '+'}${formatCurrency(amount)}',
+          amountColor: isRepayment ? AppColors.secondary : AppColors.error,
+          note: (row['note'] as String?)?.trim(),
+        ),
+      );
+    }
+
+    return entries;
+  }
+
   Future<DashboardSnapshot> loadSnapshot() async {
     final db = await _database.database;
     final rows = await db.query(
@@ -147,10 +218,17 @@ class DashboardRepository {
     double chargesToOnHand = 0;
     double chargesToGcash = 0;
     double chargesToMaya = 0;
+    double feeWithdrawnOnHand = 0;
+    double feeWithdrawnGcash = 0;
+    double feeWithdrawnMaya = 0;
     double businessFundingTotal = 0;
     double personalExpenseTotal = 0;
     double totalBorrowed = 0;
     double totalRepaid = 0;
+    double borrowingAmount = 0;
+    double borrowingRepaymentAmount = 0;
+    double personalExpenseAmount = 0;
+    double personalExpensePaymentAmount = 0;
     int transactionCount = 0;
 
     final walletSpots = <FlSpot>[];
@@ -223,8 +301,38 @@ class DashboardRepository {
           totalBorrowed += amount;
         }
 
-        if (movementType == 'repayment') {
+        if (movementType == 'borrowing repayment' ||
+            movementType == 'personal expense payment') {
           totalRepaid += amount;
+        }
+
+        // Separate tracking for borrowing and personal expense
+        if (movementType == 'borrowing') {
+          borrowingAmount += amount;
+        }
+
+        if (movementType == 'borrowing repayment') {
+          borrowingRepaymentAmount += amount;
+        }
+
+        if (movementType == 'personal expense') {
+          personalExpenseAmount += amount;
+        }
+
+        if (movementType == 'personal expense payment') {
+          personalExpensePaymentAmount += amount;
+        }
+
+        if (movementType == 'fee withdrawal') {
+          final withdrawalSource = ((row['wallet_account'] as String?) ?? '')
+              .toLowerCase();
+          if (withdrawalSource.contains('maya')) {
+            feeWithdrawnMaya += amount;
+          } else if (withdrawalSource.contains('gcash')) {
+            feeWithdrawnGcash += amount;
+          } else {
+            feeWithdrawnOnHand += amount;
+          }
         }
       }
 
@@ -324,6 +432,19 @@ class DashboardRepository {
     );
 
     final ownerCreditAdjustment = totalRepaid - totalBorrowed;
+    final remainingWithdrawableOnHand = (chargesToOnHand - feeWithdrawnOnHand)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final remainingWithdrawableGcash = (chargesToGcash - feeWithdrawnGcash)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final remainingWithdrawableMaya = (chargesToMaya - feeWithdrawnMaya)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final remainingWithdrawableTotal =
+        remainingWithdrawableOnHand +
+        remainingWithdrawableGcash +
+        remainingWithdrawableMaya;
 
     return DashboardSnapshot(
       walletBalance: walletBalance,
@@ -342,6 +463,13 @@ class DashboardRepository {
       personalExpenseTotal: personalExpenseTotal,
       totalBorrowed: totalBorrowed,
       totalRepaid: totalRepaid,
+      borrowingAmount: borrowingAmount,
+      borrowingRepaymentAmount: borrowingRepaymentAmount,
+      borrowingOutstanding: borrowingAmount - borrowingRepaymentAmount,
+      personalExpenseAmount: personalExpenseAmount,
+      personalExpensePaymentAmount: personalExpensePaymentAmount,
+      personalExpenseOutstanding:
+          personalExpenseAmount - personalExpensePaymentAmount,
       ownerCreditAdjustment: ownerCreditAdjustment,
       netBorrowOutstanding: totalBorrowed - totalRepaid,
       flowTrendLabel: '$transactionCount transactions',
@@ -350,6 +478,10 @@ class DashboardRepository {
       chargesToOnHand: chargesToOnHand,
       chargesToGcash: chargesToGcash,
       chargesToMaya: chargesToMaya,
+      remainingWithdrawableOnHand: remainingWithdrawableOnHand,
+      remainingWithdrawableGcash: remainingWithdrawableGcash,
+      remainingWithdrawableMaya: remainingWithdrawableMaya,
+      remainingWithdrawableTotal: remainingWithdrawableTotal,
       transactionCount: transactionCount,
       alertTitle: alertContent.title,
       alertMessage: alertContent.message,

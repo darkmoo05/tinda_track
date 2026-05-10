@@ -5,6 +5,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../core/app_theme.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
+import '../transactions/add_owner_movement_screen.dart';
 import '../dashboard/data/dashboard_repository.dart';
 import '../dashboard/widgets/analytics_card.dart';
 
@@ -16,6 +17,10 @@ class ChargesEarningsScreen extends StatefulWidget {
     required this.chargesToOnHand,
     required this.chargesToGcash,
     required this.chargesToMaya,
+    required this.remainingWithdrawableOnHand,
+    required this.remainingWithdrawableGcash,
+    required this.remainingWithdrawableMaya,
+    required this.remainingWithdrawableTotal,
     required this.flowSpots,
     required this.flowLabels,
     required this.flowDates,
@@ -27,6 +32,10 @@ class ChargesEarningsScreen extends StatefulWidget {
   final double chargesToOnHand;
   final double chargesToGcash;
   final double chargesToMaya;
+  final double remainingWithdrawableOnHand;
+  final double remainingWithdrawableGcash;
+  final double remainingWithdrawableMaya;
+  final double remainingWithdrawableTotal;
   final List<FlSpot> flowSpots;
   final List<String> flowLabels;
   final List<DateTime> flowDates;
@@ -47,16 +56,118 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
 
   String _fmt(double v) => _currency.format(v);
 
-  // No longer needed as a getter — routing shown inline in hero.
-
   int _selectedPeriod = 0;
   static const List<String> _periods = ['DAY', 'WEEK', 'MONTH', 'YEAR'];
+  _HistorySourceFilter _historySourceFilter = _HistorySourceFilter.all;
 
   final Set<DateTime> _expandedDays = {};
+  final Map<int, GlobalKey> _dayHeaderKeys = {};
+
+  GlobalKey _headerKeyForDay(DateTime day) {
+    final key = day.millisecondsSinceEpoch;
+    return _dayHeaderKeys.putIfAbsent(key, () => GlobalKey());
+  }
+
+  void _scrollDayHeaderIntoView(DateTime day, {double alignment = 0.08}) {
+    final contextForHeader =
+        _dayHeaderKeys[day.millisecondsSinceEpoch]?.currentContext;
+    if (contextForHeader == null) {
+      return;
+    }
+
+    Scrollable.ensureVisible(
+      contextForHeader,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      alignment: alignment,
+    );
+  }
+
+  double get _alreadyWithdrawnTotal {
+    final withdrawn = widget.totalEarnings - widget.remainingWithdrawableTotal;
+    return withdrawn.clamp(0.0, double.infinity).toDouble();
+  }
+
+  String _friendlyTransactionLabel(String rawTitle) {
+    final lower = rawTitle.toLowerCase();
+    if (lower.contains('cashin') || lower.contains('cash in')) {
+      return 'Fee from Cash In';
+    }
+    if (lower.contains('cashout') || lower.contains('cash out')) {
+      return 'Fee from Cash Out';
+    }
+    if (lower.contains('paybills') || lower.contains('bill')) {
+      return 'Fee from Bills Payment';
+    }
+    if (lower.contains('load')) {
+      return 'Fee from Load';
+    }
+    if (lower.contains('qr')) {
+      return 'Fee from QR Payment';
+    }
+    return 'Fee from Transaction';
+  }
+
+  String _friendlyDestinationSentence(String destinationLabel) {
+    return 'Fee routed to $destinationLabel';
+  }
+
+  bool _matchesSourceFilter(ChargeTransaction tx) {
+    final destination = tx.chargeDestination.toLowerCase();
+    switch (_historySourceFilter) {
+      case _HistorySourceFilter.all:
+        return true;
+      case _HistorySourceFilter.gcash:
+        return destination.contains('gcash');
+      case _HistorySourceFilter.maya:
+        return destination.contains('maya');
+      case _HistorySourceFilter.onHand:
+        return destination.contains('hand') || destination.contains('cash');
+    }
+  }
+
+  String get _bestWithdrawalSource {
+    final buckets = <String, double>{
+      'GCash': widget.remainingWithdrawableGcash,
+      'Maya Wallet': widget.remainingWithdrawableMaya,
+      'On-hand Cash': widget.remainingWithdrawableOnHand,
+    };
+
+    var selected = 'On-hand Cash';
+    var maxValue = -1.0;
+    buckets.forEach((source, value) {
+      if (value > maxValue) {
+        maxValue = value;
+        selected = source;
+      }
+    });
+    return selected;
+  }
+
+  Future<void> _openFeeWithdrawal() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AddOwnerMovementScreen(
+          initialMovementType: 'Fee Withdrawal',
+          initialDestination: _bestWithdrawalSource,
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+    if (saved == true) {
+      Navigator.of(context).pop(true);
+    }
+  }
 
   List<_DayGroup> _buildDayGroups() {
     final map = <DateTime, List<ChargeTransaction>>{};
     for (final tx in widget.chargeTransactions) {
+      if (!_matchesSourceFilter(tx)) {
+        continue;
+      }
       final key = DateTime(
         tx.createdAt.year,
         tx.createdAt.month,
@@ -119,6 +230,8 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
           ),
           const SizedBox(height: 16),
           _buildHeroBanner(),
+          const SizedBox(height: 14),
+          _buildWithdrawableCard(),
           const SizedBox(height: 20),
           _buildAnalyticsSection(),
           const SizedBox(height: 24),
@@ -130,7 +243,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Transaction History',
+                      'Fee History',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
@@ -139,7 +252,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Tap a day to see each transaction',
+                      'Tap a day to see each fee entry',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.onSurfaceVariant,
@@ -157,6 +270,10 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          _buildSourceFilterChips(),
+          const SizedBox(height: 8),
+          _buildHistoryLegend(),
           const SizedBox(height: 12),
           if (dayGroups.isEmpty)
             _buildEmptyState()
@@ -358,6 +475,168 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
     );
   }
 
+  Widget _buildWithdrawableCard() {
+    final hasWithdrawable = widget.remainingWithdrawableTotal > 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Remaining withdrawable earnings',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _fmt(widget.remainingWithdrawableTotal),
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Already withdrawn: ${_fmt(_alreadyWithdrawnTotal)}',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildBreakdownChip('GCash', widget.remainingWithdrawableGcash),
+              const SizedBox(width: 8),
+              _buildBreakdownChip('Maya', widget.remainingWithdrawableMaya),
+              const SizedBox(width: 8),
+              _buildBreakdownChip(
+                'On-hand',
+                widget.remainingWithdrawableOnHand,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: hasWithdrawable ? _openFeeWithdrawal : null,
+              icon: const Icon(Icons.savings_rounded),
+              label: const Text('Withdraw Earnings Now'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBreakdownChip(String label, double amount) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _fmt(amount),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSourceFilterChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _buildFilterChip(_HistorySourceFilter.all, 'All'),
+        _buildFilterChip(_HistorySourceFilter.gcash, 'GCash'),
+        _buildFilterChip(_HistorySourceFilter.maya, 'Maya'),
+        _buildFilterChip(_HistorySourceFilter.onHand, 'On-hand'),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip(_HistorySourceFilter value, String label) {
+    final selected = _historySourceFilter == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) {
+        setState(() {
+          _historySourceFilter = value;
+          _expandedDays.clear();
+        });
+      },
+      labelStyle: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: selected ? Colors.white : AppColors.onSurface,
+      ),
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      side: BorderSide(
+        color: selected ? AppColors.primary : AppColors.outlineVariant,
+      ),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _buildHistoryLegend() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        'Legend: each row shows fee source type and where the fee was routed (GCash, Maya, or On-hand).',
+        style: TextStyle(
+          fontSize: 11,
+          color: AppColors.onSurfaceVariant.withValues(alpha: 0.85),
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
   // ── Analytics chart ──────────────────────────────────────────
 
   Widget _buildAnalyticsSection() {
@@ -420,6 +699,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
   Widget _buildDayGroup(_DayGroup group) {
     final isExpanded = _expandedDays.contains(group.date);
     final count = group.transactions.length;
+    final headerKey = _headerKeyForDay(group.date);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -427,6 +707,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
         children: [
           // Day header — tap to expand / collapse
           Material(
+            key: headerKey,
             color: Colors.transparent,
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(16),
@@ -441,13 +722,31 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
                 bottomLeft: Radius.circular(isExpanded ? 0 : 16),
                 bottomRight: Radius.circular(isExpanded ? 0 : 16),
               ),
-              onTap: () => setState(() {
-                if (isExpanded) {
-                  _expandedDays.remove(group.date);
-                } else {
-                  _expandedDays.add(group.date);
-                }
-              }),
+              onTap: () {
+                final willExpand = !isExpanded;
+                setState(() {
+                  if (willExpand) {
+                    _expandedDays.add(group.date);
+                  } else {
+                    _expandedDays.remove(group.date);
+                  }
+                });
+
+                // After the frame, scroll so expanded content is visible.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  if (willExpand) {
+                    // Small delay so AnimatedSize begins expanding, then scroll
+                    Future.delayed(const Duration(milliseconds: 80), () {
+                      if (!mounted) return;
+                      _scrollDayHeaderIntoView(group.date, alignment: 0.28);
+                    });
+                  } else {
+                    // On collapse, keep the header near top
+                    _scrollDayHeaderIntoView(group.date, alignment: 0.08);
+                  }
+                });
+              },
               child: Ink(
                 decoration: BoxDecoration(
                   color: AppColors.surfaceContainerLowest,
@@ -506,7 +805,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '$count transaction${count == 1 ? '' : 's'}',
+                              '$count fee entr${count == 1 ? 'y' : 'ies'}',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: AppColors.onSurfaceVariant.withValues(
@@ -517,13 +816,28 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
                           ],
                         ),
                       ),
-                      Text(
-                        _fmt(group.total),
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.secondary,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _fmt(group.total),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.secondary,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            'Total fees collected that day',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppColors.onSurfaceVariant.withValues(
+                                alpha: 0.7,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(width: 8),
                       AnimatedRotation(
@@ -593,6 +907,9 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
       destLabel = context.l10n.onHand;
     }
 
+    final friendlyTitle = _friendlyTransactionLabel(tx.title);
+    final routeSentence = _friendlyDestinationSentence(destLabel);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -621,7 +938,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  tx.title,
+                  friendlyTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -632,7 +949,9 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _timeFormat.format(tx.createdAt),
+                  '${_timeFormat.format(tx.createdAt)} • $routeSentence',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11,
                     color: AppColors.onSurfaceVariant.withValues(alpha: 0.65),
@@ -679,6 +998,20 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
   // ── Empty state ───────────────────────────────────────────────
 
   Widget _buildEmptyState() {
+    String filterText;
+    switch (_historySourceFilter) {
+      case _HistorySourceFilter.gcash:
+        filterText = 'No GCash fee entries in this period.';
+        break;
+      case _HistorySourceFilter.maya:
+        filterText = 'No Maya fee entries in this period.';
+        break;
+      case _HistorySourceFilter.onHand:
+        filterText = 'No on-hand fee entries in this period.';
+        break;
+      default:
+        filterText = 'No fee entries in this period.';
+    }
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
@@ -695,22 +1028,19 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
             color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'No charges yet',
-            style: TextStyle(
+          Text(
+            filterText,
+            style: const TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 15,
               color: AppColors.onSurface,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            'Charge earnings from transactions\nwill appear here.',
+          const Text(
+            'Charge earnings from transactions will appear here.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
-            ),
+            style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
           ),
         ],
       ),
@@ -728,3 +1058,5 @@ class _DayGroup {
   final List<ChargeTransaction> transactions;
   final double total;
 }
+
+enum _HistorySourceFilter { all, gcash, maya, onHand }

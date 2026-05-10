@@ -641,8 +641,10 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
     if (item.entryType == 'transaction') {
       if (normalizedFilter == 'on_hand') {
-        // On-hand cash card should log both inflow and outflow transaction cash movements.
-        return item.onHandDelta != 0;
+        // On-hand cash card logs all inflow/outflow movements and any charge
+        // that is directed into on-hand cash (e.g. fee kept as physical cash).
+        return item.onHandDelta != 0 ||
+            (item.chargeAmount > 0 && item.chargeDestinationKey == 'on_hand');
       }
 
       if (walletKey == normalizedFilter) {
@@ -709,14 +711,14 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       final isWalletOutflow = _isWalletOutflow(item);
       final tileColor = item.entryType == 'transaction'
           ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
-          : _colorFor(item.iconKey);
+          : (isWalletOutflow ? AppColors.error : _colorFor(item.iconKey));
       grouped.add(
         ArchitectActivityTile(
           title: item.title,
           type: item.tag,
           reference: item.reference,
           amount:
-              '${isWalletOutflow ? '-' : '+'} ${_currencyFormat.format(displayAmount)}',
+              '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}',
           time: _timeFormat.format(item.createdAt),
           icon: _iconFor(item.iconKey),
           iconColor: tileColor,
@@ -732,10 +734,10 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     final isWalletOutflow = _isWalletOutflow(item);
     final accentColor = item.entryType == 'transaction'
         ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
-        : _colorFor(item.iconKey);
+        : (isWalletOutflow ? AppColors.error : _colorFor(item.iconKey));
     final displayAmount = _resolveDisplayAmount(item);
     final amountText =
-        '${isWalletOutflow ? '-' : '+'} ${_currencyFormat.format(displayAmount)}';
+        '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}';
     final dateTimeText =
         '${_fullDateFormat.format(item.createdAt)} ${_timeFormat.format(item.createdAt)}';
     final entryTypeLabel = item.entryType == 'transaction'
@@ -1854,6 +1856,12 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       return item.iconKey == 'cash_in' || item.iconKey == 'maya_cash_in';
     }
 
+    // For owner movements (non-transaction), treat explicit fee withdrawals as outflows.
+    final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
+    if (movementType == 'fee withdrawal') {
+      return true;
+    }
+
     return item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
   }
 
@@ -1862,7 +1870,15 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       return item.amount;
     }
 
-    // Use the actual delta columns to derive the net transaction amount
+    // On-hand perspective: show the full on-hand cash impact, which includes
+    // the charge portion that feeds into physical cash (e.g. fee kept on-hand
+    // during a cash-in). This gives a complete log of what actually moved.
+    if (_selectedWalletFilter == 'on_hand') {
+      final onHandAbs = item.onHandDelta.abs();
+      if (onHandAbs > 0) return onHandAbs;
+    }
+
+    // GCash / Maya perspective: show the net transaction amount
     // (excluding the store's service fee).
     //
     // For cash-in: wallet/maya delta is smaller (fee kept as on-hand)

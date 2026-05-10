@@ -11,6 +11,7 @@ import 'data/dashboard_repository.dart';
 import 'widgets/activity_item.dart';
 import 'widgets/alert_card.dart';
 import 'widgets/income_architecture_card.dart';
+import 'borrowing_expense_statement_screen.dart';
 
 enum _DashboardActivityFilter { all, business, personal, transactions }
 
@@ -32,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DashboardRepository _dashboardRepository = DashboardRepository();
   _DashboardActivityFilter _activityFilter = _DashboardActivityFilter.all;
+  int _selectedDebtTab = 0; // 0 for Borrowing, 1 for Personal Expense
   late Future<DashboardSnapshot> _dashboardFuture;
 
   @override
@@ -164,7 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _openChargesEarnings(DashboardSnapshot dashboard) async {
-    await Navigator.of(context).push(
+    final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ChargesEarningsScreen(
           totalEarnings: dashboard.recordedFlow,
@@ -172,6 +174,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           chargesToOnHand: dashboard.chargesToOnHand,
           chargesToGcash: dashboard.chargesToGcash,
           chargesToMaya: dashboard.chargesToMaya,
+          remainingWithdrawableOnHand: dashboard.remainingWithdrawableOnHand,
+          remainingWithdrawableGcash: dashboard.remainingWithdrawableGcash,
+          remainingWithdrawableMaya: dashboard.remainingWithdrawableMaya,
+          remainingWithdrawableTotal: dashboard.remainingWithdrawableTotal,
           flowSpots: dashboard.flowSpots,
           flowLabels: dashboard.flowLabels,
           flowDates: dashboard.flowDates,
@@ -179,6 +185,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+
+    if (saved == true && mounted) {
+      widget.onDataChanged?.call();
+      _reloadDashboardSnapshot();
+    }
   }
 
   Future<void> _openWalletPerspectiveHistory(
@@ -267,9 +278,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       width: tileWidth,
                       title: context.l10n.chargesEarnings,
                       value: _dashboardRepository.formatCurrency(
-                        dashboard.recordedFlow,
+                        dashboard.remainingWithdrawableTotal,
                       ),
-                      caption: dashboard.flowTrendLabel,
+                      caption: 'Withdrawable fee now',
                       icon: Icons.trending_up_rounded,
                       backgroundColor: AppColors.primaryContainer,
                       titleMaxLines: 2,
@@ -652,57 +663,272 @@ class _DashboardScreenState extends State<DashboardScreen> {
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
-    final outstanding = dashboard.netBorrowOutstanding;
-    final outstandingColor = outstanding > 0
-        ? AppColors.error
-        : (outstanding < 0 ? AppColors.secondary : AppColors.onSurfaceVariant);
+    final tabs = ['Borrowing', 'Personal Expense'];
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _minimalCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.l10n.borrowingStatus,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _buildSplitCard(
-                title: context.l10n.borrowed,
-                subtitle: context.l10n.totalPersonalFundsTaken,
-                value: _dashboardRepository.formatCurrency(
-                  dashboard.totalBorrowed,
-                ),
-                accentColor: AppColors.primary,
-                icon: Icons.call_received_rounded,
+    return GestureDetector(
+      onTap: _openStatementScreen,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: _minimalCardDecoration(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.borrowingStatus,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            // Tabs
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(8),
               ),
-              _buildSplitCard(
-                title: context.l10n.repaid,
-                subtitle: context.l10n.totalPersonalFundsReturned,
-                value: _dashboardRepository.formatCurrency(
-                  dashboard.totalRepaid,
+              child: Row(
+                children: List.generate(tabs.length, (index) {
+                  final isSelected = _selectedDebtTab == index;
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedDebtTab = index),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.primary
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Text(
+                            tabs[index],
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Content based on selected tab
+            _buildDebtTabContent(context, dashboard, _selectedDebtTab),
+            const SizedBox(height: 16),
+            // Quick action buttons
+            _buildQuickActionButtons(context, dashboard, _selectedDebtTab),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openStatementScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const BorrowingExpenseStatementScreen(),
+      ),
+    );
+  }
+
+  Widget _buildDebtTabContent(
+    BuildContext context,
+    DashboardSnapshot dashboard,
+    int tabIndex,
+  ) {
+    late final double taken;
+    late final double returned;
+    late final double outstanding;
+    late final IconData takenIcon;
+    late final IconData returnedIcon;
+
+    if (tabIndex == 0) {
+      // Borrowing
+      taken = dashboard.borrowingAmount;
+      returned = dashboard.borrowingRepaymentAmount;
+      outstanding = dashboard.borrowingOutstanding;
+      takenIcon = Icons.call_received_rounded;
+      returnedIcon = Icons.call_made_rounded;
+    } else {
+      // Personal Expense
+      taken = dashboard.personalExpenseAmount;
+      returned = dashboard.personalExpensePaymentAmount;
+      outstanding = dashboard.personalExpenseOutstanding;
+      takenIcon = Icons.shopping_bag_rounded;
+      returnedIcon = Icons.check_circle_rounded;
+    }
+
+    final effectiveOutstanding = outstanding <= 0 ? 0.0 : outstanding;
+    final isFullyPaid = effectiveOutstanding == 0;
+    final settledPercent = taken > 0
+        ? (returned / taken * 100).clamp(0.0, 100.0)
+        : 100.0;
+    final statusColor = isFullyPaid ? AppColors.secondary : AppColors.error;
+    final statusIcon = isFullyPaid
+        ? Icons.check_circle_rounded
+        : Icons.warning_rounded;
+    final statusLabel = isFullyPaid
+        ? 'Fully Paid'
+        : '${settledPercent.toStringAsFixed(0)}% Settled';
+    final statusHint = isFullyPaid
+        ? 'No remaining balance.'
+        : 'You still need to pay this amount.';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Taken vs Returned comparison
+        Row(
+          children: [
+            Expanded(
+              child: _buildComparisonItem(
+                label: 'Taken',
+                amount: _dashboardRepository.formatCurrency(taken),
+                icon: takenIcon,
+                color: AppColors.error,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildComparisonItem(
+                label: 'Returned',
+                amount: _dashboardRepository.formatCurrency(returned),
+                icon: returnedIcon,
+                color: AppColors.secondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        // Outstanding status with percentage
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
                 ),
-                accentColor: AppColors.secondary,
-                icon: Icons.call_made_rounded,
+                child: Icon(statusIcon, color: statusColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Outstanding Amount',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _dashboardRepository.formatCurrency(effectiveOutstanding),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      statusHint,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            context.l10n.ownerCreditOutstanding(
-              _dashboardRepository.formatCurrency(outstanding),
+        ),
+        // Progress bar
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: settledPercent / 100,
+            minHeight: 8,
+            backgroundColor: AppColors.surfaceContainerHigh,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isFullyPaid ? AppColors.secondary : AppColors.error,
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildComparisonItem({
+    required String label,
+    required String amount,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            label,
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: outstandingColor,
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            amount,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
         ],
@@ -710,64 +936,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSplitCard({
-    required String title,
-    required String subtitle,
-    required String value,
-    required Color accentColor,
-    required IconData icon,
-  }) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 260, maxWidth: 360),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: _minimalCardDecoration(),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
+  Widget _buildQuickActionButtons(
+    BuildContext context,
+    DashboardSnapshot dashboard,
+    int tabIndex,
+  ) {
+    final outstanding = tabIndex == 0
+        ? dashboard.borrowingOutstanding
+        : dashboard.personalExpenseOutstanding;
+    final effectiveOutstanding = outstanding <= 0 ? 0.0 : outstanding;
+    final isFullyPaid = effectiveOutstanding == 0;
+
+    final label = isFullyPaid
+        ? 'All Settled'
+        : (tabIndex == 0 ? 'Pay Borrowing' : 'Pay Personal Expense');
+
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: () {
+          if (isFullyPaid) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No outstanding balance to pay.'),
+                duration: Duration(seconds: 2),
               ),
-              child: Icon(icon, color: accentColor),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+            );
+            return;
+          }
+          _navigateToRepaymentScreen(tabIndex);
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isFullyPaid ? AppColors.secondary : AppColors.error,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isFullyPaid) ...[
+              const Icon(
+                Icons.check_circle_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _navigateToRepaymentScreen(int tabIndex) async {
+    final movementType = tabIndex == 0
+        ? 'Borrowing Repayment'
+        : 'Personal Expense Payment';
+
+    final screen = AddOwnerMovementScreen(initialMovementType: movementType);
+
+    final result = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (context) => screen));
+
+    if (result == true && mounted) {
+      _reloadDashboardSnapshot();
+    }
   }
 
   BoxDecoration _minimalCardDecoration() {
