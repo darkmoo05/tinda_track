@@ -198,7 +198,6 @@
   "filterPersonal": "Personal",
   "filterTransactions": "Mga Transaksyon",
   "noActivitiesFilter": "Walang aktibidad na tumutugma sa napiling filter.",
-  "borrowingStatus": "Katayuan ng Pagpapahiram",
   "ownerCreditOutstanding": "Natitirang Utang ng May-ari: {amount}",
   "walletTrendPlaceholder": "Lalabas ang data ng trend kapag may naitala nang aktibidad sa pitaka.",
   "capitalPlusCharges": "Puhunan {capital} + Bayad {charges}",

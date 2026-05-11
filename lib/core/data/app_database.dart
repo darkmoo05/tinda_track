@@ -631,11 +631,11 @@ class AppDatabase {
     final db = await database;
     final rows = await db.rawQuery('''
       SELECT
-        SUM(CASE WHEN owner_movement_type IN ('Borrowing', 'Personal Expense') THEN amount ELSE 0 END) AS total_borrowed,
-        SUM(CASE WHEN owner_movement_type IN ('Borrowing Repayment', 'Personal Expense Payment') THEN amount ELSE 0 END) AS total_repaid
+        SUM(CASE WHEN owner_movement_type IN ('Borrowed Funds', 'Personal Expense') THEN amount ELSE 0 END) AS total_borrowed,
+        SUM(CASE WHEN owner_movement_type IN ('Borrowed Funds Repayment', 'Personal Expense Payment') THEN amount ELSE 0 END) AS total_repaid
       FROM $ledgerTable
       WHERE entry_type = 'owner_movement'
-        AND owner_movement_type IN ('Borrowing', 'Personal Expense', 'Borrowing Repayment', 'Personal Expense Payment')
+        AND owner_movement_type IN ('Borrowed Funds', 'Borrowed Funds Repayment', 'Personal Expense', 'Personal Expense Payment')
     ''');
 
     if (rows.isEmpty) {

@@ -5,25 +5,25 @@ import '../../core/app_theme.dart';
 import 'data/dashboard_repository.dart';
 import 'data/statement_entry.dart';
 
-class BorrowingExpenseStatementScreen extends StatefulWidget {
-  const BorrowingExpenseStatementScreen({super.key});
+class PersonalExpenseStatementScreen extends StatefulWidget {
+  const PersonalExpenseStatementScreen({super.key});
 
   @override
-  State<BorrowingExpenseStatementScreen> createState() =>
-      _BorrowingExpenseStatementScreenState();
+  State<PersonalExpenseStatementScreen> createState() =>
+      _PersonalExpenseStatementScreenState();
 }
 
 enum _RecentRange { today, sevenDays, thirtyDays }
 
-class _BorrowingExpenseStatementScreenState
-    extends State<BorrowingExpenseStatementScreen> {
+class _PersonalExpenseStatementScreenState
+    extends State<PersonalExpenseStatementScreen> {
   static final NumberFormat _currency = NumberFormat.currency(
     locale: 'en_PH',
     symbol: 'PHP ',
     decimalDigits: 2,
   );
   static final DateFormat _dayHeaderDate = DateFormat('EEE, dd MMM yyyy');
-  static const String _lastSeenKey = 'borrowing_expense_statement_last_seen_ms';
+  static const String _lastSeenKey = 'personal_expense_statement_last_seen_ms';
 
   late Future<List<StatementEntry>> _entriesFuture;
   _RecentRange _selectedRange = _RecentRange.today;
@@ -104,7 +104,7 @@ class _BorrowingExpenseStatementScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Borrowing & Expense Statement')),
+      appBar: AppBar(title: const Text('Borrowed Funds Statement')),
       body: FutureBuilder<List<StatementEntry>>(
         future: _entriesFuture,
         builder: (context, snapshot) {
@@ -137,13 +137,9 @@ class _BorrowingExpenseStatementScreenState
           final summary = _summarize(entries);
           _persistLastSeenOnce(entries);
 
-          final borrowingEntries = entries
-              .where((e) => _isBorrowingType(e.type))
-              .toList();
           final personalEntries = entries
               .where((e) => _isPersonalType(e.type))
               .toList();
-          final filteredBorrowing = _applyRecentFilter(borrowingEntries);
           final filteredPersonal = _applyRecentFilter(personalEntries);
 
           return ListView(
@@ -157,7 +153,6 @@ class _BorrowingExpenseStatementScreenState
               const SizedBox(height: 16),
               _buildRecentUpdatesSection(
                 allEntries: entries,
-                borrowingEntries: filteredBorrowing,
                 personalEntries: filteredPersonal,
               ),
               const SizedBox(height: 16),
@@ -170,8 +165,6 @@ class _BorrowingExpenseStatementScreenState
   }
 
   _StatementSummary _summarize(List<StatementEntry> entries) {
-    var borrowingTaken = 0.0;
-    var borrowingPaid = 0.0;
     var expenseTaken = 0.0;
     var expensePaid = 0.0;
 
@@ -182,20 +175,15 @@ class _BorrowingExpenseStatementScreenState
         continue;
       }
 
-      if (type == 'borrowing') {
-        borrowingTaken += amount;
-      } else if (type == 'borrowing repayment') {
-        borrowingPaid += amount;
-      } else if (type == 'personal expense') {
+      if (type == 'personal expense' || type == 'borrowed funds') {
         expenseTaken += amount;
-      } else if (type == 'personal expense payment') {
+      } else if (type == 'personal expense payment' ||
+          type == 'borrowed funds repayment') {
         expensePaid += amount;
       }
     }
 
     return _StatementSummary(
-      borrowingTaken: borrowingTaken,
-      borrowingPaid: borrowingPaid,
       expenseTaken: expenseTaken,
       expensePaid: expensePaid,
     );
@@ -268,7 +256,7 @@ class _BorrowingExpenseStatementScreenState
           ),
           const SizedBox(height: 6),
           const Text(
-            'This is the total unpaid amount from Borrowing and Personal Expense.',
+            'This is the total unpaid amount from your borrowed funds.',
             style: TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],
@@ -288,64 +276,19 @@ class _BorrowingExpenseStatementScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Separated View',
+            'Borrowed Funds Balance',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
               color: AppColors.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Borrowing and Personal Expense are shown separately to avoid confusion.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
-          ),
           const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 560;
-              if (isNarrow) {
-                return Column(
-                  children: [
-                    _buildLargeBalanceTile(
-                      title: 'Borrowing',
-                      summary: summary.borrowing,
-                      accent: AppColors.error,
-                      cardColor: const Color(0xFFFFEFEF),
-                    ),
-                    const SizedBox(height: 10),
-                    _buildLargeBalanceTile(
-                      title: 'Personal Expense',
-                      summary: summary.personal,
-                      accent: AppColors.primary,
-                      cardColor: const Color(0xFFEBF3FF),
-                    ),
-                  ],
-                );
-              }
-
-              return Row(
-                children: [
-                  Expanded(
-                    child: _buildLargeBalanceTile(
-                      title: 'Borrowing',
-                      summary: summary.borrowing,
-                      accent: AppColors.error,
-                      cardColor: const Color(0xFFFFEFEF),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _buildLargeBalanceTile(
-                      title: 'Personal Expense',
-                      summary: summary.personal,
-                      accent: AppColors.primary,
-                      cardColor: const Color(0xFFEBF3FF),
-                    ),
-                  ),
-                ],
-              );
-            },
+          _buildLargeBalanceTile(
+            title: 'Borrowed Funds',
+            summary: summary.personal,
+            accent: AppColors.primary,
+            cardColor: const Color(0xFFEBF3FF),
           ),
         ],
       ),
@@ -444,18 +387,12 @@ class _BorrowingExpenseStatementScreenState
           ),
           const SizedBox(height: 3),
           const Text(
-            'Each type has its own flow: Taken -> Paid Back -> Remaining',
+            'Each expense has its own flow: Taken -> Paid Back -> Remaining',
             style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
           _buildTypeFlowCard(
-            title: 'Borrowing Flow',
-            typeSummary: summary.borrowing,
-            accent: AppColors.error,
-          ),
-          const SizedBox(height: 10),
-          _buildTypeFlowCard(
-            title: 'Personal Expense Flow',
+            title: 'Borrowed Funds Flow',
             typeSummary: summary.personal,
             accent: AppColors.primary,
           ),
@@ -560,7 +497,6 @@ class _BorrowingExpenseStatementScreenState
 
   Widget _buildRecentUpdatesSection({
     required List<StatementEntry> allEntries,
-    required List<StatementEntry> borrowingEntries,
     required List<StatementEntry> personalEntries,
   }) {
     final newCount = _countNewEntries(allEntries);
@@ -622,13 +558,7 @@ class _BorrowingExpenseStatementScreenState
           _buildRangeChips(),
           const SizedBox(height: 10),
           _buildUpdatesAccordion(
-            title: 'Borrowing Updates',
-            accent: AppColors.error,
-            entries: borrowingEntries,
-          ),
-          const SizedBox(height: 8),
-          _buildUpdatesAccordion(
-            title: 'Personal Expense Updates',
+            title: 'Borrowed Funds Updates',
             accent: AppColors.primary,
             entries: personalEntries,
           ),
@@ -870,11 +800,8 @@ class _BorrowingExpenseStatementScreenState
 
   Widget _buildTimelineRow(StatementEntry entry) {
     final isPayment = _isPaymentType(entry.type);
-    final isBorrowing = _isBorrowingType(entry.type);
     final badgeText = isPayment ? 'Payment Made' : 'Money Taken';
-    final badgeColor = isPayment
-        ? AppColors.secondary
-        : (isBorrowing ? AppColors.error : AppColors.primary);
+    final badgeColor = isPayment ? AppColors.secondary : AppColors.primary;
     final icon = isPayment
         ? Icons.arrow_circle_up_rounded
         : Icons.arrow_circle_down_rounded;
@@ -973,7 +900,7 @@ class _BorrowingExpenseStatementScreenState
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Borrowing is money you owe back. Personal Expense is owner spending tracked separately.\nRemaining means Taken minus Paid Back.',
+              'Borrowed Funds is money you take for personal use from the store. Remaining means Taken minus Paid Back.',
               style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
             ),
           ),
@@ -982,35 +909,27 @@ class _BorrowingExpenseStatementScreenState
     );
   }
 
-  bool _isBorrowingType(String type) {
-    final normalized = type.toLowerCase().trim();
-    return normalized == 'borrowing' || normalized == 'borrowing repayment';
-  }
-
   bool _isPersonalType(String type) {
     final normalized = type.toLowerCase().trim();
     return normalized == 'personal expense' ||
-        normalized == 'personal expense payment';
+        normalized == 'personal expense payment' ||
+        normalized == 'borrowed funds' ||
+        normalized == 'borrowed funds repayment';
   }
 
   bool _isPaymentType(String type) {
     final normalized = type.toLowerCase().trim();
-    return normalized.contains('repayment') || normalized.contains('payment');
+    return normalized.contains('payment');
   }
 
   String _friendlyType(String type) {
     final normalized = type.toLowerCase().trim();
-    if (normalized == 'borrowing') {
-      return 'Borrowed Money';
+    if (normalized == 'personal expense' || normalized == 'borrowed funds') {
+      return 'Borrowed Funds Taken';
     }
-    if (normalized == 'borrowing repayment') {
-      return 'Borrowing Payment';
-    }
-    if (normalized == 'personal expense') {
-      return 'Personal Expense Taken';
-    }
-    if (normalized == 'personal expense payment') {
-      return 'Personal Expense Payment';
+    if (normalized == 'personal expense payment' ||
+        normalized == 'borrowed funds repayment') {
+      return 'Borrowed Funds Repayment';
     }
     return type;
   }
@@ -1018,28 +937,18 @@ class _BorrowingExpenseStatementScreenState
 
 class _StatementSummary {
   const _StatementSummary({
-    required this.borrowingTaken,
-    required this.borrowingPaid,
     required this.expenseTaken,
     required this.expensePaid,
   });
 
-  final double borrowingTaken;
-  final double borrowingPaid;
   final double expenseTaken;
   final double expensePaid;
-
-  _TypeSummary get borrowing =>
-      _TypeSummary(taken: borrowingTaken, paid: borrowingPaid);
 
   _TypeSummary get personal =>
       _TypeSummary(taken: expenseTaken, paid: expensePaid);
 
-  double get borrowingOutstanding => borrowingTaken - borrowingPaid;
   double get expenseOutstanding => expenseTaken - expensePaid;
-  double get totalTaken => borrowingTaken + expenseTaken;
-  double get totalPaid => borrowingPaid + expensePaid;
-  double get totalOutstanding => borrowingOutstanding + expenseOutstanding;
+  double get totalOutstanding => expenseOutstanding;
 }
 
 class _TypeSummary {
@@ -1049,13 +958,15 @@ class _TypeSummary {
   final double paid;
 
   double get remaining => taken - paid;
-  double get ratio => taken <= 0 ? 0 : (paid / taken).clamp(0.0, 1.0);
+
+  double get ratio => taken > 0 ? (paid / taken).clamp(0.0, 1.0) : 0.0;
+
   double get ratioPercent => ratio * 100;
 }
 
 class _DateEntryGroup {
-  const _DateEntryGroup({required this.day, required this.entries});
-
   final DateTime day;
   final List<StatementEntry> entries;
+
+  _DateEntryGroup({required this.day, required this.entries});
 }

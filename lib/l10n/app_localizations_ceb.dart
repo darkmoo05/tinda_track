@@ -596,9 +596,6 @@ class AppLocalizationsCeb extends AppLocalizations {
       'Walay aktibidad nga katugma sa gipiling filter.';
 
   @override
-  String get borrowingStatus => 'Kahimtang sa Pagpahulam';
-
-  @override
   String ownerCreditOutstanding(String amount) {
     return 'Nahibilin nga Utang sa Tag-iya: $amount';
   }

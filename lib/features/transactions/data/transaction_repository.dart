@@ -16,6 +16,7 @@ class TransactionRepository {
     required String direction,
     required double amount,
     String chargeHandling = 'addOnTop',
+    String? transactionTypeKey,
   }) async {
     try {
       final response = await _apiClient.get(
@@ -25,6 +26,8 @@ class TransactionRepository {
           'direction': direction,
           'amount': amount,
           'chargeHandling': chargeHandling,
+          if (transactionTypeKey != null)
+            'transactionTypeKey': transactionTypeKey,
         },
       );
 
@@ -61,6 +64,7 @@ class TransactionRepository {
     String? entryDate,
     String? externalProvider,
     String? externalTransactionId,
+    String? transactionTypeKey,
   }) async {
     try {
       final request = TransactionCreateRequest(
@@ -75,6 +79,7 @@ class TransactionRepository {
         entryDate: entryDate,
         externalProvider: externalProvider,
         externalTransactionId: externalTransactionId,
+        transactionTypeKey: transactionTypeKey,
       );
 
       final response = await _apiClient.post('/transactions', request.toJson());

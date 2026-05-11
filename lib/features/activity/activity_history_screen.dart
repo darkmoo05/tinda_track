@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import 'dart:async';
 import 'dart:io';
 
 import '../../core/app_theme.dart';
@@ -40,7 +41,12 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   final DateFormat _fullDateFormat = DateFormat('dd MMM yyyy');
   final DateFormat _timeFormat = DateFormat('HH:mm');
 
-  late Future<List<_HistoryRow>> _historyFuture;
+  Timer? _debounce;
+  bool _isLoading = true;
+  List<_HistoryRow> _transactions = [];
+  List<_HistoryRow> _ownerMovements = [];
+  List<Object> _txDisplayList = [];
+  List<Object> _movDisplayList = [];
   String _searchQuery = '';
   DateTime? _beginDateFilter;
   DateTime? _endDateFilter;
@@ -52,12 +58,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     _selectedWalletFilter = _walletFilterFromPerspective(
       widget.initialWalletPerspective,
     );
-    _historyFuture = _loadHistory();
+    _loadHistory();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
@@ -72,40 +79,30 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           title: context.l10n.appTitle,
           onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
-        body: FutureBuilder<List<_HistoryRow>>(
-          future: _historyFuture,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final allRows = snapshot.data!;
-            final transactions = allRows
-                .where(_isTransactionPerspectiveRow)
-                .toList();
-            final ownerMovements = allRows
-                .where((row) => row.entryType == 'owner_movement')
-                .toList();
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildTabBar(),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      _buildHistoryList(transactions, showWalletFilters: true),
-                      _buildHistoryList(
-                        ownerMovements,
-                        showWalletFilters: false,
-                      ),
-                    ],
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTabBar(),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _buildHistoryList(
+                          _transactions,
+                          _txDisplayList,
+                          showWalletFilters: true,
+                        ),
+                        _buildHistoryList(
+                          _ownerMovements,
+                          _movDisplayList,
+                          showWalletFilters: false,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
-        ),
+                ],
+              ),
       ),
     );
   }
@@ -136,15 +133,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Widget _buildHistoryList(
-    List<_HistoryRow> items, {
+    List<_HistoryRow> allItems,
+    List<Object> displayList, {
     required bool showWalletFilters,
   }) {
-    final filteredItems = _filterItems(
-      items,
-      applyWalletFilter: showWalletFilters,
-    );
-
-    if (items.isNotEmpty && filteredItems.isEmpty) {
+    if (allItems.isNotEmpty && displayList.isEmpty) {
       return ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -161,7 +154,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       );
     }
 
-    if (items.isEmpty) {
+    if (allItems.isEmpty) {
       return ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -178,15 +171,27 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        _buildHeader(),
-        const SizedBox(height: 20),
-        _buildSearchAndFilter(showWalletFilters: showWalletFilters),
-        ..._groupItemsByDate(filteredItems),
-        const SizedBox(height: 100),
-      ],
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
+      itemCount: displayList.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 20),
+              _buildSearchAndFilter(showWalletFilters: showWalletFilters),
+              const SizedBox(height: 20),
+            ],
+          );
+        }
+        final item = displayList[index - 1];
+        if (item is String) {
+          return ArchitectDateHeader(label: item);
+        }
+        return _buildTile(item as _HistoryRow);
+      },
     );
   }
 
@@ -270,9 +275,14 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 child: TextField(
                   controller: _searchController,
                   onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value.trim().toLowerCase();
-                    });
+                    final newQuery = value.trim().toLowerCase();
+                    if (newQuery == _searchQuery) return;
+                    setState(() => _searchQuery = newQuery);
+                    _debounce?.cancel();
+                    _debounce = Timer(
+                      const Duration(milliseconds: 300),
+                      _applyFilters,
+                    );
                   },
                   decoration: InputDecoration(
                     hintText: context.l10n.searchAccountRefParty,
@@ -290,9 +300,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                         : IconButton(
                             onPressed: () {
                               _searchController.clear();
-                              setState(() {
-                                _searchQuery = '';
-                              });
+                              _debounce?.cancel();
+                              setState(() => _searchQuery = '');
+                              _applyFilters();
                             },
                             icon: const Icon(
                               Icons.close_rounded,
@@ -383,9 +393,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                     color: AppColors.primary,
                   ),
                   onDeleted: () {
-                    setState(() {
-                      _beginDateFilter = null;
-                    });
+                    _beginDateFilter = null;
+                    _applyFilters();
                   },
                 ),
               if (_endDateFilter != null)
@@ -405,9 +414,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                     color: AppColors.primary,
                   ),
                   onDeleted: () {
-                    setState(() {
-                      _endDateFilter = null;
-                    });
+                    _endDateFilter = null;
+                    _applyFilters();
                   },
                 ),
             ],
@@ -461,9 +469,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
-          setState(() {
-            _selectedWalletFilter = isSelected ? null : walletKey;
-          });
+          _selectedWalletFilter = isSelected ? null : walletKey;
+          _applyFilters();
         },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -592,6 +599,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         _endDateFilter = normalized;
       }
     });
+    _applyFilters();
   }
 
   Future<void> _pickEndDateFilter() async {
@@ -620,6 +628,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         _beginDateFilter = normalized;
       }
     });
+    _applyFilters();
   }
 
   bool _isTransactionPerspectiveRow(_HistoryRow item) {
@@ -696,38 +705,47 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return '';
   }
 
-  List<Widget> _groupItemsByDate(List<_HistoryRow> items) {
-    final grouped = <Widget>[];
-    String lastDate = '';
+  void _applyFilters() {
+    if (!mounted) return;
+    final filteredTx = _filterItems(_transactions, applyWalletFilter: true);
+    final filteredMov = _filterItems(_ownerMovements, applyWalletFilter: false);
+    setState(() {
+      _txDisplayList = _buildGroupedDisplayList(filteredTx);
+      _movDisplayList = _buildGroupedDisplayList(filteredMov);
+    });
+  }
 
+  List<Object> _buildGroupedDisplayList(List<_HistoryRow> items) {
+    final result = <Object>[];
+    String lastDate = '';
     for (final item in items) {
       final dateLabel = _dateLabel(item.createdAt);
       if (dateLabel != lastDate) {
         lastDate = dateLabel;
-        grouped.add(ArchitectDateHeader(label: dateLabel));
+        result.add(dateLabel);
       }
-
-      final displayAmount = _resolveDisplayAmount(item);
-      final isWalletOutflow = _isWalletOutflow(item);
-      final tileColor = item.entryType == 'transaction'
-          ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
-          : (isWalletOutflow ? AppColors.error : _colorFor(item.iconKey));
-      grouped.add(
-        ArchitectActivityTile(
-          title: item.title,
-          type: item.tag,
-          reference: item.reference,
-          amount:
-              '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}',
-          time: _timeFormat.format(item.createdAt),
-          icon: _iconFor(item.iconKey),
-          iconColor: tileColor,
-          onTap: () => _showTransactionDetails(item),
-        ),
-      );
+      result.add(item);
     }
+    return result;
+  }
 
-    return grouped;
+  Widget _buildTile(_HistoryRow item) {
+    final displayAmount = _resolveDisplayAmount(item);
+    final isWalletOutflow = _isWalletOutflow(item);
+    final tileColor = item.entryType == 'transaction'
+        ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
+        : (isWalletOutflow ? AppColors.error : _colorFor(item.iconKey));
+    return ArchitectActivityTile(
+      title: item.title,
+      type: item.tag,
+      reference: item.reference,
+      amount:
+          '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}',
+      time: _timeFormat.format(item.createdAt),
+      icon: _iconFor(item.iconKey),
+      iconColor: tileColor,
+      onTap: () => _showTransactionDetails(item),
+    );
   }
 
   Future<void> _showTransactionDetails(_HistoryRow item) async {
@@ -981,14 +999,14 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     );
   }
 
-  Future<List<_HistoryRow>> _loadHistory() async {
+  Future<void> _loadHistory() async {
     final db = await _database.database;
     final rows = await db.query(
       AppDatabase.ledgerTable,
       orderBy: 'created_at DESC, id DESC',
     );
 
-    return rows
+    final allRows = rows
         .map((row) {
           final entryType = row['entry_type'] as String;
           final reference = row['reference'] as String;
@@ -1030,6 +1048,23 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           );
         })
         .toList(growable: false);
+
+    if (!mounted) return;
+    final txRows = allRows.where(_isTransactionPerspectiveRow).toList();
+    final movRows = allRows
+        .where((row) => row.entryType == 'owner_movement')
+        .toList();
+    setState(() {
+      _transactions = txRows;
+      _ownerMovements = movRows;
+      _isLoading = false;
+      _txDisplayList = _buildGroupedDisplayList(
+        _filterItems(txRows, applyWalletFilter: true),
+      );
+      _movDisplayList = _buildGroupedDisplayList(
+        _filterItems(movRows, applyWalletFilter: false),
+      );
+    });
   }
 
   String? _extractChargeDestinationKeyFromNote(String note) {

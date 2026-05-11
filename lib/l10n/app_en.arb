@@ -224,7 +224,6 @@
   "filterPersonal": "Personal",
   "filterTransactions": "Transactions",
   "noActivitiesFilter": "No activities match the selected filter yet.",
-  "borrowingStatus": "Borrowing Status",
   "ownerCreditOutstanding": "Owner Credit Outstanding: {amount}",
   "@ownerCreditOutstanding": {
     "placeholders": {

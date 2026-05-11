@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/data/app_database.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../transactions/add_owner_movement_screen.dart';
@@ -59,6 +60,14 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
   int _selectedPeriod = 0;
   static const List<String> _periods = ['DAY', 'WEEK', 'MONTH', 'YEAR'];
   _HistorySourceFilter _historySourceFilter = _HistorySourceFilter.all;
+
+  List<_FeeMovementEntry> _feeMovements = [];
+  bool _isLoadingFeeMovements = true;
+  int _feeMovementsTotal = 0;
+  static final _movementDateTimeFormat = DateFormat('dd MMM yyyy · h:mm a');
+
+  // Memoized fee history day groups — recomputed only when the filter changes.
+  List<_DayGroup> _dayGroups = const [];
 
   final Set<DateTime> _expandedDays = {};
   final Map<int, GlobalKey> _dayHeaderKeys = {};
@@ -162,12 +171,12 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
     }
   }
 
-  List<_DayGroup> _buildDayGroups() {
+  // Pure computation — called once on init and whenever the filter changes.
+  // Never called inside build(), so it doesn't run on every setState.
+  List<_DayGroup> _computeDayGroups() {
     final map = <DateTime, List<ChargeTransaction>>{};
     for (final tx in widget.chargeTransactions) {
-      if (!_matchesSourceFilter(tx)) {
-        continue;
-      }
+      if (!_matchesSourceFilter(tx)) continue;
       final key = DateTime(
         tx.createdAt.year,
         tx.createdAt.month,
@@ -184,9 +193,72 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final dayGroups = _buildDayGroups();
+  void initState() {
+    super.initState();
+    // Build once immediately — no setState needed since this is initState.
+    _dayGroups = _computeDayGroups();
+    _loadFeeMovements();
+  }
 
+  Future<void> _loadFeeMovements() async {
+    final db = await AppDatabase.instance.database;
+    await AppDatabase.instance.ensureWalletSchema(db);
+
+    // Total count — shown on the "View all" button.
+    final countResult = await db.rawQuery('''
+      SELECT COUNT(*) AS cnt
+      FROM ${AppDatabase.ledgerTable}
+      WHERE is_deleted = 0
+        AND entry_type = 'owner_movement'
+        AND owner_movement_type IN ('Fee Withdrawal', 'Fee Transfer')
+    ''');
+    final total = (countResult.first['cnt'] as int?) ?? 0;
+
+    // Latest 5 entries only — keeps the inline card compact.
+    final rows = await db.rawQuery('''
+      SELECT
+        created_at,
+        owner_movement_type,
+        wallet_account,
+        owner_party_account,
+        amount,
+        reference
+      FROM ${AppDatabase.ledgerTable}
+      WHERE is_deleted = 0
+        AND entry_type = 'owner_movement'
+        AND owner_movement_type IN ('Fee Withdrawal', 'Fee Transfer')
+      ORDER BY created_at DESC, id DESC
+      LIMIT 5
+    ''');
+
+    if (!mounted) return;
+
+    setState(() {
+      _feeMovementsTotal = total;
+      _feeMovements = rows.map((row) {
+        final movementType = (row['owner_movement_type'] as String?) ?? '';
+        final isTransfer = movementType == 'Fee Transfer';
+        return _FeeMovementEntry(
+          createdAt:
+              DateTime.tryParse((row['created_at'] as String?) ?? '') ??
+              DateTime.now(),
+          movementType: movementType,
+          source: isTransfer
+              ? ((row['owner_party_account'] as String?) ?? '')
+              : ((row['wallet_account'] as String?) ?? ''),
+          destination: isTransfer
+              ? ((row['wallet_account'] as String?) ?? '')
+              : null,
+          amount: (row['amount'] as num?)?.toDouble() ?? 0,
+          reference: (row['reference'] as String?) ?? '',
+        );
+      }).toList();
+      _isLoadingFeeMovements = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
@@ -208,77 +280,99 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-        children: [
-          Text(
-            context.l10n.chargesEarnings,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.onSurface,
-              letterSpacing: -0.3,
+      body: CustomScrollView(
+        slivers: [
+          // ── Fixed top content ──────────────────────────────────
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.chargesEarnings,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.onSurface,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'All-time charges collected from transactions',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildHeroBanner(),
+                  const SizedBox(height: 14),
+                  _buildWithdrawableCard(),
+                  const SizedBox(height: 14),
+                  _buildFeeMovementLog(),
+                  const SizedBox(height: 20),
+                  _buildAnalyticsSection(),
+                  const SizedBox(height: 24),
+                  // Fee History header
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Fee History',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.onSurface,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Tap a day to see each fee entry',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${_dayGroups.length} day${_dayGroups.length == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildSourceFilterChips(),
+                  const SizedBox(height: 8),
+                  _buildHistoryLegend(),
+                  const SizedBox(height: 12),
+                  if (_dayGroups.isEmpty) _buildEmptyState(),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'All-time charges collected from transactions',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildHeroBanner(),
-          const SizedBox(height: 14),
-          _buildWithdrawableCard(),
-          const SizedBox(height: 20),
-          _buildAnalyticsSection(),
-          const SizedBox(height: 24),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Fee History',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Tap a day to see each fee entry',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+
+          // ── Day groups — lazy, only visible headers are built ──
+          if (_dayGroups.isNotEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+              sliver: SliverList.builder(
+                itemCount: _dayGroups.length,
+                itemBuilder: (_, i) => _buildDayGroup(_dayGroups[i]),
               ),
-              Text(
-                '${dayGroups.length} day${dayGroups.length == 1 ? '' : 's'}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _buildSourceFilterChips(),
-          const SizedBox(height: 8),
-          _buildHistoryLegend(),
-          const SizedBox(height: 12),
-          if (dayGroups.isEmpty)
-            _buildEmptyState()
+            )
           else
-            ...dayGroups.map(_buildDayGroup),
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
@@ -601,6 +695,9 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
         setState(() {
           _historySourceFilter = value;
           _expandedDays.clear();
+          // Recompute memoized groups for the new filter in the same setState
+          // so build() reads the already-updated list.
+          _dayGroups = _computeDayGroups();
         });
       },
       labelStyle: TextStyle(
@@ -995,6 +1092,292 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
     );
   }
 
+  // ── Fee movement log ─────────────────────────────────────────
+
+  Widget _buildFeeMovementLog() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Fee Movement Log',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Every time fee income was withdrawn or moved to a wallet',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (!_isLoadingFeeMovements)
+              Text(
+                '$_feeMovementsTotal record${_feeMovementsTotal == 1 ? '' : 's'}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_isLoadingFeeMovements)
+          const LinearProgressIndicator(minHeight: 2)
+        else if (_feeMovements.isEmpty)
+          _buildFeeMovementEmptyState()
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.outlineVariant),
+            ),
+            child: Column(
+              children: [
+                ..._feeMovements.asMap().entries.map(
+                  (e) => _buildFeeMovementEntry(
+                    e.value,
+                    isLast:
+                        e.key == _feeMovements.length - 1 &&
+                        _feeMovementsTotal <= _feeMovements.length,
+                  ),
+                ),
+                if (_feeMovementsTotal > _feeMovements.length)
+                  InkWell(
+                    onTap: _showFeeMovementSheet,
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 13,
+                      ),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                            color: AppColors.outlineVariant,
+                            width: 0.5,
+                          ),
+                        ),
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'View all $_feeMovementsTotal records',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _showFeeMovementSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _FeeMovementSheet(),
+    );
+  }
+
+  Widget _buildFeeMovementEntry(
+    _FeeMovementEntry entry, {
+    bool isLast = false,
+  }) {
+    final isWithdrawal = entry.movementType == 'Fee Withdrawal';
+    final Color color = isWithdrawal
+        ? AppColors.error
+        : const Color(0xFFF59E0B);
+    final IconData icon = isWithdrawal
+        ? Icons.savings_rounded
+        : Icons.swap_horiz_rounded;
+    final String badgeLabel = isWithdrawal ? 'WITHDRAWN' : 'MOVED TO WALLET';
+
+    final String sourceLabel = _feeDestLabel(entry.source);
+    final String title = isWithdrawal
+        ? 'Fee Withdrawn \u00b7 $sourceLabel'
+        : 'Fee Transferred \u00b7 $sourceLabel \u2192 ${_feeDestLabel(entry.destination ?? '')}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                ),
+              ),
+      ),
+      child: Row(
+        children: [
+          // Icon badge
+          Container(
+            width: 38,
+            height: 38,
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          // Title + date
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _movementDateTimeFormat.format(entry.createdAt),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.65),
+                  ),
+                ),
+                if (entry.reference.isNotEmpty) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    entry.reference,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Amount + badge
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _fmt(entry.amount),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  badgeLabel,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _feeDestLabel(String raw) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('gcash')) return 'GCash';
+    if (lower.contains('maya')) return 'Maya Wallet';
+    if (lower.contains('hand') || lower.contains('cash')) return 'On-Hand Cash';
+    return raw.isNotEmpty ? raw : 'Unknown';
+  }
+
+  Widget _buildFeeMovementEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.swap_horiz_rounded,
+            size: 36,
+            color: AppColors.onSurfaceVariant.withValues(alpha: 0.35),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'No fee movements yet',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'When you withdraw or transfer your fee earnings to a wallet, each movement will appear here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Empty state ───────────────────────────────────────────────
 
   Widget _buildEmptyState() {
@@ -1048,6 +1431,24 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
   }
 }
 
+class _FeeMovementEntry {
+  const _FeeMovementEntry({
+    required this.createdAt,
+    required this.movementType,
+    required this.source,
+    this.destination,
+    required this.amount,
+    required this.reference,
+  });
+
+  final DateTime createdAt;
+  final String movementType; // 'Fee Withdrawal' or 'Fee Transfer'
+  final String source; // where fee came from
+  final String? destination; // only set for Fee Transfer
+  final double amount;
+  final String reference;
+}
+
 class _DayGroup {
   const _DayGroup({
     required this.date,
@@ -1058,5 +1459,544 @@ class _DayGroup {
   final List<ChargeTransaction> transactions;
   final double total;
 }
+
+// ── Full-screen fee movement log sheet ───────────────────────
+
+class _FeeMovementSheet extends StatefulWidget {
+  const _FeeMovementSheet();
+
+  @override
+  State<_FeeMovementSheet> createState() => _FeeMovementSheetState();
+}
+
+class _FeeMovementSheetState extends State<_FeeMovementSheet> {
+  static final _currency = NumberFormat.currency(
+    locale: 'en_PH',
+    symbol: '₱ ',
+    decimalDigits: 2,
+  );
+  static final _dateHeader = DateFormat('EEE, dd MMM yyyy');
+  static final _dtFormat = DateFormat('dd MMM yyyy · h:mm a');
+
+  List<_FeeMovementEntry> _all = [];
+  bool _isLoading = true;
+  _FeeMovementTypeFilter _filter = _FeeMovementTypeFilter.all;
+  final Set<DateTime> _expandedDays = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final db = await AppDatabase.instance.database;
+    await AppDatabase.instance.ensureWalletSchema(db);
+    final rows = await db.rawQuery('''
+      SELECT
+        created_at,
+        owner_movement_type,
+        wallet_account,
+        owner_party_account,
+        amount,
+        reference
+      FROM ${AppDatabase.ledgerTable}
+      WHERE is_deleted = 0
+        AND entry_type = 'owner_movement'
+        AND owner_movement_type IN ('Fee Withdrawal', 'Fee Transfer')
+      ORDER BY created_at DESC, id DESC
+    ''');
+    if (!mounted) return;
+    setState(() {
+      _all = rows.map((row) {
+        final movementType = (row['owner_movement_type'] as String?) ?? '';
+        final isTransfer = movementType == 'Fee Transfer';
+        return _FeeMovementEntry(
+          createdAt:
+              DateTime.tryParse((row['created_at'] as String?) ?? '') ??
+              DateTime.now(),
+          movementType: movementType,
+          source: isTransfer
+              ? ((row['owner_party_account'] as String?) ?? '')
+              : ((row['wallet_account'] as String?) ?? ''),
+          destination: isTransfer
+              ? ((row['wallet_account'] as String?) ?? '')
+              : null,
+          amount: (row['amount'] as num?)?.toDouble() ?? 0,
+          reference: (row['reference'] as String?) ?? '',
+        );
+      }).toList();
+      _isLoading = false;
+    });
+  }
+
+  List<_FeeMovementEntry> get _filtered {
+    switch (_filter) {
+      case _FeeMovementTypeFilter.withdrawals:
+        return _all.where((e) => e.movementType == 'Fee Withdrawal').toList();
+      case _FeeMovementTypeFilter.transfers:
+        return _all.where((e) => e.movementType == 'Fee Transfer').toList();
+      case _FeeMovementTypeFilter.all:
+        return _all;
+    }
+  }
+
+  // Groups filtered list by calendar day, newest first.
+  List<MapEntry<DateTime, List<_FeeMovementEntry>>> get _dayGroups {
+    final map = <DateTime, List<_FeeMovementEntry>>{};
+    for (final e in _filtered) {
+      final key = DateTime(
+        e.createdAt.year,
+        e.createdAt.month,
+        e.createdAt.day,
+      );
+      map.putIfAbsent(key, () => []).add(e);
+    }
+    final days = map.keys.toList()..sort((a, b) => b.compareTo(a));
+    return days.map((d) => MapEntry(d, map[d]!)).toList();
+  }
+
+  String _fmt(double v) => _currency.format(v);
+
+  String _label(String raw) {
+    final l = raw.toLowerCase();
+    if (l.contains('gcash')) return 'GCash';
+    if (l.contains('maya')) return 'Maya Wallet';
+    if (l.contains('hand') || l.contains('cash')) return 'On-Hand Cash';
+    return raw.isNotEmpty ? raw : 'Unknown';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = _dayGroups;
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Fee Movement Log',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'All withdrawals and wallet transfers of fee income',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                  color: AppColors.onSurfaceVariant,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Filter chips
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                _chip('All', _FeeMovementTypeFilter.all),
+                const SizedBox(width: 8),
+                _chip('Withdrawals', _FeeMovementTypeFilter.withdrawals),
+                const SizedBox(width: 8),
+                _chip('Transfers', _FeeMovementTypeFilter.transfers),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          // Scrollable content
+          Flexible(
+            child: _isLoading
+                ? const Padding(
+                    padding: EdgeInsets.all(48),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : groups.isEmpty
+                ? _buildEmpty()
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                    itemCount: groups.length,
+                    itemBuilder: (_, i) => _buildDayGroup(groups[i]),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String label, _FeeMovementTypeFilter value) {
+    final selected = _filter == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => setState(() {
+        _filter = value;
+        _expandedDays.clear();
+      }),
+      labelStyle: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: selected ? Colors.white : AppColors.onSurface,
+      ),
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      side: BorderSide(
+        color: selected ? AppColors.primary : AppColors.outlineVariant,
+      ),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _buildDayGroup(MapEntry<DateTime, List<_FeeMovementEntry>> group) {
+    final day = group.key;
+    final entries = group.value;
+    final isExpanded = _expandedDays.contains(day);
+    final count = entries.length;
+    final dayTotal = entries.fold(0.0, (s, e) => s + e.amount);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        children: [
+          // Day header
+          InkWell(
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(14),
+              topRight: const Radius.circular(14),
+              bottomLeft: Radius.circular(isExpanded ? 0 : 14),
+              bottomRight: Radius.circular(isExpanded ? 0 : 14),
+            ),
+            onTap: () => setState(() {
+              if (isExpanded) {
+                _expandedDays.remove(day);
+              } else {
+                _expandedDays.add(day);
+              }
+            }),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLowest,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(14),
+                  topRight: const Radius.circular(14),
+                  bottomLeft: Radius.circular(isExpanded ? 0 : 14),
+                  bottomRight: Radius.circular(isExpanded ? 0 : 14),
+                ),
+                border: Border.all(
+                  color: isExpanded
+                      ? AppColors.primary.withValues(alpha: 0.35)
+                      : AppColors.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.calendar_today_rounded,
+                        color: AppColors.primary,
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _dateHeader.format(day),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            '$count movement${count == 1 ? '' : 's'}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.onSurfaceVariant.withValues(
+                                alpha: 0.7,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _fmt(dayTotal),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          'moved that day',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.onSurfaceVariant.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 6),
+                    AnimatedRotation(
+                      turns: isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: AppColors.onSurfaceVariant,
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Entries panel
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            child: isExpanded
+                ? Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerLow,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(14),
+                        bottomRight: Radius.circular(14),
+                      ),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Column(
+                      children: entries
+                          .asMap()
+                          .entries
+                          .map(
+                            (e) => _buildEntry(
+                              e.value,
+                              isLast: e.key == entries.length - 1,
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEntry(_FeeMovementEntry entry, {bool isLast = false}) {
+    final isWithdrawal = entry.movementType == 'Fee Withdrawal';
+    final Color color = isWithdrawal
+        ? AppColors.error
+        : const Color(0xFFF59E0B);
+    final IconData icon = isWithdrawal
+        ? Icons.savings_rounded
+        : Icons.swap_horiz_rounded;
+    final String badge = isWithdrawal ? 'WITHDRAWN' : 'MOVED TO WALLET';
+    final src = _label(entry.source);
+    final title = isWithdrawal
+        ? 'Fee Withdrawn \u00b7 $src'
+        : 'Fee Transferred \u00b7 $src \u2192 ${_label(entry.destination ?? '')}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                ),
+              ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 17),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _dtFormat.format(entry.createdAt),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.65),
+                  ),
+                ),
+                if (entry.reference.isNotEmpty) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    entry.reference,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _fmt(entry.amount),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  badge,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmpty() {
+    String label;
+    switch (_filter) {
+      case _FeeMovementTypeFilter.withdrawals:
+        label = 'withdrawals';
+        break;
+      case _FeeMovementTypeFilter.transfers:
+        label = 'transfers';
+        break;
+      case _FeeMovementTypeFilter.all:
+        label = 'movements';
+        break;
+    }
+    return Padding(
+      padding: const EdgeInsets.all(48),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.swap_horiz_rounded,
+            size: 40,
+            color: AppColors.onSurfaceVariant.withValues(alpha: 0.35),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No $label recorded',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Fee movements will appear here once you withdraw or transfer fee income.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _FeeMovementTypeFilter { all, withdrawals, transfers }
 
 enum _HistorySourceFilter { all, gcash, maya, onHand }

@@ -18,16 +18,10 @@ class DashboardSnapshot {
     required this.recordedFlow,
     required this.businessFundingTotal,
     required this.personalExpenseTotal,
-    required this.totalBorrowed,
-    required this.totalRepaid,
-    required this.borrowingAmount,
-    required this.borrowingRepaymentAmount,
-    required this.borrowingOutstanding,
     required this.personalExpenseAmount,
     required this.personalExpensePaymentAmount,
     required this.personalExpenseOutstanding,
     required this.ownerCreditAdjustment,
-    required this.netBorrowOutstanding,
     required this.flowTrendLabel,
     required this.flowCaption,
     required this.chargesToOnHand,
@@ -63,16 +57,10 @@ class DashboardSnapshot {
   final double recordedFlow;
   final double businessFundingTotal;
   final double personalExpenseTotal;
-  final double totalBorrowed;
-  final double totalRepaid;
-  final double borrowingAmount;
-  final double borrowingRepaymentAmount;
-  final double borrowingOutstanding;
   final double personalExpenseAmount;
   final double personalExpensePaymentAmount;
   final double personalExpenseOutstanding;
   final double ownerCreditAdjustment;
-  final double netBorrowOutstanding;
   final String flowTrendLabel;
   final String flowCaption;
   final double chargesToOnHand;
@@ -168,10 +156,11 @@ class DashboardRepository {
 
       final normalizedType = movementType.toLowerCase();
       final isDebit =
-          normalizedType == 'borrowing' || normalizedType == 'personal expense';
+          normalizedType == 'personal expense' ||
+          normalizedType == 'borrowed funds';
       final isRepayment =
-          normalizedType == 'borrowing repayment' ||
-          normalizedType == 'personal expense payment';
+          normalizedType == 'personal expense payment' ||
+          normalizedType == 'borrowed funds repayment';
 
       if (!isDebit && !isRepayment) {
         continue;
@@ -223,10 +212,6 @@ class DashboardRepository {
     double feeWithdrawnMaya = 0;
     double businessFundingTotal = 0;
     double personalExpenseTotal = 0;
-    double totalBorrowed = 0;
-    double totalRepaid = 0;
-    double borrowingAmount = 0;
-    double borrowingRepaymentAmount = 0;
     double personalExpenseAmount = 0;
     double personalExpensePaymentAmount = 0;
     int transactionCount = 0;
@@ -293,39 +278,26 @@ class DashboardRepository {
           businessFundingTotal += amount;
         }
 
-        if (ownerScope == 'personal' || movementType == 'personal expense') {
+        if (ownerScope == 'personal' ||
+            movementType == 'personal expense' ||
+            movementType == 'borrowed funds') {
           personalExpenseTotal += amount;
         }
 
-        if (movementType == 'borrowing' || movementType == 'personal expense') {
-          totalBorrowed += amount;
-        }
-
-        if (movementType == 'borrowing repayment' ||
-            movementType == 'personal expense payment') {
-          totalRepaid += amount;
-        }
-
-        // Separate tracking for borrowing and personal expense
-        if (movementType == 'borrowing') {
-          borrowingAmount += amount;
-        }
-
-        if (movementType == 'borrowing repayment') {
-          borrowingRepaymentAmount += amount;
-        }
-
-        if (movementType == 'personal expense') {
+        // Track borrowed-funds-only totals
+        if (movementType == 'personal expense' ||
+            movementType == 'borrowed funds') {
           personalExpenseAmount += amount;
         }
 
-        if (movementType == 'personal expense payment') {
+        if (movementType == 'personal expense payment' ||
+            movementType == 'borrowed funds repayment') {
           personalExpensePaymentAmount += amount;
         }
 
-        if (movementType == 'fee withdrawal') {
-          final withdrawalSource = ((row['wallet_account'] as String?) ?? '')
-              .toLowerCase();
+        if (movementType == 'fee withdrawal' ||
+            movementType == 'fee transfer') {
+          final withdrawalSource = _resolveFeeMovementSource(row, movementType);
           if (withdrawalSource.contains('maya')) {
             feeWithdrawnMaya += amount;
           } else if (withdrawalSource.contains('gcash')) {
@@ -431,7 +403,8 @@ class DashboardRepository {
       onHandTopUpBaseline: onHandTopUpBaseline,
     );
 
-    final ownerCreditAdjustment = totalRepaid - totalBorrowed;
+    final ownerCreditAdjustment =
+        personalExpensePaymentAmount - personalExpenseAmount;
     final remainingWithdrawableOnHand = (chargesToOnHand - feeWithdrawnOnHand)
         .clamp(0.0, double.infinity)
         .toDouble();
@@ -461,17 +434,11 @@ class DashboardRepository {
       recordedFlow: chargesCollected,
       businessFundingTotal: businessFundingTotal,
       personalExpenseTotal: personalExpenseTotal,
-      totalBorrowed: totalBorrowed,
-      totalRepaid: totalRepaid,
-      borrowingAmount: borrowingAmount,
-      borrowingRepaymentAmount: borrowingRepaymentAmount,
-      borrowingOutstanding: borrowingAmount - borrowingRepaymentAmount,
       personalExpenseAmount: personalExpenseAmount,
       personalExpensePaymentAmount: personalExpensePaymentAmount,
       personalExpenseOutstanding:
           personalExpenseAmount - personalExpensePaymentAmount,
       ownerCreditAdjustment: ownerCreditAdjustment,
-      netBorrowOutstanding: totalBorrowed - totalRepaid,
       flowTrendLabel: '$transactionCount transactions',
       flowCaption:
           'Charges routed • On-hand: ${formatCurrency(chargesToOnHand)} • GCash: ${formatCurrency(chargesToGcash)} • Maya: ${formatCurrency(chargesToMaya)}',
@@ -550,6 +517,29 @@ class DashboardRepository {
     }
 
     return _ChargeRouting(amount: chargeAmount, destination: destination);
+  }
+
+  String _resolveFeeMovementSource(
+    Map<String, Object?> row,
+    String movementType,
+  ) {
+    if (movementType == 'fee transfer') {
+      final explicitSource = ((row['owner_party_account'] as String?) ?? '')
+          .trim()
+          .toLowerCase();
+      if (explicitSource.isNotEmpty) {
+        return explicitSource;
+      }
+
+      // Legacy fallback for older rows without explicit fee source.
+      final title = ((row['title'] as String?) ?? '').toLowerCase();
+      final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
+      if (title.contains('from on-hand cash') || onHandDelta < 0) {
+        return 'on-hand cash';
+      }
+    }
+
+    return ((row['wallet_account'] as String?) ?? '').trim().toLowerCase();
   }
 
   String _extractChargeDestination(Map<String, Object?> row) {

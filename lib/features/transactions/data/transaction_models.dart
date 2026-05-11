@@ -45,6 +45,7 @@ class TransactionCreateRequest {
   final String? entryDate;
   final String? externalProvider;
   final String? externalTransactionId;
+  final String? transactionTypeKey; // e.g., gcash_cashin, maya_paybills
 
   TransactionCreateRequest({
     required this.walletProvider,
@@ -58,6 +59,7 @@ class TransactionCreateRequest {
     this.entryDate,
     this.externalProvider,
     this.externalTransactionId,
+    this.transactionTypeKey,
   });
 
   Map<String, dynamic> toJson() => {
@@ -73,6 +75,7 @@ class TransactionCreateRequest {
     if (externalProvider != null) 'externalProvider': externalProvider,
     if (externalTransactionId != null)
       'externalTransactionId': externalTransactionId,
+    if (transactionTypeKey != null) 'transactionTypeKey': transactionTypeKey,
   };
 }
 

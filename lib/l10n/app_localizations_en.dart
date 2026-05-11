@@ -594,9 +594,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'No activities match the selected filter yet.';
 
   @override
-  String get borrowingStatus => 'Borrowing Status';
-
-  @override
   String ownerCreditOutstanding(String amount) {
     return 'Owner Credit Outstanding: $amount';
   }

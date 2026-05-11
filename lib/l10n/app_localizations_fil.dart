@@ -593,9 +593,6 @@ class AppLocalizationsFil extends AppLocalizations {
       'Walang aktibidad na tumutugma sa napiling filter.';
 
   @override
-  String get borrowingStatus => 'Katayuan ng Pagpapahiram';
-
-  @override
   String ownerCreditOutstanding(String amount) {
     return 'Natitirang Utang ng May-ari: $amount';
   }

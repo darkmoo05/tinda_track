@@ -1210,12 +1210,6 @@ abstract class AppLocalizations {
   /// **'No activities match the selected filter yet.'**
   String get noActivitiesFilter;
 
-  /// No description provided for @borrowingStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'Borrowing Status'**
-  String get borrowingStatus;
-
   /// No description provided for @ownerCreditOutstanding.
   ///
   /// In en, this message translates to:
