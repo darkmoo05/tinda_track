@@ -22,12 +22,12 @@ class ChargesScreen extends StatefulWidget {
 }
 
 class _ChargesScreenState extends State<ChargesScreen> {
-  static const List<MapEntry<String, String>> _serviceOptions = [
-    MapEntry('cashin', 'Cash-In'),
-    MapEntry('cashout', 'Cash-Out'),
-    MapEntry('load', 'Load'),
-    MapEntry('paybills', 'Pay Bills'),
-    MapEntry('qrpayment', 'QR Payment'),
+  static const List<String> _serviceOptionKeys = [
+    'cashin',
+    'cashout',
+    'load',
+    'paybills',
+    'qrpayment',
   ];
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -36,6 +36,44 @@ class _ChargesScreenState extends State<ChargesScreen> {
   final _chargeAmountController = TextEditingController();
   final ChargeRepository _chargeRepository = ChargeRepository.instance;
   late String _selectedTypeKey;
+  bool _helpExpanded = false;
+
+  String _serviceLabel(BuildContext context, String serviceKey) {
+    switch (serviceKey) {
+      case 'cashin':
+        return context.l10n.serviceCashIn;
+      case 'cashout':
+        return context.l10n.serviceCashOut;
+      case 'load':
+        return context.l10n.serviceLoad;
+      case 'paybills':
+        return context.l10n.servicePayBills;
+      case 'qrpayment':
+        return context.l10n.serviceQrPayment;
+      default:
+        return serviceKey;
+    }
+  }
+
+  String _localizeRepoError(BuildContext context, ChargeRepositoryError error) {
+    switch (error.code) {
+      case ChargeRepoErrorCode.overlapRange:
+        return context.l10n.chargeErrorOverlapRange;
+      case ChargeRepoErrorCode.updateTargetMissing:
+        return context.l10n.chargeErrorUpdateTargetMissing;
+      case ChargeRepoErrorCode.lowerBoundNonPositive:
+        return context.l10n.chargeErrorLowerBoundNonPositive;
+      case ChargeRepoErrorCode.upperBoundTooSmall:
+        return context.l10n.chargeErrorUpperBoundTooSmall;
+      case ChargeRepoErrorCode.chargeNegative:
+        return context.l10n.chargeErrorNegative;
+      case ChargeRepoErrorCode.chargeTooHigh:
+        return context.l10n.chargeErrorTooHigh(
+          (error.maxAllowed ?? 0).toStringAsFixed(2),
+          (error.upperBound ?? 0).toString(),
+        );
+    }
+  }
 
   @override
   void initState() {
@@ -55,7 +93,9 @@ class _ChargesScreenState extends State<ChargesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedType = FixedTransactionType.forKey(_selectedTypeKey);
+    final walletPrefix = _selectedTypeKey.startsWith('maya') ? 'maya' : 'gcash';
+    final service = _selectedTypeKey.replaceFirst('${walletPrefix}_', '');
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: const AppSideDrawer(),
@@ -101,10 +141,12 @@ class _ChargesScreenState extends State<ChargesScreen> {
         padding: const EdgeInsets.all(24),
         children: [
           _buildPageHeader(context),
-          const SizedBox(height: 20),
-          _buildTypeSelector(selectedType),
           const SizedBox(height: 24),
-          _buildAddBracketCard(context),
+          _buildActiveServiceTag(walletPrefix, service),
+          const SizedBox(height: 24),
+          _buildAddTierCard(context),
+          const SizedBox(height: 24),
+          _buildHelpSection(),
           const SizedBox(height: 24),
           ValueListenableBuilder<List<ChargeBracketRecord>>(
             valueListenable: _chargeRepository.brackets,
@@ -112,61 +154,12 @@ class _ChargesScreenState extends State<ChargesScreen> {
               final filtered = brackets
                   .where((b) => b.transactionTypeKey == _selectedTypeKey)
                   .toList();
-              return _buildActiveBracketsSection(context, filtered);
+              return _buildActiveTiersSection(context, filtered);
             },
           ),
           const SizedBox(height: 100),
         ],
       ),
-    );
-  }
-
-  Widget _buildTypeSelector(FixedTransactionType selectedType) {
-    final walletPrefix = _selectedTypeKey.startsWith('maya') ? 'maya' : 'gcash';
-    final service = _selectedTypeKey.replaceFirst('${walletPrefix}_', '');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.l10n.configureFeesFor,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildWalletToggle(
-                'gcash',
-                context.l10n.gcashWalletOption,
-                AppColors.primary,
-                walletPrefix == 'gcash',
-                Icons.account_balance_wallet_outlined,
-                service,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildWalletToggle(
-                'maya',
-                context.l10n.mayaWalletOption,
-                AppColors.secondary,
-                walletPrefix == 'maya',
-                Icons.wallet_rounded,
-                service,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        _buildServiceDropdown(
-          currentService: service,
-          walletPrefix: walletPrefix,
-        ),
-      ],
     );
   }
 
@@ -176,17 +169,10 @@ class _ChargesScreenState extends State<ChargesScreen> {
     Color color,
     bool selected,
     IconData icon,
-    String currentService,
+    VoidCallback onTap,
   ) {
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTypeKey = '${prefix}_$currentService';
-          _lowerBoundController.clear();
-          _upperBoundController.clear();
-          _chargeAmountController.clear();
-        });
-      },
+      onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -197,8 +183,9 @@ class _ChargesScreenState extends State<ChargesScreen> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: selected
-                ? color.withValues(alpha: 0.45)
+                ? color.withValues(alpha: 0.60)
                 : AppColors.outlineVariant.withValues(alpha: 0.35),
+            width: selected ? 2 : 1,
           ),
         ),
         child: Row(
@@ -218,6 +205,10 @@ class _ChargesScreenState extends State<ChargesScreen> {
                 color: selected ? color : AppColors.onSurfaceVariant,
               ),
             ),
+            if (selected) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.check_rounded, size: 16, color: color),
+            ],
           ],
         ),
       ),
@@ -227,13 +218,12 @@ class _ChargesScreenState extends State<ChargesScreen> {
   Widget _buildServiceDropdown({
     required String currentService,
     required String walletPrefix,
+    required ValueChanged<String> onChanged,
   }) {
     final color = walletPrefix == 'maya'
         ? AppColors.secondary
         : AppColors.primary;
-    final currentLabel = _serviceOptions
-        .firstWhere((option) => option.key == currentService)
-        .value;
+    final currentLabel = _serviceLabel(context, currentService);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -255,9 +245,10 @@ class _ChargesScreenState extends State<ChargesScreen> {
             color: AppColors.onSurface,
           ),
           selectedItemBuilder: (context) {
-            return _serviceOptions
-                .map((option) {
-                  final isCurrent = option.key == currentService;
+            return _serviceOptionKeys
+                .map((serviceKey) {
+                  final isCurrent = serviceKey == currentService;
+                  final label = _serviceLabel(context, serviceKey);
                   return Row(
                     children: [
                       Icon(Icons.tune_rounded, size: 16, color: color),
@@ -265,8 +256,8 @@ class _ChargesScreenState extends State<ChargesScreen> {
                       Expanded(
                         child: Text(
                           isCurrent
-                              ? 'Select fee type: $currentLabel'
-                              : 'Select fee type: ${option.value}',
+                              ? context.l10n.selectFeeType(currentLabel)
+                              : context.l10n.selectFeeType(label),
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 13,
@@ -280,11 +271,21 @@ class _ChargesScreenState extends State<ChargesScreen> {
                 })
                 .toList(growable: false);
           },
-          items: _serviceOptions
-              .map((option) {
+          items: _serviceOptionKeys
+              .map((serviceKey) {
+                final isSelected = serviceKey == currentService;
                 return DropdownMenuItem<String>(
-                  value: option.key,
-                  child: Text(option.value),
+                  value: serviceKey,
+                  child: Row(
+                    children: [
+                      if (isSelected) ...[
+                        Icon(Icons.check_rounded, size: 18, color: color),
+                        const SizedBox(width: 8),
+                      ],
+                      if (!isSelected) const SizedBox(width: 26),
+                      Expanded(child: Text(_serviceLabel(context, serviceKey))),
+                    ],
+                  ),
                 );
               })
               .toList(growable: false),
@@ -292,12 +293,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
             if (value == null) {
               return;
             }
-            setState(() {
-              _selectedTypeKey = '${walletPrefix}_$value';
-              _lowerBoundController.clear();
-              _upperBoundController.clear();
-              _chargeAmountController.clear();
-            });
+            onChanged(value);
           },
         ),
       ),
@@ -309,7 +305,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Charges Management',
+          context.l10n.chargesManagement,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
             color: AppColors.onSurface,
             fontWeight: FontWeight.bold,
@@ -326,15 +322,256 @@ class _ChargesScreenState extends State<ChargesScreen> {
     );
   }
 
-  Widget _buildAddBracketCard(BuildContext context) {
+  Widget _buildActiveServiceTag(String walletPrefix, String service) {
+    final walletLabel = walletPrefix == 'maya'
+        ? context.l10n.mayaWalletOption
+        : context.l10n.gcashWalletOption;
+    final walletIcon = walletPrefix == 'maya'
+        ? Icons.wallet_rounded
+        : Icons.account_balance_wallet_outlined;
+    final walletColor = walletPrefix == 'maya'
+        ? AppColors.secondary
+        : AppColors.primary;
+    final serviceLabel = _serviceLabel(context, service);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.configureFeesFor,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            border: Border.all(color: walletColor.withValues(alpha: 0.3)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: walletColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(walletIcon, size: 20, color: walletColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      walletLabel,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      serviceLabel,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _showServiceSwitchMenu,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      Icons.swap_horiz_rounded,
+                      size: 20,
+                      color: walletColor,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showServiceSwitchMenu() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        String selectedWalletPrefix = _selectedTypeKey.startsWith('maya')
+            ? 'maya'
+            : 'gcash';
+        String selectedService = _selectedTypeKey.replaceFirst(
+          '${selectedWalletPrefix}_',
+          '',
+        );
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void applySelection(String walletPrefix, String service) {
+              setDialogState(() {
+                selectedWalletPrefix = walletPrefix;
+                selectedService = service;
+              });
+
+              setState(() {
+                _selectedTypeKey = '${walletPrefix}_$service';
+                _lowerBoundController.clear();
+                _upperBoundController.clear();
+                _chargeAmountController.clear();
+              });
+            }
+
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: AlertDialog(
+                  backgroundColor: AppColors.surfaceContainerLowest,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  titlePadding: EdgeInsets.zero,
+                  contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  title: Container(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.06),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.swap_horiz_outlined,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            context.l10n.switchService,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      Text(
+                        context.l10n.selectWalletAndTransactionType,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildWalletToggle(
+                              'gcash',
+                              context.l10n.gcashWalletOption,
+                              AppColors.primary,
+                              selectedWalletPrefix == 'gcash',
+                              Icons.account_balance_wallet_outlined,
+                              () => applySelection('gcash', selectedService),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildWalletToggle(
+                              'maya',
+                              context.l10n.mayaWalletOption,
+                              AppColors.secondary,
+                              selectedWalletPrefix == 'maya',
+                              Icons.wallet_rounded,
+                              () => applySelection('maya', selectedService),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildServiceDropdown(
+                        currentService: selectedService,
+                        walletPrefix: selectedWalletPrefix,
+                        onChanged: (service) =>
+                            applySelection(selectedWalletPrefix, service),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              side: const BorderSide(
+                                color: AppColors.outlineVariant,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: Text(context.l10n.done),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildAddTierCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -345,12 +582,20 @@ class _ChargesScreenState extends State<ChargesScreen> {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.add_circle_outline_rounded,
-                color: AppColors.primary,
-                size: 20,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.add_circle_outline_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Text(
                 context.l10n.addNewBracket,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -366,6 +611,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
             label: context.l10n.lowerBound,
             hint: context.l10n.lowerBoundHint,
             keyboardType: TextInputType.number,
+            helpText: context.l10n.startingAmountHelp,
           ),
           const SizedBox(height: 12),
           _buildInputField(
@@ -373,6 +619,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
             label: context.l10n.upperBound,
             hint: context.l10n.upperBoundHint,
             keyboardType: TextInputType.number,
+            helpText: context.l10n.endingAmountHelp,
           ),
           const SizedBox(height: 12),
           _buildInputField(
@@ -380,36 +627,47 @@ class _ChargesScreenState extends State<ChargesScreen> {
             label: context.l10n.chargeAmount,
             hint: context.l10n.chargeAmountHint,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            helpText: context.l10n.feeAmountHelp,
           ),
+          if (_lowerBoundController.text.isNotEmpty &&
+              _upperBoundController.text.isNotEmpty &&
+              _chargeAmountController.text.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  context.l10n.feePreview(
+                    _lowerBoundController.text,
+                    _chargeAmountController.text,
+                  ),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ),
+            ),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.primary, AppColors.primaryContainer],
-                ),
-                borderRadius: BorderRadius.circular(12),
+            child: FilledButton(
+              onPressed: _addBracket,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                backgroundColor: AppColors.primary,
               ),
-              child: ElevatedButton(
-                onPressed: _addBracket,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'CREATE BRACKET',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
+              child: Text(
+                context.l10n.addNewBracket.toUpperCase(),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
                 ),
               ),
             ),
@@ -419,27 +677,164 @@ class _ChargesScreenState extends State<ChargesScreen> {
     );
   }
 
+  Widget _buildHelpSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _helpExpanded = !_helpExpanded),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.help_outline_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      context.l10n.whatTheseFieldsMean,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+                Icon(
+                  _helpExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_helpExpanded) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              border: Border.all(
+                color: AppColors.outlineVariant.withValues(alpha: 0.3),
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHelpRow(
+                  context.l10n.startingAmountLabel,
+                  context.l10n.startingAmountHelp,
+                ),
+                const SizedBox(height: 12),
+                _buildHelpRow(
+                  context.l10n.endingAmountLabel,
+                  context.l10n.endingAmountHelp,
+                ),
+                const SizedBox(height: 12),
+                _buildHelpRow(
+                  context.l10n.feeAmountLabel,
+                  context.l10n.feeAmountHelp,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    context.l10n.exampleTransactionText,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurface,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildHelpRow(String title, String description) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          description,
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.onSurfaceVariant,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildInputField({
     required TextEditingController controller,
     required String label,
     required String hint,
     TextInputType? keyboardType,
+    String? helpText,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.onSurfaceVariant,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            if (helpText != null)
+              Tooltip(
+                message: helpText,
+                child: Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: AppColors.primary.withValues(alpha: 0.6),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: AppColors.outlineVariant),
@@ -459,7 +854,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
     );
   }
 
-  Widget _buildActiveBracketsSection(
+  Widget _buildActiveTiersSection(
     BuildContext context,
     List<ChargeBracketRecord> brackets,
   ) {
@@ -470,7 +865,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Active Charge Brackets',
+              context.l10n.activeTiers,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: AppColors.onSurface,
                 fontWeight: FontWeight.w700,
@@ -483,7 +878,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
                 borderRadius: BorderRadius.circular(9999),
               ),
               child: Text(
-                'Total: ${brackets.length} Brackets',
+                context.l10n.totalTiers(brackets.length.toString()),
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -512,14 +907,14 @@ class _ChargesScreenState extends State<ChargesScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'No charge brackets saved yet',
+                  context.l10n.noFeeTiersTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'This section now loads bracket ranges from your local database.',
+                  context.l10n.noFeeTiersMessage,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.onSurfaceVariant,
@@ -533,74 +928,160 @@ class _ChargesScreenState extends State<ChargesScreen> {
             final bracket = brackets[i];
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: _buildBracketTile(context, bracket),
+              child: _buildTierCard(context, bracket, i + 1),
             );
           }),
       ],
     );
   }
 
-  Widget _buildBracketTile(BuildContext context, ChargeBracketRecord bracket) {
+  Widget _buildTierCard(
+    BuildContext context,
+    ChargeBracketRecord bracket,
+    int tierNumber,
+  ) {
+    String getTierDescription() {
+      if (bracket.lowerBound <= 1000 && bracket.upperBound <= 5000) {
+        return context.l10n.smallTransactions;
+      } else if (bracket.lowerBound > 1000 && bracket.upperBound <= 10000) {
+        return context.l10n.mediumTransactions;
+      }
+      return context.l10n.largeTransactions;
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 4,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${bracket.lowerBound} - ${bracket.upperBound} PHP',
-                  style: const TextStyle(
-                    fontSize: 14,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.tierName(
+                        tierNumber.toString(),
+                        getTierDescription(),
+                      ),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '₱${bracket.lowerBound} — ₱${bracket.upperBound}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  context.l10n.feeAmount(
+                    bracket.chargeAmount.toStringAsFixed(2),
+                  ),
+                  style: TextStyle(
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
+                    color: AppColors.secondary,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Charge: ${bracket.chargeAmount.toStringAsFixed(2)} PHP',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(
+            height: 1,
+            color: AppColors.outlineVariant.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.tierStatus(context.l10n.active),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      context.l10n.availableForTransactions,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: () => _editBracket(bracket),
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: Text(context.l10n.edit),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
                 ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: () => _editBracket(bracket),
-            icon: const Icon(
-              Icons.edit_outlined,
-              size: 18,
-              color: AppColors.primary,
-            ),
-            tooltip: 'Edit',
-          ),
-          IconButton(
-            onPressed: () => _deleteBracket(bracket),
-            icon: Icon(Icons.delete_outline, size: 18, color: AppColors.error),
-            tooltip: 'Delete',
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () => _deleteBracket(bracket),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: Text(context.l10n.delete),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -613,10 +1094,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
     final chargeAmount = _parseDoubleInput(_chargeAmountController.text);
 
     if (lowerBound == null || upperBound == null || chargeAmount == null) {
-      _showMessage(
-        'Enter valid lower bound, upper bound, and charge amount.',
-        isError: true,
-      );
+      _showMessage(context.l10n.chargeInputInvalid, isError: true);
       return;
     }
 
@@ -632,14 +1110,14 @@ class _ChargesScreenState extends State<ChargesScreen> {
     }
 
     if (error != null) {
-      _showMessage(error, isError: true);
+      _showMessage(_localizeRepoError(context, error), isError: true);
       return;
     }
 
     _lowerBoundController.clear();
     _upperBoundController.clear();
     _chargeAmountController.clear();
-    _showMessage('Charge bracket added.');
+    _showMessage(context.l10n.chargeBracketAdded);
   }
 
   int? _parseIntInput(String raw) {
@@ -656,8 +1134,15 @@ class _ChargesScreenState extends State<ChargesScreen> {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) =>
-          _ChargeBracketDialog(repository: _chargeRepository, bracket: bracket),
+      builder: (_) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: _ChargeBracketDialog(
+            repository: _chargeRepository,
+            bracket: bracket,
+          ),
+        ),
+      ),
     );
   }
 
@@ -688,10 +1173,10 @@ class _ChargesScreenState extends State<ChargesScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
-                'Delete Bracket',
+              Text(
+                context.l10n.deleteBracketTitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: AppColors.onSurface,
@@ -699,7 +1184,10 @@ class _ChargesScreenState extends State<ChargesScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Delete the \u20b1${bracket.lowerBound}\u2013\u20b1${bracket.upperBound} charge range? This cannot be undone.',
+                context.l10n.deleteBracketMessage(
+                  bracket.lowerBound.toString(),
+                  bracket.upperBound.toString(),
+                ),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
@@ -742,8 +1230,8 @@ class _ChargesScreenState extends State<ChargesScreen> {
                     size: 16,
                     color: Colors.white,
                   ),
-                  label: const Text(
-                    'Delete',
+                  label: Text(
+                    context.l10n.delete,
                     style: TextStyle(color: Colors.white),
                   ),
                 ),
@@ -764,7 +1252,9 @@ class _ChargesScreenState extends State<ChargesScreen> {
     }
 
     _showMessage(
-      deleted ? 'Charge bracket deleted.' : 'Unable to delete bracket.',
+      deleted
+          ? context.l10n.chargeBracketDeleted
+          : context.l10n.unableToDeleteBracket,
       isError: !deleted,
     );
   }
@@ -821,6 +1311,26 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
   String? _errorText;
   bool _isSaving = false;
 
+  String _localizeRepoError(BuildContext context, ChargeRepositoryError error) {
+    switch (error.code) {
+      case ChargeRepoErrorCode.overlapRange:
+        return context.l10n.chargeErrorOverlapRange;
+      case ChargeRepoErrorCode.updateTargetMissing:
+        return context.l10n.chargeErrorUpdateTargetMissing;
+      case ChargeRepoErrorCode.lowerBoundNonPositive:
+        return context.l10n.chargeErrorLowerBoundNonPositive;
+      case ChargeRepoErrorCode.upperBoundTooSmall:
+        return context.l10n.chargeErrorUpperBoundTooSmall;
+      case ChargeRepoErrorCode.chargeNegative:
+        return context.l10n.chargeErrorNegative;
+      case ChargeRepoErrorCode.chargeTooHigh:
+        return context.l10n.chargeErrorTooHigh(
+          (error.maxAllowed ?? 0).toStringAsFixed(2),
+          (error.upperBound ?? 0).toString(),
+        );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -850,7 +1360,7 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
 
     if (lowerBound == null || upperBound == null || chargeAmount == null) {
       setState(() {
-        _errorText = 'Enter valid lower bound, upper bound, and charge amount.';
+        _errorText = context.l10n.chargeInputInvalid;
       });
       return;
     }
@@ -874,7 +1384,7 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
     if (error != null) {
       setState(() {
         _isSaving = false;
-        _errorText = error;
+        _errorText = _localizeRepoError(context, error);
       });
       return;
     }
@@ -922,9 +1432,9 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
               ),
             ),
             const SizedBox(width: 12),
-            const Text(
-              'Edit Charge Bracket',
-              style: TextStyle(
+            Text(
+              context.l10n.editChargeBracketTitle,
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: AppColors.onSurface,
@@ -938,9 +1448,12 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 12),
-          const Text(
-            'Update the exact lower and upper bounds for this charge range.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+          Text(
+            context.l10n.editChargeBracketHint,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 16),
           _dialogField(
@@ -1012,7 +1525,9 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
                         ),
                       )
                     : const Icon(Icons.save_outlined, size: 16),
-                label: Text(_isSaving ? 'Saving…' : 'Save Changes'),
+                label: Text(
+                  _isSaving ? context.l10n.saving : context.l10n.saveChanges,
+                ),
               ),
             ),
           ],

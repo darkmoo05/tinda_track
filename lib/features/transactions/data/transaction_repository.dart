@@ -2,6 +2,21 @@ import 'package:dio/dio.dart';
 import '../../../core/network/api_client.dart';
 import 'transaction_models.dart';
 
+class TransactionApiException implements Exception {
+  const TransactionApiException(this.message, {this.statusCode});
+
+  final String message;
+  final int? statusCode;
+
+  @override
+  String toString() {
+    if (statusCode == null) {
+      return message;
+    }
+    return '$message (status: $statusCode)';
+  }
+}
+
 class TransactionRepository {
   TransactionRepository._();
 
@@ -26,8 +41,9 @@ class TransactionRepository {
           'direction': direction,
           'amount': amount,
           'chargeHandling': chargeHandling,
-          if (transactionTypeKey != null)
-            'transactionTypeKey': transactionTypeKey,
+          ...?transactionTypeKey == null
+              ? null
+              : {'transactionTypeKey': transactionTypeKey},
         },
       );
 
@@ -38,11 +54,21 @@ class TransactionRepository {
             data['data'] as Map<String, dynamic>,
           );
         }
-        throw Exception('Preview failed: ${data['error']}');
+        throw TransactionApiException('Preview failed: ${data['error']}');
       }
-      throw Exception('Unexpected response status: ${response.statusCode}');
+      throw TransactionApiException(
+        'Unexpected response status from preview',
+        statusCode: response.statusCode,
+      );
     } on DioException catch (e) {
-      throw Exception('Failed to preview transaction: ${e.message}');
+      final responseData = e.response?.data;
+      final serverMessage = responseData is Map<String, dynamic>
+          ? (responseData['message'] ?? responseData['error']) as String?
+          : null;
+      throw TransactionApiException(
+        serverMessage ?? 'Failed to preview transaction: ${e.message}',
+        statusCode: e.response?.statusCode,
+      );
     } catch (e) {
       rethrow;
     }
@@ -50,8 +76,8 @@ class TransactionRepository {
 
   /// Create a new transaction on the server.
   /// Returns transaction details including balance updates.
-  /// Throws [DioException] with statusCode 409 if duplicate syncId exists.
-  /// Throws [DioException] with statusCode 400 if balance would go negative.
+  /// Throws [TransactionApiException] with statusCode 409 if duplicate syncId exists.
+  /// Throws [TransactionApiException] with statusCode 400 if balance would go negative.
   Future<TransactionCreateResponse> createTransaction({
     required String walletProvider,
     required String direction,
@@ -91,21 +117,32 @@ class TransactionRepository {
             data['data'] as Map<String, dynamic>,
           );
         }
-        throw Exception('Transaction creation failed: ${data['error']}');
+        throw TransactionApiException(
+          'Transaction creation failed: ${data['error']}',
+        );
       }
-      throw Exception('Unexpected response status: ${response.statusCode}');
+      throw TransactionApiException(
+        'Unexpected response status while creating transaction',
+        statusCode: response.statusCode,
+      );
     } on DioException catch (e) {
-      // Re-throw DioException to preserve status code for caller handling
       if (e.response?.statusCode == 409) {
-        throw Exception('Transaction already exists (duplicate syncId)');
+        throw const TransactionApiException(
+          'Transaction already exists (duplicate syncId)',
+          statusCode: 409,
+        );
       }
       if (e.response?.statusCode == 400) {
         final errorData = e.response?.data as Map<String, dynamic>?;
-        throw Exception(
+        throw TransactionApiException(
           'Invalid transaction: ${errorData?['message'] ?? e.message}',
+          statusCode: 400,
         );
       }
-      throw Exception('Failed to create transaction: ${e.message}');
+      throw TransactionApiException(
+        'Failed to create transaction: ${e.message}',
+        statusCode: e.response?.statusCode,
+      );
     } catch (e) {
       rethrow;
     }

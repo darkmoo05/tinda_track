@@ -155,6 +155,7 @@ class _MainShellState extends State<MainShell> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'mainShellFab',
         onPressed: _toggleFab,
         backgroundColor: AppColors.primary,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

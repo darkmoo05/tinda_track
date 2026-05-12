@@ -121,25 +121,25 @@ abstract class AppLocalizations {
   /// No description provided for @gcashWallet.
   ///
   /// In en, this message translates to:
-  /// **'GCASH WALLET'**
+  /// **'GCash Wallet'**
   String get gcashWallet;
 
   /// No description provided for @mayaWallet.
   ///
   /// In en, this message translates to:
-  /// **'MAYA WALLET'**
+  /// **'Maya Wallet'**
   String get mayaWallet;
 
   /// No description provided for @onHandCash.
   ///
   /// In en, this message translates to:
-  /// **'ON-HAND CASH'**
+  /// **'On-hand Cash'**
   String get onHandCash;
 
   /// No description provided for @chargesEarnings.
   ///
   /// In en, this message translates to:
-  /// **'CHARGES EARNINGS'**
+  /// **'Charges Earnings'**
   String get chargesEarnings;
 
   /// No description provided for @availableBalance.
@@ -217,13 +217,13 @@ abstract class AppLocalizations {
   /// No description provided for @accountNumber.
   ///
   /// In en, this message translates to:
-  /// **'Account Number'**
+  /// **'Recipient Account'**
   String get accountNumber;
 
   /// No description provided for @searchOrEnterAccountNumber.
   ///
   /// In en, this message translates to:
-  /// **'Search or enter account number'**
+  /// **'Name or number'**
   String get searchOrEnterAccountNumber;
 
   /// No description provided for @scanningReceipt.
@@ -231,6 +231,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Scanning receipt…'**
   String get scanningReceipt;
+
+  /// No description provided for @scanningReceiptModalMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading image and parsing receipt data...'**
+  String get scanningReceiptModalMessage;
 
   /// No description provided for @scanReceiptButton.
   ///
@@ -496,6 +502,408 @@ abstract class AppLocalizations {
   /// **'Customer Sends'**
   String get customerSends;
 
+  /// No description provided for @recordTransactionDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction Setup'**
+  String get recordTransactionDetails;
+
+  /// No description provided for @optionalDetailsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Reference or Notes (Optional)'**
+  String get optionalDetailsSection;
+
+  /// No description provided for @reviewTotals.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Breakdown'**
+  String get reviewTotals;
+
+  /// No description provided for @showDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Show details'**
+  String get showDetails;
+
+  /// No description provided for @hideDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide details'**
+  String get hideDetails;
+
+  /// No description provided for @whoPaysServiceFee.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee Handling'**
+  String get whoPaysServiceFee;
+
+  /// No description provided for @customerPaysFeeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer bears fee'**
+  String get customerPaysFeeLabel;
+
+  /// No description provided for @deductedFromSentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Include in amount'**
+  String get deductedFromSentLabel;
+
+  /// No description provided for @usingWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'Using wallet'**
+  String get usingWallet;
+
+  /// No description provided for @serviceFee.
+  ///
+  /// In en, this message translates to:
+  /// **'Applicable fee'**
+  String get serviceFee;
+
+  /// No description provided for @feeDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee Sent To'**
+  String get feeDestination;
+
+  /// No description provided for @feeRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee range'**
+  String get feeRange;
+
+  /// No description provided for @amountSentToCustomerWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer Total'**
+  String get amountSentToCustomerWallet;
+
+  /// No description provided for @amountCustomerSends.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount customer sends'**
+  String get amountCustomerSends;
+
+  /// No description provided for @customerPays.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer pays'**
+  String get customerPays;
+
+  /// No description provided for @cashPaidOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash paid out'**
+  String get cashPaidOut;
+
+  /// No description provided for @cashAddedToDrawer.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Drawer'**
+  String get cashAddedToDrawer;
+
+  /// No description provided for @feeAddedExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Service fee is added on top. Example: ₱100 transaction + ₱5 fee = collect ₱105 from customer, send ₱100.'**
+  String get feeAddedExample;
+
+  /// No description provided for @feeDeductedExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Service fee is deducted before sending. Example: ₱100 entered, ₱5 fee deducted = only ₱95 is sent to customer wallet.'**
+  String get feeDeductedExample;
+
+  /// No description provided for @accountNotInContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'This account is not in contacts yet. Tap here to add contact before saving.'**
+  String get accountNotInContacts;
+
+  /// No description provided for @saveTransactionAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Record Transaction'**
+  String get saveTransactionAction;
+
+  /// No description provided for @walletAndService.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction Type (Required)'**
+  String get walletAndService;
+
+  /// No description provided for @verifiedAccountFound.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} - Verified account record found'**
+  String verifiedAccountFound(String name);
+
+  /// No description provided for @onHandCashLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'On-hand cash'**
+  String get onHandCashLabel;
+
+  /// No description provided for @cashPaidOutTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash you hand out to the customer from your drawer.'**
+  String get cashPaidOutTooltip;
+
+  /// No description provided for @cashAddedToDrawerTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash that goes into your drawer after this transaction.'**
+  String get cashAddedToDrawerTooltip;
+
+  /// No description provided for @noFeeRuleForAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'No fee rule for this amount yet. Fee is ₱0. Add a fee rule first.'**
+  String get noFeeRuleForAmount;
+
+  /// No description provided for @receiptDataAppliedReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Receipt data applied. Please review before saving.'**
+  String get receiptDataAppliedReview;
+
+  /// No description provided for @noFeeRangeFoundTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No fee range found'**
+  String get noFeeRangeFoundTitle;
+
+  /// No description provided for @noFeeRangeFoundMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The entered amount does not match any configured fee range. Please create a new fee range first.'**
+  String get noFeeRangeFoundMessage;
+
+  /// No description provided for @accountNumberRequiredBeforeSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Account number is required before saving.'**
+  String get accountNumberRequiredBeforeSaving;
+
+  /// No description provided for @transactionAmountRequiredBeforeSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction amount is required before saving.'**
+  String get transactionAmountRequiredBeforeSaving;
+
+  /// No description provided for @noFeeRangeFoundForAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'No fee range found for this amount. Create a new range first.'**
+  String get noFeeRangeFoundForAmount;
+
+  /// No description provided for @amountToSendMustBeGreaterThanZero.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount to send must be greater than zero. Adjust entered amount or charge handling.'**
+  String get amountToSendMustBeGreaterThanZero;
+
+  /// No description provided for @insufficientBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient {source} balance. Available: ₱ {amount}'**
+  String insufficientBalance(String source, String amount);
+
+  /// No description provided for @partyNotRegisteredYet.
+  ///
+  /// In en, this message translates to:
+  /// **'Party is not registered yet. Register details first.'**
+  String get partyNotRegisteredYet;
+
+  /// No description provided for @transactionSavedSyncRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction saved for {name}. Backend sync will retry automatically.'**
+  String transactionSavedSyncRetry(String name);
+
+  /// No description provided for @amountMustBeGreaterThanZero.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount must be greater than 0'**
+  String get amountMustBeGreaterThanZero;
+
+  /// No description provided for @feeValidationFailedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee validation failed{status}: {message}'**
+  String feeValidationFailedStatus(String status, String message);
+
+  /// No description provided for @feeValidationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee validation failed: {error}'**
+  String feeValidationFailed(String error);
+
+  /// No description provided for @backendPreviewUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Backend Preview Unavailable'**
+  String get backendPreviewUnavailable;
+
+  /// No description provided for @unableToValidateFeePreviewNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to validate fee preview from backend right now.'**
+  String get unableToValidateFeePreviewNow;
+
+  /// No description provided for @saveLocally.
+  ///
+  /// In en, this message translates to:
+  /// **'Save locally'**
+  String get saveLocally;
+
+  /// No description provided for @feeBreakdownTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee breakdown'**
+  String get feeBreakdownTitle;
+
+  /// No description provided for @charge.
+  ///
+  /// In en, this message translates to:
+  /// **'Charge'**
+  String get charge;
+
+  /// No description provided for @totalCollected.
+  ///
+  /// In en, this message translates to:
+  /// **'Total collected'**
+  String get totalCollected;
+
+  /// No description provided for @walletCredit.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet credit'**
+  String get walletCredit;
+
+  /// No description provided for @onHandChange.
+  ///
+  /// In en, this message translates to:
+  /// **'On-hand change'**
+  String get onHandChange;
+
+  /// No description provided for @feeRouting.
+  ///
+  /// In en, this message translates to:
+  /// **'Where the Fee Goes'**
+  String get feeRouting;
+
+  /// No description provided for @confirmAndSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm and save'**
+  String get confirmAndSave;
+
+  /// No description provided for @selectRegisteredContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Registered Contact'**
+  String get selectRegisteredContact;
+
+  /// No description provided for @registerPartyFirstThenSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Register a party first, then use search to pick an account.'**
+  String get registerPartyFirstThenSearch;
+
+  /// No description provided for @tryDifferentNameOrAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Try searching with a different name or account number.'**
+  String get tryDifferentNameOrAccount;
+
+  /// No description provided for @accountWithNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Account: {number}'**
+  String accountWithNumber(String number);
+
+  /// No description provided for @completeNameAndAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Please complete full name and account number.'**
+  String get completeNameAndAccount;
+
+  /// No description provided for @unableToSaveParty.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to save party. Please try again.'**
+  String get unableToSaveParty;
+
+  /// No description provided for @accountAlreadyRegistered.
+  ///
+  /// In en, this message translates to:
+  /// **'Account already registered.'**
+  String get accountAlreadyRegistered;
+
+  /// No description provided for @partyRegistrationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Party Registration'**
+  String get partyRegistrationTitle;
+
+  /// No description provided for @defineFinancialEntityBeforeTransaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Define a new financial entity before recording this transaction.'**
+  String get defineFinancialEntityBeforeTransaction;
+
+  /// No description provided for @loadService.
+  ///
+  /// In en, this message translates to:
+  /// **'Load'**
+  String get loadService;
+
+  /// No description provided for @payBillsService.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay Bills'**
+  String get payBillsService;
+
+  /// No description provided for @qrPaymentService.
+  ///
+  /// In en, this message translates to:
+  /// **'QR Payment'**
+  String get qrPaymentService;
+
+  /// No description provided for @stepOneChooseWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'Step 1: Choose wallet'**
+  String get stepOneChooseWallet;
+
+  /// No description provided for @pickWalletHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet buttons choose which account to use.'**
+  String get pickWalletHelper;
+
+  /// No description provided for @stepTwoChooseService.
+  ///
+  /// In en, this message translates to:
+  /// **'Step 2: Choose service'**
+  String get stepTwoChooseService;
+
+  /// No description provided for @pickServiceHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Service buttons choose what transaction to perform.'**
+  String get pickServiceHelper;
+
+  /// No description provided for @selectedWalletService.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected: {wallet} • {service}'**
+  String selectedWalletService(String wallet, String service);
+
   /// No description provided for @newOwnerMovement.
   ///
   /// In en, this message translates to:
@@ -703,37 +1111,127 @@ abstract class AppLocalizations {
   /// No description provided for @movements.
   ///
   /// In en, this message translates to:
-  /// **'Movements'**
+  /// **'Wallet History'**
   String get movements;
+
+  /// No description provided for @walletHistorySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Track GCash, Maya, and cash movement.'**
+  String get walletHistorySubtitle;
 
   /// No description provided for @reports.
   ///
   /// In en, this message translates to:
-  /// **'Reports'**
+  /// **'Download Report'**
   String get reports;
 
   /// No description provided for @transactions.
   ///
   /// In en, this message translates to:
-  /// **'TRANSACTIONS'**
+  /// **'Transactions'**
   String get transactions;
 
   /// No description provided for @ownerMovements.
   ///
   /// In en, this message translates to:
-  /// **'OWNER MOVEMENTS'**
+  /// **'Owner Activity'**
   String get ownerMovements;
+
+  /// No description provided for @historyTransactionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction'**
+  String get historyTransactionLabel;
+
+  /// No description provided for @historyOwnerActivityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner Activity'**
+  String get historyOwnerActivityLabel;
+
+  /// No description provided for @historyTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get historyTypeLabel;
+
+  /// No description provided for @historyCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get historyCategoryLabel;
+
+  /// No description provided for @historyAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get historyAccountLabel;
+
+  /// No description provided for @historyAmountShownLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount shown'**
+  String get historyAmountShownLabel;
+
+  /// No description provided for @walletChangeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet change'**
+  String get walletChangeLabel;
+
+  /// No description provided for @cashChangeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash change'**
+  String get cashChangeLabel;
+
+  /// No description provided for @savedOnLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved on'**
+  String get savedOnLabel;
+
+  /// No description provided for @transactionBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction Breakdown'**
+  String get transactionBreakdown;
+
+  /// No description provided for @entryDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Entry Details'**
+  String get entryDetails;
+
+  /// No description provided for @includesFee.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes fee: {amount}'**
+  String includesFee(String amount);
+
+  /// No description provided for @today.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get today;
+
+  /// No description provided for @yesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get yesterday;
 
   /// No description provided for @noMatchingTransactions.
   ///
   /// In en, this message translates to:
-  /// **'No matching transactions'**
+  /// **'No results found'**
   String get noMatchingTransactions;
 
   /// No description provided for @trySearchingBy.
   ///
   /// In en, this message translates to:
-  /// **'Try searching by title, account number, reference ID, notes, or date.'**
+  /// **'Try changing the wallet, date, or search.'**
   String get trySearchingBy;
 
   /// No description provided for @noHistoryYet.
@@ -745,26 +1243,38 @@ abstract class AppLocalizations {
   /// No description provided for @newEntriesWillAppear.
   ///
   /// In en, this message translates to:
-  /// **'New entries will appear here once you save transactions or owner movements.'**
+  /// **'Your saved transactions and owner activity will appear here.'**
   String get newEntriesWillAppear;
 
   /// No description provided for @searchAccountRefParty.
   ///
   /// In en, this message translates to:
-  /// **'Search account, ref ID, party, or note'**
+  /// **'Search by account, ref no., or note'**
   String get searchAccountRefParty;
 
   /// No description provided for @beginningDate.
   ///
   /// In en, this message translates to:
-  /// **'Beginning Date'**
+  /// **'From date'**
   String get beginningDate;
 
   /// No description provided for @endDate.
   ///
   /// In en, this message translates to:
-  /// **'End Date'**
+  /// **'To date'**
   String get endDate;
+
+  /// No description provided for @filterBeginDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter from date'**
+  String get filterBeginDate;
+
+  /// No description provided for @filterEndDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter to date'**
+  String get filterEndDate;
 
   /// No description provided for @gcash.
   ///
@@ -781,7 +1291,7 @@ abstract class AppLocalizations {
   /// No description provided for @onHand.
   ///
   /// In en, this message translates to:
-  /// **'On-hand'**
+  /// **'Cash on hand'**
   String get onHand;
 
   /// No description provided for @pdf.
@@ -808,6 +1318,294 @@ abstract class AppLocalizations {
   /// **'Close'**
   String get close;
 
+  /// No description provided for @selectBeginningDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Select from date'**
+  String get selectBeginningDate;
+
+  /// No description provided for @selectEndDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Select to date'**
+  String get selectEndDate;
+
+  /// No description provided for @generalLedgerReport.
+  ///
+  /// In en, this message translates to:
+  /// **'General Ledger Report'**
+  String get generalLedgerReport;
+
+  /// No description provided for @generalLedgerReportDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a date range, then choose PDF or Excel output.'**
+  String get generalLedgerReportDescription;
+
+  /// No description provided for @fileFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'File format'**
+  String get fileFormat;
+
+  /// No description provided for @endDateValidationMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'To date must be the same as or later than from date.'**
+  String get endDateValidationMessage;
+
+  /// No description provided for @preparingReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing report...'**
+  String get preparingReport;
+
+  /// No description provided for @noLedgerRecordsForDateRange.
+  ///
+  /// In en, this message translates to:
+  /// **'No ledger records were found for the selected date range.'**
+  String get noLedgerRecordsForDateRange;
+
+  /// No description provided for @reportGenerationCanceled.
+  ///
+  /// In en, this message translates to:
+  /// **'Report generation canceled. No folder was selected.'**
+  String get reportGenerationCanceled;
+
+  /// No description provided for @generatingReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating report...'**
+  String get generatingReport;
+
+  /// No description provided for @reportShareUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Report generated, but sharing is not available on this device. The file was saved locally.'**
+  String get reportShareUnavailable;
+
+  /// No description provided for @reportGenerationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to generate the report. Please try again.'**
+  String get reportGenerationFailed;
+
+  /// No description provided for @reportSavedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Report generated successfully. Saved to {path}'**
+  String reportSavedTo(String path);
+
+  /// No description provided for @walletHistoryReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet History Report'**
+  String get walletHistoryReport;
+
+  /// No description provided for @walletHistorySheetName.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet History'**
+  String get walletHistorySheetName;
+
+  /// No description provided for @walletFlowReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet Flow'**
+  String get walletFlowReport;
+
+  /// No description provided for @walletFlowSheetName.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet Flow'**
+  String get walletFlowSheetName;
+
+  /// No description provided for @periodLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Period'**
+  String get periodLabel;
+
+  /// No description provided for @generatedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Generated'**
+  String get generatedLabel;
+
+  /// No description provided for @legendTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick guide'**
+  String get legendTitle;
+
+  /// No description provided for @legendPlusMinus.
+  ///
+  /// In en, this message translates to:
+  /// **'Use + for increase and - for decrease.'**
+  String get legendPlusMinus;
+
+  /// No description provided for @legendAmountShownNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount matches history. Cash out may already include fee.'**
+  String get legendAmountShownNote;
+
+  /// No description provided for @reportDateTimeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Date/Time'**
+  String get reportDateTimeLabel;
+
+  /// No description provided for @reportTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get reportTypeLabel;
+
+  /// No description provided for @reportAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount shown'**
+  String get reportAmountLabel;
+
+  /// No description provided for @reportFeeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee'**
+  String get reportFeeLabel;
+
+  /// No description provided for @reportWalletDeltaLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet change'**
+  String get reportWalletDeltaLabel;
+
+  /// No description provided for @reportCashDeltaLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash change'**
+  String get reportCashDeltaLabel;
+
+  /// No description provided for @reportReferenceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Ref #'**
+  String get reportReferenceLabel;
+
+  /// No description provided for @reportDetailsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get reportDetailsLabel;
+
+  /// No description provided for @dateTimeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Date & Time'**
+  String get dateTimeLabel;
+
+  /// No description provided for @walletUsedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet'**
+  String get walletUsedLabel;
+
+  /// No description provided for @amountShownLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'History Amount'**
+  String get amountShownLabel;
+
+  /// No description provided for @descriptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get descriptionLabel;
+
+  /// No description provided for @remarksLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Remarks'**
+  String get remarksLabel;
+
+  /// No description provided for @moneyInLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Money In'**
+  String get moneyInLabel;
+
+  /// No description provided for @moneyOutLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Money Out'**
+  String get moneyOutLabel;
+
+  /// No description provided for @feeDetailsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee Details'**
+  String get feeDetailsLabel;
+
+  /// No description provided for @balanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance'**
+  String get balanceLabel;
+
+  /// No description provided for @totalsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'TOTALS'**
+  String get totalsLabel;
+
+  /// No description provided for @gcashMovementLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'GCash Change'**
+  String get gcashMovementLabel;
+
+  /// No description provided for @mayaMovementLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Maya Change'**
+  String get mayaMovementLabel;
+
+  /// No description provided for @cashOnHandMovementLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash Change'**
+  String get cashOnHandMovementLabel;
+
+  /// No description provided for @feesRoutedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee Destination'**
+  String get feesRoutedLabel;
+
+  /// No description provided for @totalMoneyInLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Money In'**
+  String get totalMoneyInLabel;
+
+  /// No description provided for @totalMoneyOutLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Money Out'**
+  String get totalMoneyOutLabel;
+
+  /// No description provided for @netBalanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Net Balance'**
+  String get netBalanceLabel;
+
+  /// No description provided for @totalFeesPaidLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Fees Paid'**
+  String get totalFeesPaidLabel;
+
   /// No description provided for @chooseFolder.
   ///
   /// In en, this message translates to:
@@ -817,43 +1615,43 @@ abstract class AppLocalizations {
   /// No description provided for @chargesManagement.
   ///
   /// In en, this message translates to:
-  /// **'Charges Management'**
+  /// **'Fee Configuration'**
   String get chargesManagement;
 
   /// No description provided for @setServiceFeeBrackets.
   ///
   /// In en, this message translates to:
-  /// **'Set service fee brackets for each transaction type separately.'**
+  /// **'Manage pricing for all services'**
   String get setServiceFeeBrackets;
 
   /// No description provided for @configureFeesFor.
   ///
   /// In en, this message translates to:
-  /// **'Configure Fees For'**
+  /// **'Configuring fees for:'**
   String get configureFeesFor;
 
   /// No description provided for @gcashWalletOption.
   ///
   /// In en, this message translates to:
-  /// **'GCash Wallet'**
+  /// **'GCash'**
   String get gcashWalletOption;
 
   /// No description provided for @mayaWalletOption.
   ///
   /// In en, this message translates to:
-  /// **'Maya Wallet'**
+  /// **'Maya'**
   String get mayaWalletOption;
 
   /// No description provided for @addNewBracket.
   ///
   /// In en, this message translates to:
-  /// **'Add New Bracket'**
+  /// **'Add New Fee Tier'**
   String get addNewBracket;
 
   /// No description provided for @lowerBound.
   ///
   /// In en, this message translates to:
-  /// **'Lower Bound (PHP)'**
+  /// **'Starting Amount (PHP)'**
   String get lowerBound;
 
   /// No description provided for @lowerBoundHint.
@@ -865,7 +1663,7 @@ abstract class AppLocalizations {
   /// No description provided for @upperBound.
   ///
   /// In en, this message translates to:
-  /// **'Upper Bound (PHP)'**
+  /// **'Ending Amount (PHP)'**
   String get upperBound;
 
   /// No description provided for @upperBoundHint.
@@ -877,7 +1675,7 @@ abstract class AppLocalizations {
   /// No description provided for @chargeAmount.
   ///
   /// In en, this message translates to:
-  /// **'Charge Amount (PHP)'**
+  /// **'Fee Amount (PHP)'**
   String get chargeAmount;
 
   /// No description provided for @chargeAmountHint.
@@ -910,65 +1708,545 @@ abstract class AppLocalizations {
   /// **'Go back'**
   String get goBack;
 
+  /// No description provided for @serviceCashIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash-In'**
+  String get serviceCashIn;
+
+  /// No description provided for @serviceCashOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash-Out'**
+  String get serviceCashOut;
+
+  /// No description provided for @serviceLoad.
+  ///
+  /// In en, this message translates to:
+  /// **'Load'**
+  String get serviceLoad;
+
+  /// No description provided for @servicePayBills.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay Bills'**
+  String get servicePayBills;
+
+  /// No description provided for @serviceQrPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'QR Payment'**
+  String get serviceQrPayment;
+
+  /// No description provided for @selectFeeType.
+  ///
+  /// In en, this message translates to:
+  /// **'Select fee type: {type}'**
+  String selectFeeType(String type);
+
+  /// No description provided for @selectWalletAndTransactionType.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a wallet and transaction type'**
+  String get selectWalletAndTransactionType;
+
+  /// No description provided for @feePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview: ₱{from} → Fee ₱{fee}'**
+  String feePreview(String from, String fee);
+
+  /// No description provided for @startingAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting Amount'**
+  String get startingAmountLabel;
+
+  /// No description provided for @endingAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Ending Amount'**
+  String get endingAmountLabel;
+
+  /// No description provided for @feeAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee Amount'**
+  String get feeAmountLabel;
+
+  /// No description provided for @totalTiers.
+  ///
+  /// In en, this message translates to:
+  /// **'Total: {count} tiers'**
+  String totalTiers(String count);
+
+  /// No description provided for @smallTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'Small Transactions'**
+  String get smallTransactions;
+
+  /// No description provided for @mediumTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium Transactions'**
+  String get mediumTransactions;
+
+  /// No description provided for @largeTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'Large Transactions'**
+  String get largeTransactions;
+
+  /// No description provided for @availableForTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'(Available for transactions)'**
+  String get availableForTransactions;
+
+  /// No description provided for @chargeInputInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter valid lower bound, upper bound, and charge amount.'**
+  String get chargeInputInvalid;
+
+  /// No description provided for @chargeBracketAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Charge bracket added.'**
+  String get chargeBracketAdded;
+
+  /// No description provided for @chargeBracketDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Charge bracket deleted.'**
+  String get chargeBracketDeleted;
+
+  /// No description provided for @unableToDeleteBracket.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to delete bracket.'**
+  String get unableToDeleteBracket;
+
+  /// No description provided for @deleteBracketTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Bracket'**
+  String get deleteBracketTitle;
+
+  /// No description provided for @deleteBracketMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the ₱{lower}–₱{upper} charge range? This cannot be undone.'**
+  String deleteBracketMessage(String lower, String upper);
+
+  /// No description provided for @editChargeBracketTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Charge Bracket'**
+  String get editChargeBracketTitle;
+
+  /// No description provided for @editChargeBracketHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Update the exact lower and upper bounds for this charge range.'**
+  String get editChargeBracketHint;
+
+  /// No description provided for @saveChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Changes'**
+  String get saveChanges;
+
+  /// No description provided for @chargeErrorOverlapRange.
+  ///
+  /// In en, this message translates to:
+  /// **'This range overlaps with an existing charge bracket for this type.'**
+  String get chargeErrorOverlapRange;
+
+  /// No description provided for @chargeErrorUpdateTargetMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to update the selected bracket.'**
+  String get chargeErrorUpdateTargetMissing;
+
+  /// No description provided for @chargeErrorLowerBoundNonPositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Lower bound must be greater than zero.'**
+  String get chargeErrorLowerBoundNonPositive;
+
+  /// No description provided for @chargeErrorUpperBoundTooSmall.
+  ///
+  /// In en, this message translates to:
+  /// **'Upper bound must be greater than or equal to lower bound.'**
+  String get chargeErrorUpperBoundTooSmall;
+
+  /// No description provided for @chargeErrorNegative.
+  ///
+  /// In en, this message translates to:
+  /// **'Charge amount cannot be negative.'**
+  String get chargeErrorNegative;
+
+  /// No description provided for @chargeErrorTooHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'Charge amount cannot exceed 50% of the upper bound (max ₱{max} for a ₱{upper} upper bound).'**
+  String chargeErrorTooHigh(String max, String upper);
+
+  /// No description provided for @activeTiers.
+  ///
+  /// In en, this message translates to:
+  /// **'Active Fee Tiers'**
+  String get activeTiers;
+
+  /// No description provided for @feeTierOverview.
+  ///
+  /// In en, this message translates to:
+  /// **'Tier Overview'**
+  String get feeTierOverview;
+
+  /// No description provided for @switchService.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Service'**
+  String get switchService;
+
+  /// No description provided for @tierName.
+  ///
+  /// In en, this message translates to:
+  /// **'Tier {number}: {description}'**
+  String tierName(String number, String description);
+
+  /// No description provided for @feeAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee: ₱{amount}'**
+  String feeAmount(String amount);
+
+  /// No description provided for @tierStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status: {status}'**
+  String tierStatus(String status);
+
+  /// No description provided for @usedXTimes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} transactions used'**
+  String usedXTimes(String count);
+
+  /// No description provided for @simpleMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Simple Mode'**
+  String get simpleMode;
+
+  /// No description provided for @advancedMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced Mode'**
+  String get advancedMode;
+
+  /// No description provided for @whatTheseFieldsMean.
+  ///
+  /// In en, this message translates to:
+  /// **'What do these fields mean?'**
+  String get whatTheseFieldsMean;
+
+  /// No description provided for @startingAmountHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The lowest transaction amount that this fee applies to'**
+  String get startingAmountHelp;
+
+  /// No description provided for @endingAmountHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The highest transaction amount that this fee applies to'**
+  String get endingAmountHelp;
+
+  /// No description provided for @feeAmountHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'How much you earn from each transaction in this range'**
+  String get feeAmountHelp;
+
+  /// No description provided for @exampleTransactionText.
+  ///
+  /// In en, this message translates to:
+  /// **'Example: If ₱1,500 is sent, and your tier is ₱1,000-₱2,000 with fee ₱50, you earn ₱50.'**
+  String get exampleTransactionText;
+
+  /// No description provided for @noFeeTiersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No Fee Tiers Configured Yet'**
+  String get noFeeTiersTitle;
+
+  /// No description provided for @noFeeTiersMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Start earning immediately by setting up your first fee structure.'**
+  String get noFeeTiersMessage;
+
+  /// No description provided for @lastUsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Last used: {time}'**
+  String lastUsed(String time);
+
   /// No description provided for @registeredParties.
   ///
   /// In en, this message translates to:
-  /// **'Registered Parties'**
+  /// **'Your People'**
   String get registeredParties;
+
+  /// No description provided for @yourPeople.
+  ///
+  /// In en, this message translates to:
+  /// **'Your People'**
+  String get yourPeople;
 
   /// No description provided for @manageParties.
   ///
   /// In en, this message translates to:
-  /// **'Manage your customer ecosystem and entity associations.'**
+  /// **'Manage customers & partners you work with'**
   String get manageParties;
+
+  /// No description provided for @manageCustomersPartners.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage customers & partners you work with'**
+  String get manageCustomersPartners;
+
+  /// No description provided for @searchByNameAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by name or account number...'**
+  String get searchByNameAccount;
 
   /// No description provided for @activeEntities.
   ///
   /// In en, this message translates to:
-  /// **'ACTIVE ENTITIES'**
+  /// **'Quick Stats'**
   String get activeEntities;
 
   /// No description provided for @addParty.
   ///
   /// In en, this message translates to:
-  /// **'ADD PARTY'**
+  /// **'Add New Person'**
   String get addParty;
+
+  /// No description provided for @addNewPerson.
+  ///
+  /// In en, this message translates to:
+  /// **'Add New Person'**
+  String get addNewPerson;
 
   /// No description provided for @noMatchingParties.
   ///
   /// In en, this message translates to:
-  /// **'No matching parties found'**
+  /// **'No people match that search'**
   String get noMatchingParties;
 
   /// No description provided for @tryDifferentKeyword.
   ///
   /// In en, this message translates to:
-  /// **'Try a different keyword for name, entity ID, account, or description.'**
+  /// **'Try a different name or account number'**
   String get tryDifferentKeyword;
 
   /// No description provided for @noPartiesSaved.
   ///
   /// In en, this message translates to:
-  /// **'No parties saved yet'**
+  /// **'Nobody Here Yet! 👋'**
   String get noPartiesSaved;
 
   /// No description provided for @localDatabaseInfo.
   ///
   /// In en, this message translates to:
-  /// **'This screen now shows only records stored in your local database.'**
+  /// **'Your contact list is empty. Let\'s add your first customer or business partner.'**
   String get localDatabaseInfo;
 
   /// No description provided for @deleteParty.
   ///
   /// In en, this message translates to:
-  /// **'Delete Party'**
+  /// **'Delete Person'**
   String get deleteParty;
 
   /// No description provided for @deletePartyConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete \"{name}\"? This action cannot be undone.'**
+  /// **'Are you sure you want to delete {name}? This action cannot be undone.'**
   String deletePartyConfirm(String name);
+
+  /// No description provided for @peopleSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'people saved'**
+  String get peopleSaved;
+
+  /// No description provided for @verified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get verified;
+
+  /// No description provided for @waitingToVerify.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting to verify'**
+  String get waitingToVerify;
+
+  /// No description provided for @verificationStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification Status'**
+  String get verificationStatus;
+
+  /// No description provided for @statusVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get statusVerified;
+
+  /// No description provided for @statusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for Verification'**
+  String get statusPending;
+
+  /// No description provided for @joinedDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Joined {date}'**
+  String joinedDate(String date);
+
+  /// No description provided for @theirAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Account: {account}'**
+  String theirAccount(String account);
+
+  /// No description provided for @viewHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'View History'**
+  String get viewHistory;
+
+  /// No description provided for @allPeople.
+  ///
+  /// In en, this message translates to:
+  /// **'All People'**
+  String get allPeople;
+
+  /// No description provided for @pendingPeople.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get pendingPeople;
+
+  /// No description provided for @nobodyHereYet.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody Here Yet! 👋'**
+  String get nobodyHereYet;
+
+  /// No description provided for @letAddFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Your contact list is empty. Let\'s add your first customer or business partner.'**
+  String get letAddFirst;
+
+  /// No description provided for @show.
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get show;
+
+  /// No description provided for @sort.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort'**
+  String get sort;
+
+  /// No description provided for @newest.
+  ///
+  /// In en, this message translates to:
+  /// **'Newest'**
+  String get newest;
+
+  /// No description provided for @oldest.
+  ///
+  /// In en, this message translates to:
+  /// **'Oldest'**
+  String get oldest;
+
+  /// No description provided for @all.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get all;
+
+  /// No description provided for @active.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get active;
+
+  /// No description provided for @pending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get pending;
+
+  /// No description provided for @partiesManagement.
+  ///
+  /// In en, this message translates to:
+  /// **'Parties Management'**
+  String get partiesManagement;
+
+  /// No description provided for @lastUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Last Updated'**
+  String get lastUpdated;
+
+  /// No description provided for @total.
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get total;
+
+  /// No description provided for @account.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get account;
+
+  /// No description provided for @status.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get status;
+
+  /// No description provided for @edit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get edit;
+
+  /// No description provided for @history.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get history;
+
+  /// No description provided for @name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get name;
 
   /// No description provided for @backupSync.
   ///
@@ -1171,7 +2449,7 @@ abstract class AppLocalizations {
   /// No description provided for @totalFunds.
   ///
   /// In en, this message translates to:
-  /// **'TOTAL FUNDS'**
+  /// **'CURRENT BUSINESS CASH'**
   String get totalFunds;
 
   /// No description provided for @recentActivities.
@@ -1222,17 +2500,23 @@ abstract class AppLocalizations {
   /// **'Trend data will appear once wallet activity has been recorded.'**
   String get walletTrendPlaceholder;
 
-  /// No description provided for @capitalPlusCharges.
+  /// No description provided for @businessCashBreakdown.
   ///
   /// In en, this message translates to:
-  /// **'Capital {capital} + Charges {charges}'**
-  String capitalPlusCharges(String capital, String charges);
+  /// **'Wallets {wallets} + On-hand {cash} + Owner Credit {credit}'**
+  String businessCashBreakdown(String wallets, String cash, String credit);
 
-  /// No description provided for @capitalComputation.
+  /// No description provided for @businessCashComputation.
   ///
   /// In en, this message translates to:
-  /// **'Computation: Initial Capital/Top-ups + Total Charge Earnings'**
-  String get capitalComputation;
+  /// **'Available now for business use'**
+  String get businessCashComputation;
+
+  /// No description provided for @withdrawableEarningsNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdrawable earnings right now: {amount}'**
+  String withdrawableEarningsNote(String amount);
 }
 
 class _AppLocalizationsDelegate

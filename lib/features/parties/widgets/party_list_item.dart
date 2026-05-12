@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/l10n_extension.dart';
 import '../../../shared/widgets/architect_card.dart';
 
 enum PartyStatus { verified, pending }
@@ -9,6 +10,7 @@ class PartyListItem extends StatelessWidget {
   final String joinDate;
   final String id;
   final String description;
+  final String accountNumber;
   final PartyStatus status;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -19,6 +21,7 @@ class PartyListItem extends StatelessWidget {
     required this.joinDate,
     required this.id,
     required this.description,
+    required this.accountNumber,
     required this.status,
     required this.onEdit,
     required this.onDelete,
@@ -26,6 +29,7 @@ class PartyListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = MediaQuery.sizeOf(context).width < 360;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: ArchitectCard(
@@ -36,11 +40,15 @@ class PartyListItem extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.surfaceContainerLow,
+                  radius: 24,
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                   child: Text(
-                    name[0],
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    name.isEmpty ? '?' : name[0].toUpperCase(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -50,49 +58,101 @@ class PartyListItem extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 8),
-                          _buildStatusBadge(status),
+                          Flexible(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: _buildStatusBadge(context, status),
+                            ),
+                          ),
                         ],
                       ),
+                      const SizedBox(height: 4),
                       Text(
-                        'Joined $joinDate',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.labelMedium?.copyWith(fontSize: 10),
+                        context.l10n.joinedDate(joinDate),
+                        style: Theme.of(context).textTheme.labelSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.l10n.theirAccount(accountNumber),
+                        style: Theme.of(context).textTheme.labelSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            if (description.isNotEmpty) ...[
+              Text(
+                description,
+                style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    description,
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
+                  child: isCompact
+                      ? OutlinedButton(
+                          onPressed: onEdit,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          child: Text(context.l10n.edit),
+                        )
+                      : OutlinedButton.icon(
+                          onPressed: onEdit,
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: Text(context.l10n.edit),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
                 ),
-                Row(
-                  children: [
-                    _buildActionButton(Icons.edit_outlined, onEdit),
-                    const SizedBox(width: 8),
-                    _buildActionButton(
-                      Icons.delete_outline_rounded,
-                      onDelete,
-                      color: Colors.red[100],
-                      iconColor: Colors.red,
-                    ),
-                  ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: isCompact
+                      ? OutlinedButton(
+                          onPressed: onDelete,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            side: const BorderSide(color: AppColors.error),
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          child: Text(context.l10n.delete),
+                        )
+                      : OutlinedButton.icon(
+                          onPressed: onDelete,
+                          icon: const Icon(Icons.delete_outline, size: 16),
+                          label: Text(context.l10n.delete),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            side: const BorderSide(color: AppColors.error),
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -102,44 +162,42 @@ class PartyListItem extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusBadge(PartyStatus status) {
+  Widget _buildStatusBadge(BuildContext context, PartyStatus status) {
     final isVerified = status == PartyStatus.verified;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: isVerified ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E0),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        isVerified ? 'VERIFIED' : 'PENDING DOCS',
-        style: TextStyle(
-          fontSize: 8,
-          fontWeight: FontWeight.bold,
-          color: isVerified ? const Color(0xFF2E7D32) : const Color(0xFFE65100),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButton(
-    IconData icon,
-    VoidCallback onTap, {
-    Color? color,
-    Color? iconColor,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 168),
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: color ?? const Color(0xFFF3F3F6),
-          borderRadius: BorderRadius.circular(8),
+          color: isVerified
+              ? AppColors.secondary.withValues(alpha: 0.1)
+              : Colors.orange.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
         ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: iconColor ?? AppColors.onSurfaceVariant,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isVerified ? Icons.verified_rounded : Icons.hourglass_top_rounded,
+              size: 12,
+              color: isVerified ? AppColors.secondary : Colors.orange,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                isVerified
+                    ? context.l10n.statusVerified
+                    : context.l10n.statusPending,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isVerified ? AppColors.secondary : Colors.orange,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -18,16 +18,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get walletOverview => 'Wallet Overview';
 
   @override
-  String get gcashWallet => 'GCASH WALLET';
+  String get gcashWallet => 'GCash Wallet';
 
   @override
-  String get mayaWallet => 'MAYA WALLET';
+  String get mayaWallet => 'Maya Wallet';
 
   @override
-  String get onHandCash => 'ON-HAND CASH';
+  String get onHandCash => 'On-hand Cash';
 
   @override
-  String get chargesEarnings => 'CHARGES EARNINGS';
+  String get chargesEarnings => 'Charges Earnings';
 
   @override
   String get availableBalance => 'Available balance';
@@ -67,13 +67,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transactionTypeLabel => 'Transaction Type';
 
   @override
-  String get accountNumber => 'Account Number';
+  String get accountNumber => 'Recipient Account';
 
   @override
-  String get searchOrEnterAccountNumber => 'Search or enter account number';
+  String get searchOrEnterAccountNumber => 'Name or number';
 
   @override
   String get scanningReceipt => 'Scanning receipt…';
+
+  @override
+  String get scanningReceiptModalMessage =>
+      'Reading image and parsing receipt data...';
 
   @override
   String get scanReceiptButton => 'Scan Receipt (Camera/Gallery)';
@@ -218,6 +222,240 @@ class AppLocalizationsEn extends AppLocalizations {
   String get customerSends => 'Customer Sends';
 
   @override
+  String get recordTransactionDetails => 'Transaction Setup';
+
+  @override
+  String get optionalDetailsSection => 'Add Reference or Notes (Optional)';
+
+  @override
+  String get reviewTotals => 'Total Breakdown';
+
+  @override
+  String get showDetails => 'Show details';
+
+  @override
+  String get hideDetails => 'Hide details';
+
+  @override
+  String get whoPaysServiceFee => 'Fee Handling';
+
+  @override
+  String get customerPaysFeeLabel => 'Customer bears fee';
+
+  @override
+  String get deductedFromSentLabel => 'Include in amount';
+
+  @override
+  String get usingWallet => 'Using wallet';
+
+  @override
+  String get serviceFee => 'Applicable fee';
+
+  @override
+  String get feeDestination => 'Fee Sent To';
+
+  @override
+  String get feeRange => 'Fee range';
+
+  @override
+  String get amountSentToCustomerWallet => 'Customer Total';
+
+  @override
+  String get amountCustomerSends => 'Amount customer sends';
+
+  @override
+  String get customerPays => 'Customer pays';
+
+  @override
+  String get cashPaidOut => 'Cash paid out';
+
+  @override
+  String get cashAddedToDrawer => 'Your Drawer';
+
+  @override
+  String get feeAddedExample =>
+      'Service fee is added on top. Example: ₱100 transaction + ₱5 fee = collect ₱105 from customer, send ₱100.';
+
+  @override
+  String get feeDeductedExample =>
+      'Service fee is deducted before sending. Example: ₱100 entered, ₱5 fee deducted = only ₱95 is sent to customer wallet.';
+
+  @override
+  String get accountNotInContacts =>
+      'This account is not in contacts yet. Tap here to add contact before saving.';
+
+  @override
+  String get saveTransactionAction => 'Record Transaction';
+
+  @override
+  String get walletAndService => 'Transaction Type (Required)';
+
+  @override
+  String verifiedAccountFound(String name) {
+    return '$name - Verified account record found';
+  }
+
+  @override
+  String get onHandCashLabel => 'On-hand cash';
+
+  @override
+  String get cashPaidOutTooltip =>
+      'Cash you hand out to the customer from your drawer.';
+
+  @override
+  String get cashAddedToDrawerTooltip =>
+      'Cash that goes into your drawer after this transaction.';
+
+  @override
+  String get noFeeRuleForAmount =>
+      'No fee rule for this amount yet. Fee is ₱0. Add a fee rule first.';
+
+  @override
+  String get receiptDataAppliedReview =>
+      'Receipt data applied. Please review before saving.';
+
+  @override
+  String get noFeeRangeFoundTitle => 'No fee range found';
+
+  @override
+  String get noFeeRangeFoundMessage =>
+      'The entered amount does not match any configured fee range. Please create a new fee range first.';
+
+  @override
+  String get accountNumberRequiredBeforeSaving =>
+      'Account number is required before saving.';
+
+  @override
+  String get transactionAmountRequiredBeforeSaving =>
+      'Transaction amount is required before saving.';
+
+  @override
+  String get noFeeRangeFoundForAmount =>
+      'No fee range found for this amount. Create a new range first.';
+
+  @override
+  String get amountToSendMustBeGreaterThanZero =>
+      'Amount to send must be greater than zero. Adjust entered amount or charge handling.';
+
+  @override
+  String insufficientBalance(String source, String amount) {
+    return 'Insufficient $source balance. Available: ₱ $amount';
+  }
+
+  @override
+  String get partyNotRegisteredYet =>
+      'Party is not registered yet. Register details first.';
+
+  @override
+  String transactionSavedSyncRetry(String name) {
+    return 'Transaction saved for $name. Backend sync will retry automatically.';
+  }
+
+  @override
+  String get amountMustBeGreaterThanZero => 'Amount must be greater than 0';
+
+  @override
+  String feeValidationFailedStatus(String status, String message) {
+    return 'Fee validation failed$status: $message';
+  }
+
+  @override
+  String feeValidationFailed(String error) {
+    return 'Fee validation failed: $error';
+  }
+
+  @override
+  String get backendPreviewUnavailable => 'Backend Preview Unavailable';
+
+  @override
+  String get unableToValidateFeePreviewNow =>
+      'Unable to validate fee preview from backend right now.';
+
+  @override
+  String get saveLocally => 'Save locally';
+
+  @override
+  String get feeBreakdownTitle => 'Fee breakdown';
+
+  @override
+  String get charge => 'Charge';
+
+  @override
+  String get totalCollected => 'Total collected';
+
+  @override
+  String get walletCredit => 'Wallet credit';
+
+  @override
+  String get onHandChange => 'On-hand change';
+
+  @override
+  String get feeRouting => 'Where the Fee Goes';
+
+  @override
+  String get confirmAndSave => 'Confirm and save';
+
+  @override
+  String get selectRegisteredContact => 'Select Registered Contact';
+
+  @override
+  String get registerPartyFirstThenSearch =>
+      'Register a party first, then use search to pick an account.';
+
+  @override
+  String get tryDifferentNameOrAccount =>
+      'Try searching with a different name or account number.';
+
+  @override
+  String accountWithNumber(String number) {
+    return 'Account: $number';
+  }
+
+  @override
+  String get completeNameAndAccount =>
+      'Please complete full name and account number.';
+
+  @override
+  String get unableToSaveParty => 'Unable to save party. Please try again.';
+
+  @override
+  String get accountAlreadyRegistered => 'Account already registered.';
+
+  @override
+  String get partyRegistrationTitle => 'Party Registration';
+
+  @override
+  String get defineFinancialEntityBeforeTransaction =>
+      'Define a new financial entity before recording this transaction.';
+
+  @override
+  String get loadService => 'Load';
+
+  @override
+  String get payBillsService => 'Pay Bills';
+
+  @override
+  String get qrPaymentService => 'QR Payment';
+
+  @override
+  String get stepOneChooseWallet => 'Step 1: Choose wallet';
+
+  @override
+  String get pickWalletHelper => 'Wallet buttons choose which account to use.';
+
+  @override
+  String get stepTwoChooseService => 'Step 2: Choose service';
+
+  @override
+  String get pickServiceHelper =>
+      'Service buttons choose what transaction to perform.';
+
+  @override
+  String selectedWalletService(String wallet, String service) {
+    return 'Selected: $wallet • $service';
+  }
+
+  @override
   String get newOwnerMovement => 'New Money Record';
 
   @override
@@ -322,39 +560,91 @@ class AppLocalizationsEn extends AppLocalizations {
   String get categoryPending => 'No category selected';
 
   @override
-  String get movements => 'Movements';
+  String get movements => 'Wallet History';
 
   @override
-  String get reports => 'Reports';
+  String get walletHistorySubtitle => 'Track GCash, Maya, and cash movement.';
 
   @override
-  String get transactions => 'TRANSACTIONS';
+  String get reports => 'Download Report';
 
   @override
-  String get ownerMovements => 'OWNER MOVEMENTS';
+  String get transactions => 'Transactions';
 
   @override
-  String get noMatchingTransactions => 'No matching transactions';
+  String get ownerMovements => 'Owner Activity';
 
   @override
-  String get trySearchingBy =>
-      'Try searching by title, account number, reference ID, notes, or date.';
+  String get historyTransactionLabel => 'Transaction';
+
+  @override
+  String get historyOwnerActivityLabel => 'Owner Activity';
+
+  @override
+  String get historyTypeLabel => 'Type';
+
+  @override
+  String get historyCategoryLabel => 'Category';
+
+  @override
+  String get historyAccountLabel => 'Account';
+
+  @override
+  String get historyAmountShownLabel => 'Amount shown';
+
+  @override
+  String get walletChangeLabel => 'Wallet change';
+
+  @override
+  String get cashChangeLabel => 'Cash change';
+
+  @override
+  String get savedOnLabel => 'Saved on';
+
+  @override
+  String get transactionBreakdown => 'Transaction Breakdown';
+
+  @override
+  String get entryDetails => 'Entry Details';
+
+  @override
+  String includesFee(String amount) {
+    return 'Includes fee: $amount';
+  }
+
+  @override
+  String get today => 'Today';
+
+  @override
+  String get yesterday => 'Yesterday';
+
+  @override
+  String get noMatchingTransactions => 'No results found';
+
+  @override
+  String get trySearchingBy => 'Try changing the wallet, date, or search.';
 
   @override
   String get noHistoryYet => 'No history yet';
 
   @override
   String get newEntriesWillAppear =>
-      'New entries will appear here once you save transactions or owner movements.';
+      'Your saved transactions and owner activity will appear here.';
 
   @override
-  String get searchAccountRefParty => 'Search account, ref ID, party, or note';
+  String get searchAccountRefParty => 'Search by account, ref no., or note';
 
   @override
-  String get beginningDate => 'Beginning Date';
+  String get beginningDate => 'From date';
 
   @override
-  String get endDate => 'End Date';
+  String get endDate => 'To date';
+
+  @override
+  String get filterBeginDate => 'Filter from date';
+
+  @override
+  String get filterEndDate => 'Filter to date';
 
   @override
   String get gcash => 'GCash';
@@ -363,7 +653,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get maya => 'Maya';
 
   @override
-  String get onHand => 'On-hand';
+  String get onHand => 'Cash on hand';
 
   @override
   String get pdf => 'PDF';
@@ -378,41 +668,193 @@ class AppLocalizationsEn extends AppLocalizations {
   String get close => 'Close';
 
   @override
+  String get selectBeginningDate => 'Select from date';
+
+  @override
+  String get selectEndDate => 'Select to date';
+
+  @override
+  String get generalLedgerReport => 'General Ledger Report';
+
+  @override
+  String get generalLedgerReportDescription =>
+      'Pick a date range, then choose PDF or Excel output.';
+
+  @override
+  String get fileFormat => 'File format';
+
+  @override
+  String get endDateValidationMessage =>
+      'To date must be the same as or later than from date.';
+
+  @override
+  String get preparingReport => 'Preparing report...';
+
+  @override
+  String get noLedgerRecordsForDateRange =>
+      'No ledger records were found for the selected date range.';
+
+  @override
+  String get reportGenerationCanceled =>
+      'Report generation canceled. No folder was selected.';
+
+  @override
+  String get generatingReport => 'Generating report...';
+
+  @override
+  String get reportShareUnavailable =>
+      'Report generated, but sharing is not available on this device. The file was saved locally.';
+
+  @override
+  String get reportGenerationFailed =>
+      'Failed to generate the report. Please try again.';
+
+  @override
+  String reportSavedTo(String path) {
+    return 'Report generated successfully. Saved to $path';
+  }
+
+  @override
+  String get walletHistoryReport => 'Wallet History Report';
+
+  @override
+  String get walletHistorySheetName => 'Wallet History';
+
+  @override
+  String get walletFlowReport => 'Wallet Flow';
+
+  @override
+  String get walletFlowSheetName => 'Wallet Flow';
+
+  @override
+  String get periodLabel => 'Period';
+
+  @override
+  String get generatedLabel => 'Generated';
+
+  @override
+  String get legendTitle => 'Quick guide';
+
+  @override
+  String get legendPlusMinus => 'Use + for increase and - for decrease.';
+
+  @override
+  String get legendAmountShownNote =>
+      'Amount matches history. Cash out may already include fee.';
+
+  @override
+  String get reportDateTimeLabel => 'Date/Time';
+
+  @override
+  String get reportTypeLabel => 'Type';
+
+  @override
+  String get reportAmountLabel => 'Amount shown';
+
+  @override
+  String get reportFeeLabel => 'Fee';
+
+  @override
+  String get reportWalletDeltaLabel => 'Wallet change';
+
+  @override
+  String get reportCashDeltaLabel => 'Cash change';
+
+  @override
+  String get reportReferenceLabel => 'Ref #';
+
+  @override
+  String get reportDetailsLabel => 'Details';
+
+  @override
+  String get dateTimeLabel => 'Date & Time';
+
+  @override
+  String get walletUsedLabel => 'Wallet';
+
+  @override
+  String get amountShownLabel => 'History Amount';
+
+  @override
+  String get descriptionLabel => 'Description';
+
+  @override
+  String get remarksLabel => 'Remarks';
+
+  @override
+  String get moneyInLabel => 'Money In';
+
+  @override
+  String get moneyOutLabel => 'Money Out';
+
+  @override
+  String get feeDetailsLabel => 'Fee Details';
+
+  @override
+  String get balanceLabel => 'Balance';
+
+  @override
+  String get totalsLabel => 'TOTALS';
+
+  @override
+  String get gcashMovementLabel => 'GCash Change';
+
+  @override
+  String get mayaMovementLabel => 'Maya Change';
+
+  @override
+  String get cashOnHandMovementLabel => 'Cash Change';
+
+  @override
+  String get feesRoutedLabel => 'Fee Destination';
+
+  @override
+  String get totalMoneyInLabel => 'Total Money In';
+
+  @override
+  String get totalMoneyOutLabel => 'Total Money Out';
+
+  @override
+  String get netBalanceLabel => 'Net Balance';
+
+  @override
+  String get totalFeesPaidLabel => 'Total Fees Paid';
+
+  @override
   String get chooseFolder => 'Choose folder to save General Ledger report';
 
   @override
-  String get chargesManagement => 'Charges Management';
+  String get chargesManagement => 'Fee Configuration';
 
   @override
-  String get setServiceFeeBrackets =>
-      'Set service fee brackets for each transaction type separately.';
+  String get setServiceFeeBrackets => 'Manage pricing for all services';
 
   @override
-  String get configureFeesFor => 'Configure Fees For';
+  String get configureFeesFor => 'Configuring fees for:';
 
   @override
-  String get gcashWalletOption => 'GCash Wallet';
+  String get gcashWalletOption => 'GCash';
 
   @override
-  String get mayaWalletOption => 'Maya Wallet';
+  String get mayaWalletOption => 'Maya';
 
   @override
-  String get addNewBracket => 'Add New Bracket';
+  String get addNewBracket => 'Add New Fee Tier';
 
   @override
-  String get lowerBound => 'Lower Bound (PHP)';
+  String get lowerBound => 'Starting Amount (PHP)';
 
   @override
   String get lowerBoundHint => 'e.g. 1000';
 
   @override
-  String get upperBound => 'Upper Bound (PHP)';
+  String get upperBound => 'Ending Amount (PHP)';
 
   @override
   String get upperBoundHint => 'e.g. 1500';
 
   @override
-  String get chargeAmount => 'Charge Amount (PHP)';
+  String get chargeAmount => 'Fee Amount (PHP)';
 
   @override
   String get chargeAmountHint => 'e.g. 25.00';
@@ -430,39 +872,315 @@ class AppLocalizationsEn extends AppLocalizations {
   String get goBack => 'Go back';
 
   @override
-  String get registeredParties => 'Registered Parties';
+  String get serviceCashIn => 'Cash-In';
 
   @override
-  String get manageParties =>
-      'Manage your customer ecosystem and entity associations.';
+  String get serviceCashOut => 'Cash-Out';
 
   @override
-  String get activeEntities => 'ACTIVE ENTITIES';
+  String get serviceLoad => 'Load';
 
   @override
-  String get addParty => 'ADD PARTY';
+  String get servicePayBills => 'Pay Bills';
 
   @override
-  String get noMatchingParties => 'No matching parties found';
+  String get serviceQrPayment => 'QR Payment';
 
   @override
-  String get tryDifferentKeyword =>
-      'Try a different keyword for name, entity ID, account, or description.';
+  String selectFeeType(String type) {
+    return 'Select fee type: $type';
+  }
 
   @override
-  String get noPartiesSaved => 'No parties saved yet';
+  String get selectWalletAndTransactionType =>
+      'Select a wallet and transaction type';
+
+  @override
+  String feePreview(String from, String fee) {
+    return 'Preview: ₱$from → Fee ₱$fee';
+  }
+
+  @override
+  String get startingAmountLabel => 'Starting Amount';
+
+  @override
+  String get endingAmountLabel => 'Ending Amount';
+
+  @override
+  String get feeAmountLabel => 'Fee Amount';
+
+  @override
+  String totalTiers(String count) {
+    return 'Total: $count tiers';
+  }
+
+  @override
+  String get smallTransactions => 'Small Transactions';
+
+  @override
+  String get mediumTransactions => 'Medium Transactions';
+
+  @override
+  String get largeTransactions => 'Large Transactions';
+
+  @override
+  String get availableForTransactions => '(Available for transactions)';
+
+  @override
+  String get chargeInputInvalid =>
+      'Enter valid lower bound, upper bound, and charge amount.';
+
+  @override
+  String get chargeBracketAdded => 'Charge bracket added.';
+
+  @override
+  String get chargeBracketDeleted => 'Charge bracket deleted.';
+
+  @override
+  String get unableToDeleteBracket => 'Unable to delete bracket.';
+
+  @override
+  String get deleteBracketTitle => 'Delete Bracket';
+
+  @override
+  String deleteBracketMessage(String lower, String upper) {
+    return 'Delete the ₱$lower–₱$upper charge range? This cannot be undone.';
+  }
+
+  @override
+  String get editChargeBracketTitle => 'Edit Charge Bracket';
+
+  @override
+  String get editChargeBracketHint =>
+      'Update the exact lower and upper bounds for this charge range.';
+
+  @override
+  String get saveChanges => 'Save Changes';
+
+  @override
+  String get chargeErrorOverlapRange =>
+      'This range overlaps with an existing charge bracket for this type.';
+
+  @override
+  String get chargeErrorUpdateTargetMissing =>
+      'Unable to update the selected bracket.';
+
+  @override
+  String get chargeErrorLowerBoundNonPositive =>
+      'Lower bound must be greater than zero.';
+
+  @override
+  String get chargeErrorUpperBoundTooSmall =>
+      'Upper bound must be greater than or equal to lower bound.';
+
+  @override
+  String get chargeErrorNegative => 'Charge amount cannot be negative.';
+
+  @override
+  String chargeErrorTooHigh(String max, String upper) {
+    return 'Charge amount cannot exceed 50% of the upper bound (max ₱$max for a ₱$upper upper bound).';
+  }
+
+  @override
+  String get activeTiers => 'Active Fee Tiers';
+
+  @override
+  String get feeTierOverview => 'Tier Overview';
+
+  @override
+  String get switchService => 'Switch Service';
+
+  @override
+  String tierName(String number, String description) {
+    return 'Tier $number: $description';
+  }
+
+  @override
+  String feeAmount(String amount) {
+    return 'Fee: ₱$amount';
+  }
+
+  @override
+  String tierStatus(String status) {
+    return 'Status: $status';
+  }
+
+  @override
+  String usedXTimes(String count) {
+    return '$count transactions used';
+  }
+
+  @override
+  String get simpleMode => 'Simple Mode';
+
+  @override
+  String get advancedMode => 'Advanced Mode';
+
+  @override
+  String get whatTheseFieldsMean => 'What do these fields mean?';
+
+  @override
+  String get startingAmountHelp =>
+      'The lowest transaction amount that this fee applies to';
+
+  @override
+  String get endingAmountHelp =>
+      'The highest transaction amount that this fee applies to';
+
+  @override
+  String get feeAmountHelp =>
+      'How much you earn from each transaction in this range';
+
+  @override
+  String get exampleTransactionText =>
+      'Example: If ₱1,500 is sent, and your tier is ₱1,000-₱2,000 with fee ₱50, you earn ₱50.';
+
+  @override
+  String get noFeeTiersTitle => 'No Fee Tiers Configured Yet';
+
+  @override
+  String get noFeeTiersMessage =>
+      'Start earning immediately by setting up your first fee structure.';
+
+  @override
+  String lastUsed(String time) {
+    return 'Last used: $time';
+  }
+
+  @override
+  String get registeredParties => 'Your People';
+
+  @override
+  String get yourPeople => 'Your People';
+
+  @override
+  String get manageParties => 'Manage customers & partners you work with';
+
+  @override
+  String get manageCustomersPartners =>
+      'Manage customers & partners you work with';
+
+  @override
+  String get searchByNameAccount => 'Search by name or account number...';
+
+  @override
+  String get activeEntities => 'Quick Stats';
+
+  @override
+  String get addParty => 'Add New Person';
+
+  @override
+  String get addNewPerson => 'Add New Person';
+
+  @override
+  String get noMatchingParties => 'No people match that search';
+
+  @override
+  String get tryDifferentKeyword => 'Try a different name or account number';
+
+  @override
+  String get noPartiesSaved => 'Nobody Here Yet! 👋';
 
   @override
   String get localDatabaseInfo =>
-      'This screen now shows only records stored in your local database.';
+      'Your contact list is empty. Let\'s add your first customer or business partner.';
 
   @override
-  String get deleteParty => 'Delete Party';
+  String get deleteParty => 'Delete Person';
 
   @override
   String deletePartyConfirm(String name) {
-    return 'Are you sure you want to delete \"$name\"? This action cannot be undone.';
+    return 'Are you sure you want to delete $name? This action cannot be undone.';
   }
+
+  @override
+  String get peopleSaved => 'people saved';
+
+  @override
+  String get verified => 'Verified';
+
+  @override
+  String get waitingToVerify => 'waiting to verify';
+
+  @override
+  String get verificationStatus => 'Verification Status';
+
+  @override
+  String get statusVerified => 'Verified';
+
+  @override
+  String get statusPending => 'Waiting for Verification';
+
+  @override
+  String joinedDate(String date) {
+    return 'Joined $date';
+  }
+
+  @override
+  String theirAccount(String account) {
+    return 'Account: $account';
+  }
+
+  @override
+  String get viewHistory => 'View History';
+
+  @override
+  String get allPeople => 'All People';
+
+  @override
+  String get pendingPeople => 'Pending';
+
+  @override
+  String get nobodyHereYet => 'Nobody Here Yet! 👋';
+
+  @override
+  String get letAddFirst =>
+      'Your contact list is empty. Let\'s add your first customer or business partner.';
+
+  @override
+  String get show => 'Show';
+
+  @override
+  String get sort => 'Sort';
+
+  @override
+  String get newest => 'Newest';
+
+  @override
+  String get oldest => 'Oldest';
+
+  @override
+  String get all => 'All';
+
+  @override
+  String get active => 'Active';
+
+  @override
+  String get pending => 'Pending';
+
+  @override
+  String get partiesManagement => 'Parties Management';
+
+  @override
+  String get lastUpdated => 'Last Updated';
+
+  @override
+  String get total => 'Total';
+
+  @override
+  String get account => 'Account';
+
+  @override
+  String get status => 'Status';
+
+  @override
+  String get edit => 'Edit';
+
+  @override
+  String get history => 'History';
+
+  @override
+  String get name => 'Name';
 
   @override
   String get backupSync => 'Backup & Sync';
@@ -572,7 +1290,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectLanguage => 'Select Language';
 
   @override
-  String get totalFunds => 'TOTAL FUNDS';
+  String get totalFunds => 'CURRENT BUSINESS CASH';
 
   @override
   String get recentActivities => 'Recent Activities';
@@ -603,11 +1321,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'Trend data will appear once wallet activity has been recorded.';
 
   @override
-  String capitalPlusCharges(String capital, String charges) {
-    return 'Capital $capital + Charges $charges';
+  String businessCashBreakdown(String wallets, String cash, String credit) {
+    return 'Wallets $wallets + On-hand $cash + Owner Credit $credit';
   }
 
   @override
-  String get capitalComputation =>
-      'Computation: Initial Capital/Top-ups + Total Charge Earnings';
+  String get businessCashComputation => 'Available now for business use';
+
+  @override
+  String withdrawableEarningsNote(String amount) {
+    return 'Withdrawable earnings right now: $amount';
+  }
 }

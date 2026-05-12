@@ -160,8 +160,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         children: [
           _buildHeader(),
           const SizedBox(height: 20),
-          _buildSearchAndFilter(showWalletFilters: showWalletFilters),
-          const SizedBox(height: 20),
           _buildEmptyState(
             title: context.l10n.noHistoryYet,
             message: context.l10n.newEntriesWillAppear,
@@ -231,276 +229,276 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          context.l10n.movements,
-          style: const TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: AppColors.onSurface,
-          ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.outlineVariant.withValues(alpha: 0.5),
         ),
-        FilledButton.icon(
-          onPressed: _openLedgerReportSheet,
-          icon: const Icon(Icons.assessment_outlined, size: 18),
-          label: Text(context.l10n.reports),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.movements,
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  context.l10n.walletHistorySubtitle,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 12),
+          FilledButton.icon(
+            onPressed: _openLedgerReportSheet,
+            icon: const Icon(Icons.download_rounded, size: 18),
+            label: Text(context.l10n.reports),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildSearchAndFilter({required bool showWalletFilters}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEEEEF0),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (value) {
-                    final newQuery = value.trim().toLowerCase();
-                    if (newQuery == _searchQuery) return;
-                    setState(() => _searchQuery = newQuery);
-                    _debounce?.cancel();
-                    _debounce = Timer(
-                      const Duration(milliseconds: 300),
-                      _applyFilters,
-                    );
-                  },
-                  decoration: InputDecoration(
-                    hintText: context.l10n.searchAccountRefParty,
-                    hintStyle: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
-                      size: 20,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                    suffixIcon: _searchQuery.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                              _debounce?.cancel();
-                              setState(() => _searchQuery = '');
-                              _applyFilters();
-                            },
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              size: 18,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                    border: InputBorder.none,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Material(
-              color: _beginDateFilter == null && _endDateFilter == null
-                  ? const Color(0xFFEEEEF0)
-                  : AppColors.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                onTap: _pickBeginDateFilter,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  child: Icon(
-                    Icons.calendar_month_rounded,
-                    size: 24,
-                    color: _beginDateFilter == null && _endDateFilter == null
-                        ? AppColors.primary
-                        : AppColors.primary,
-                  ),
-                ),
-              ),
-            ),
-          ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppColors.outlineVariant.withValues(alpha: 0.45),
         ),
-        const SizedBox(height: 12),
-        if (showWalletFilters)
-          Row(
-            children: [
-              Expanded(
-                child: _buildWalletFilterCard(
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                final newQuery = value.trim().toLowerCase();
+                if (newQuery == _searchQuery) return;
+                setState(() => _searchQuery = newQuery);
+                _debounce?.cancel();
+                _debounce = Timer(
+                  const Duration(milliseconds: 300),
+                  _applyFilters,
+                );
+              },
+              decoration: InputDecoration(
+                hintText: context.l10n.searchAccountRefParty,
+                hintStyle: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  size: 20,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                suffixIcon: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          _debounce?.cancel();
+                          setState(() => _searchQuery = '');
+                          _applyFilters();
+                        },
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+          if (showWalletFilters) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildWalletFilterChip(
+                  label: context.l10n.filterAll,
+                  icon: Icons.grid_view_rounded,
+                  color: AppColors.primary,
+                  walletKey: null,
+                ),
+                _buildWalletFilterChip(
                   label: context.l10n.gcash,
                   icon: Icons.account_balance_wallet_outlined,
                   color: AppColors.primary,
                   walletKey: 'gcash',
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildWalletFilterCard(
+                _buildWalletFilterChip(
                   label: context.l10n.maya,
                   icon: Icons.wallet_rounded,
                   color: AppColors.secondary,
                   walletKey: 'maya',
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildWalletFilterCard(
+                _buildWalletFilterChip(
                   label: context.l10n.onHand,
                   icon: Icons.payments_outlined,
                   color: const Color(0xFF8E6C00),
                   walletKey: 'on_hand',
                 ),
-              ),
-            ],
-          ),
-        if (_beginDateFilter != null || _endDateFilter != null) ...[
+              ],
+            ),
+          ],
+          if (_beginDateFilter != null || _endDateFilter != null) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (_beginDateFilter != null)
+                  Chip(
+                    label: Text(
+                      '${context.l10n.beginningDate}: ${_fullDateFormat.format(_beginDateFilter!)}',
+                    ),
+                    labelStyle: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                    side: BorderSide.none,
+                    deleteIcon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                    onDeleted: () {
+                      _beginDateFilter = null;
+                      _applyFilters();
+                    },
+                  ),
+                if (_endDateFilter != null)
+                  Chip(
+                    label: Text(
+                      '${context.l10n.endDate}: ${_fullDateFormat.format(_endDateFilter!)}',
+                    ),
+                    labelStyle: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                    side: BorderSide.none,
+                    deleteIcon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                    onDeleted: () {
+                      _endDateFilter = null;
+                      _applyFilters();
+                    },
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
-              if (_beginDateFilter != null)
-                Chip(
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickBeginDateFilter,
+                  icon: const Icon(Icons.event_available_rounded, size: 16),
                   label: Text(
-                    'Begin: ${_fullDateFormat.format(_beginDateFilter!)}',
+                    _beginDateFilter == null
+                        ? context.l10n.beginningDate
+                        : _fullDateFormat.format(_beginDateFilter!),
                   ),
-                  labelStyle: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                  side: BorderSide.none,
-                  deleteIcon: const Icon(
-                    Icons.close_rounded,
-                    size: 18,
-                    color: AppColors.primary,
-                  ),
-                  onDeleted: () {
-                    _beginDateFilter = null;
-                    _applyFilters();
-                  },
                 ),
-              if (_endDateFilter != null)
-                Chip(
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickEndDateFilter,
+                  icon: const Icon(Icons.event_rounded, size: 16),
                   label: Text(
-                    'End: ${_fullDateFormat.format(_endDateFilter!)}',
+                    _endDateFilter == null
+                        ? context.l10n.endDate
+                        : _fullDateFormat.format(_endDateFilter!),
                   ),
-                  labelStyle: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                  side: BorderSide.none,
-                  deleteIcon: const Icon(
-                    Icons.close_rounded,
-                    size: 18,
-                    color: AppColors.primary,
-                  ),
-                  onDeleted: () {
-                    _endDateFilter = null;
-                    _applyFilters();
-                  },
                 ),
+              ),
             ],
           ),
         ],
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _pickBeginDateFilter,
-                icon: const Icon(Icons.event_available_rounded, size: 16),
-                label: Text(
-                  _beginDateFilter == null
-                      ? context.l10n.beginningDate
-                      : _fullDateFormat.format(_beginDateFilter!),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _pickEndDateFilter,
-                icon: const Icon(Icons.event_rounded, size: 16),
-                label: Text(
-                  _endDateFilter == null
-                      ? context.l10n.endDate
-                      : _fullDateFormat.format(_endDateFilter!),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildWalletFilterCard({
+  Widget _buildWalletFilterChip({
     required String label,
     required IconData icon,
     required Color color,
-    required String walletKey,
+    required String? walletKey,
   }) {
     final isSelected = _selectedWalletFilter == walletKey;
 
-    return Material(
-      color: isSelected
-          ? color.withValues(alpha: 0.14)
-          : AppColors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          _selectedWalletFilter = isSelected ? null : walletKey;
-          _applyFilters();
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isSelected ? color : AppColors.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: isSelected ? color : AppColors.onSurface,
-                  ),
-                ),
-              ),
-              if (isSelected)
-                Icon(Icons.check_circle_rounded, size: 18, color: color),
-            ],
-          ),
+    return ChoiceChip(
+      selected: isSelected,
+      showCheckmark: false,
+      onSelected: (_) {
+        _selectedWalletFilter = walletKey == null || isSelected
+            ? null
+            : walletKey;
+        _applyFilters();
+      },
+      avatar: Icon(
+        icon,
+        size: 16,
+        color: isSelected ? color : AppColors.onSurfaceVariant,
+      ),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: isSelected ? color : AppColors.onSurface,
         ),
       ),
+      selectedColor: color.withValues(alpha: 0.14),
+      backgroundColor: AppColors.surfaceContainerLow,
+      side: BorderSide(
+        color: isSelected
+            ? color.withValues(alpha: 0.35)
+            : AppColors.outlineVariant.withValues(alpha: 0.5),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 
@@ -573,6 +571,31 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return movementType == 'top-up' || movementType == 'initial capital';
   }
 
+  bool _isCashTransferPerspectiveRow(_HistoryRow item) {
+    if (item.entryType != 'owner_movement') {
+      return false;
+    }
+
+    final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
+    return movementType == 'cash transfer (on-hand to wallet)';
+  }
+
+  bool _isBorrowedFundsPerspectiveRow(_HistoryRow item) {
+    if (item.entryType != 'owner_movement') {
+      return false;
+    }
+
+    final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
+    return movementType == 'borrowed funds' ||
+        movementType == 'borrowed funds repayment';
+  }
+
+  bool _isTransactionLogRow(_HistoryRow item) {
+    return item.entryType == 'transaction' ||
+        _isCashTransferPerspectiveRow(item) ||
+        _isBorrowedFundsPerspectiveRow(item);
+  }
+
   Future<void> _pickBeginDateFilter() async {
     final now = DateTime.now();
     final pickedDate = await showDatePicker(
@@ -580,7 +603,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       initialDate: _beginDateFilter ?? _endDateFilter ?? now,
       firstDate: DateTime(now.year - 5),
       lastDate: DateTime(now.year + 5),
-      helpText: 'Filter Begin Date',
+      helpText: context.l10n.filterBeginDate,
     );
 
     if (pickedDate == null) {
@@ -609,7 +632,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       initialDate: _endDateFilter ?? _beginDateFilter ?? now,
       firstDate: DateTime(now.year - 5),
       lastDate: DateTime(now.year + 5),
-      helpText: 'Filter End Date',
+      helpText: context.l10n.filterEndDate,
     );
 
     if (pickedDate == null) {
@@ -641,7 +664,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     }
 
     final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
-    return movementType == 'top-up' || movementType == 'initial capital';
+    return movementType == 'top-up' ||
+        movementType == 'initial capital' ||
+        movementType == 'cash transfer (on-hand to wallet)' ||
+        movementType == 'borrowed funds' ||
+        movementType == 'borrowed funds repayment';
   }
 
   bool _matchesWalletPerspective(_HistoryRow item, String walletFilter) {
@@ -668,8 +695,17 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
       final isTopUp =
           movementType == 'top-up' || movementType == 'initial capital';
-      if (!isTopUp) {
+      final isCashTransfer =
+          movementType == 'cash transfer (on-hand to wallet)';
+      final isBorrowedFunds =
+          movementType == 'borrowed funds' ||
+          movementType == 'borrowed funds repayment';
+      if (!isTopUp && !isCashTransfer && !isBorrowedFunds) {
         return false;
+      }
+
+      if (isCashTransfer && normalizedFilter == 'on_hand') {
+        return item.onHandDelta != 0;
       }
 
       return walletKey == normalizedFilter;
@@ -732,13 +768,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   Widget _buildTile(_HistoryRow item) {
     final displayAmount = _resolveDisplayAmount(item);
     final isWalletOutflow = _isWalletOutflow(item);
-    final tileColor = item.entryType == 'transaction'
+    final tileColor = _isTransactionLogRow(item)
         ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
         : (isWalletOutflow ? AppColors.error : _colorFor(item.iconKey));
     return ArchitectActivityTile(
       title: item.title,
-      type: item.tag,
-      reference: item.reference,
+      subtitle: _buildTileSubtitle(item),
+      supportingText: _buildTileSupportingText(item),
       amount:
           '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}',
       time: _timeFormat.format(item.createdAt),
@@ -750,7 +786,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
   Future<void> _showTransactionDetails(_HistoryRow item) async {
     final isWalletOutflow = _isWalletOutflow(item);
-    final accentColor = item.entryType == 'transaction'
+    final accentColor = _isTransactionLogRow(item)
         ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
         : (isWalletOutflow ? AppColors.error : _colorFor(item.iconKey));
     final displayAmount = _resolveDisplayAmount(item);
@@ -758,9 +794,15 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}';
     final dateTimeText =
         '${_fullDateFormat.format(item.createdAt)} ${_timeFormat.format(item.createdAt)}';
-    final entryTypeLabel = item.entryType == 'transaction'
-        ? 'Transaction'
-        : 'Owner Movement';
+    final walletDelta = _walletDeltaForItem(item);
+    final walletChangeText = _signedCurrency(walletDelta);
+    final cashChangeText = _signedCurrency(item.onHandDelta);
+    final entryTypeLabel = _isTransactionLogRow(item)
+        ? context.l10n.historyTransactionLabel
+        : context.l10n.historyOwnerActivityLabel;
+    final detailsTitle = _isTransactionLogRow(item)
+        ? context.l10n.transactionBreakdown
+        : context.l10n.entryDetails;
     final hasDistinctReferenceId =
         item.rawReference.trim().isNotEmpty &&
         item.rawReference.trim() != (item.accountNumber ?? '').trim();
@@ -804,8 +846,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Transaction Details',
+                          Text(
+                            detailsTitle,
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -852,28 +894,63 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildDetailRow('Title', item.title),
-                          _buildDetailRow('Category', item.tag),
+                          _buildDetailRow(
+                            context.l10n.historyTypeLabel,
+                            entryTypeLabel,
+                          ),
+                          _buildDetailRow(
+                            context.l10n.historyCategoryLabel,
+                            item.title,
+                          ),
                           if (hasWalletAccount)
                             _buildDetailRow(
-                              'Wallet Account',
-                              item.walletAccount,
+                              context.l10n.walletLabel,
+                              _displayWalletAccountLabel(item.walletAccount),
                             ),
                           if (hasDistinctReferenceId)
-                            _buildDetailRow('Reference ID', item.rawReference),
+                            _buildDetailRow(
+                              context.l10n.referenceNo,
+                              item.rawReference,
+                            ),
                           if (hasAccountNumber)
                             _buildDetailRow(
-                              'Account Number',
+                              context.l10n.historyAccountLabel,
                               item.accountNumber!,
                             ),
                           if (!hasDistinctReferenceId && !hasAccountNumber)
-                            _buildDetailRow('Reference ID', item.rawReference),
+                            _buildDetailRow(
+                              context.l10n.referenceNo,
+                              item.rawReference,
+                            ),
                           _buildDetailRow(
-                            'Amount',
+                            context.l10n.historyAmountShownLabel,
                             amountText,
                             valueColor: accentColor,
                           ),
-                          _buildDetailRow('Date & Time', dateTimeText),
+                          if (item.chargeAmount > 0)
+                            _buildDetailRow(
+                              context.l10n.serviceFee,
+                              _currencyFormat.format(item.chargeAmount),
+                            ),
+                          if (hasWalletAccount)
+                            _buildDetailRow(
+                              context.l10n.walletChangeLabel,
+                              walletChangeText,
+                              valueColor: walletDelta < 0
+                                  ? AppColors.error
+                                  : AppColors.secondary,
+                            ),
+                          _buildDetailRow(
+                            context.l10n.cashChangeLabel,
+                            cashChangeText,
+                            valueColor: item.onHandDelta < 0
+                                ? AppColors.error
+                                : AppColors.secondary,
+                          ),
+                          _buildDetailRow(
+                            context.l10n.savedOnLabel,
+                            dateTimeText,
+                          ),
                           if (hasNotes) _buildNotesSection(item.note),
                         ],
                       ),
@@ -1101,7 +1178,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 initialDate: beginDate,
                 firstDate: DateTime(now.year - 10),
                 lastDate: DateTime(now.year + 10),
-                helpText: 'Select Beginning Date',
+                helpText: context.l10n.selectBeginningDate,
               );
               if (picked == null) {
                 return;
@@ -1120,7 +1197,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 initialDate: endDate,
                 firstDate: DateTime(now.year - 10),
                 lastDate: DateTime(now.year + 10),
-                helpText: 'Select End Date',
+                helpText: context.l10n.selectEndDate,
               );
               if (picked == null) {
                 return;
@@ -1146,16 +1223,16 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      children: const [
-                        Icon(
+                      children: [
+                        const Icon(
                           Icons.assessment_outlined,
                           color: AppColors.primary,
                           size: 20,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
-                          'General Ledger Report',
-                          style: TextStyle(
+                          context.l10n.generalLedgerReport,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
                             color: AppColors.onSurface,
@@ -1164,8 +1241,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'Pick a beginning and end date, then choose PDF or Excel file output.',
+                    Text(
+                      context.l10n.generalLedgerReportDescription,
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.onSurfaceVariant,
@@ -1184,8 +1261,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       onTap: pickEndDate,
                     ),
                     const SizedBox(height: 14),
-                    const Text(
-                      'File Format',
+                    Text(
+                      context.l10n.fileFormat,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -1269,10 +1346,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     }
 
     if (request.endDate.isBefore(request.beginDate)) {
-      _showSnack(
-        'End date must be the same or later than beginning date.',
-        isError: true,
-      );
+      _showSnack(context.l10n.endDateValidationMessage, isError: true);
       return;
     }
 
@@ -1333,7 +1407,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   Future<void> _generateGeneralLedgerReport(
     _LedgerReportRequest request,
   ) async {
-    _showSnack('Preparing report...');
+    _showSnack(context.l10n.preparingReport);
 
     try {
       final entries = await _loadLedgerEntriesForRange(
@@ -1345,17 +1419,17 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         if (!mounted) {
           return;
         }
-        _showSnack('No ledger records found for the selected date range.');
+        _showSnack(context.l10n.noLedgerRecordsForDateRange);
         return;
       }
 
       final reportsDir = await _resolveSaveDirectory();
       if (reportsDir == null) {
-        _showSnack('Report generation canceled. No folder selected.');
+        _showSnack(context.l10n.reportGenerationCanceled);
         return;
       }
 
-      _showSnack('Generating general ledger report...');
+      _showSnack(context.l10n.generatingReport);
 
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final filePath = path.join(
@@ -1387,7 +1461,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         return;
       }
 
-      _showSnack('Report generated successfully. Saved to $filePath');
+      _showSnack(context.l10n.reportSavedTo(filePath));
 
       if (!_supportsShareSheet) {
         return;
@@ -1397,22 +1471,20 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         await Share.shareXFiles(
           [XFile(filePath)],
           text:
-              'General Ledger Report (${_fullDateFormat.format(request.beginDate)} - ${_fullDateFormat.format(request.endDate)})',
+              '${context.l10n.generalLedgerReport} (${_fullDateFormat.format(request.beginDate)} - ${_fullDateFormat.format(request.endDate)})',
         );
       } catch (shareError, shareStack) {
         debugPrint(
           'Share failed for generated report: $shareError\n$shareStack',
         );
-        _showSnack(
-          'Report generated, but sharing is unavailable on this device. File is saved locally.',
-        );
+        _showSnack(context.l10n.reportShareUnavailable);
       }
     } catch (error, stackTrace) {
       debugPrint('Report generation failed: $error\n$stackTrace');
       if (!mounted) {
         return;
       }
-      _showSnack('Failed to generate report. Please try again.', isError: true);
+      _showSnack(context.l10n.reportGenerationFailed, isError: true);
     }
   }
 
@@ -1420,7 +1492,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     try {
       final fallbackDir = await _resolveReportsDirectory();
       final selectedPath = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Choose folder to save General Ledger report',
+        dialogTitle: context.l10n.chooseFolder,
         initialDirectory: fallbackDir.path,
       );
 
@@ -1482,13 +1554,24 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           final notes = (row['note'] as String?) ?? '';
           final iconKey = row['icon_key'] as String;
           final amount = (row['amount'] as num).toDouble();
+          final walletAccount = (row['wallet_account'] as String?) ?? '';
+          final walletDelta = (row['wallet_delta'] as num?)?.toDouble() ?? 0;
+          final mayaWalletDelta =
+              (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0;
+          final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
           final isOutflow = iconKey == 'cash_out';
           final inflow = isOutflow ? 0.0 : amount;
           final outflow = isOutflow ? amount : 0.0;
-          final chargeAmount = entryType == 'transaction'
+          final chargeAmount =
+              entryType == 'transaction' ||
+                  ((row['owner_movement_type'] as String?) ?? '').trim() ==
+                      'Cash Transfer (On-hand to Wallet)'
               ? _extractChargeAmountFromNote(notes)
               : 0.0;
-          final chargeDestination = entryType == 'transaction'
+          final chargeDestination =
+              entryType == 'transaction' ||
+                  ((row['owner_movement_type'] as String?) ?? '').trim() ==
+                      'Cash Transfer (On-hand to Wallet)'
               ? _extractChargeDestinationFromNote(notes)
               : '';
           runningBalance += inflow - outflow;
@@ -1499,9 +1582,14 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             title: row['title'] as String,
             tag: row['tag'] as String,
             reference: (row['reference'] as String?) ?? '',
+            walletAccount: walletAccount,
             notes: notes,
             inflow: inflow,
             outflow: outflow,
+            amountShown: amount,
+            gcashChange: walletDelta,
+            mayaChange: mayaWalletDelta,
+            cashChange: onHandDelta,
             chargeAmount: chargeAmount,
             chargeDestination: chargeDestination,
             chargeBreakdown: _buildChargeBreakdown(
@@ -1523,6 +1611,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     required _LedgerTotals totals,
   }) async {
     final pdf = pw.Document();
+    final l10n = context.l10n;
     final timestamp = DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now());
     final dateFormat = DateFormat('dd MMM yyyy HH:mm');
 
@@ -1530,20 +1619,49 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.all(20),
-        build: (context) {
+        build: (_) {
           return [
             pw.Text(
-              'Transaction History Report',
+              _pdfSafeText(l10n.walletFlowReport),
               style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 4),
             pw.Text(
-              'Period: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
+              '${_pdfSafeText(l10n.periodLabel)}: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
               style: const pw.TextStyle(fontSize: 11),
             ),
             pw.Text(
-              'Generated: $timestamp',
+              '${_pdfSafeText(l10n.generatedLabel)}: $timestamp',
               style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.blue50,
+                border: pw.Border.all(color: PdfColors.blue100),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    _pdfSafeText(l10n.legendTitle),
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    _pdfSafeText(l10n.legendPlusMinus),
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+                  pw.Text(
+                    _pdfSafeText(l10n.legendAmountShownNote),
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+                ],
+              ),
             ),
             pw.SizedBox(height: 12),
             pw.TableHelper.fromTextArray(
@@ -1557,19 +1675,16 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
               ),
               cellStyle: const pw.TextStyle(fontSize: 8),
               cellAlignment: pw.Alignment.centerLeft,
-              headers: const [
-                'Date & Time',
-                'Type',
-                'Description',
-                'Category',
-                'Reference No.',
-                'Remarks',
-                'Money In',
-                'Money Out',
-                'Service Fee',
-                'Fee Destination',
-                'Fee Details',
-                'Balance',
+              headers: [
+                _pdfSafeText(l10n.reportDateTimeLabel),
+                _pdfSafeText(l10n.reportTypeLabel),
+                _pdfSafeText(l10n.walletUsedLabel),
+                _pdfSafeText(l10n.reportAmountLabel),
+                _pdfSafeText(l10n.reportFeeLabel),
+                _pdfSafeText(l10n.reportWalletDeltaLabel),
+                _pdfSafeText(l10n.reportCashDeltaLabel),
+                _pdfSafeText(l10n.reportReferenceLabel),
+                _pdfSafeText(l10n.reportDetailsLabel),
               ],
               data: entries
                   .map(
@@ -1577,21 +1692,20 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       dateFormat.format(entry.createdAt),
                       _pdfSafeText(
                         entry.entryType == 'owner_movement'
-                            ? 'Owner Movement'
-                            : 'Transaction',
+                            ? l10n.historyOwnerActivityLabel
+                            : l10n.historyTransactionLabel,
                       ),
-                      _pdfSafeText(entry.title),
-                      _pdfSafeText(entry.tag),
-                      _pdfSafeText(entry.reference),
-                      _pdfSafeText(entry.notes),
-                      entry.inflow > 0 ? _reportCurrency(entry.inflow) : '',
-                      entry.outflow > 0 ? _reportCurrency(entry.outflow) : '',
+                      _pdfSafeText(
+                        _displayWalletAccountLabel(entry.walletAccount),
+                      ),
+                      _reportCurrency(entry.amountShown),
                       entry.chargeAmount > 0
                           ? _reportCurrency(entry.chargeAmount)
                           : '',
-                      _pdfSafeText(entry.chargeDestination),
-                      _pdfSafeText(entry.chargeBreakdown),
-                      _reportCurrency(entry.runningBalance),
+                      _reportSignedCurrency(entry.walletChange),
+                      _reportSignedCurrency(entry.cashChange),
+                      _pdfSafeText(entry.reference),
+                      _pdfSafeText(entry.title),
                     ],
                   )
                   .toList(growable: false),
@@ -1607,28 +1721,28 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    'Total Money In: ${_reportCurrency(totals.totalInflow)}',
+                    '${_pdfSafeText(l10n.gcashMovementLabel)}: ${_reportSignedCurrency(totals.gcashMovement)}',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                   pw.Text(
-                    'Total Money Out: ${_reportCurrency(totals.totalOutflow)}',
+                    '${_pdfSafeText(l10n.mayaMovementLabel)}: ${_reportSignedCurrency(totals.mayaMovement)}',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                   pw.Text(
-                    'Net Balance: ${_reportCurrency(totals.net)}',
+                    '${_pdfSafeText(l10n.cashOnHandMovementLabel)}: ${_reportSignedCurrency(totals.cashMovement)}',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                   pw.Text(
-                    'Total Fees Paid: ${_reportCurrency(totals.totalCharges)}',
+                    '${_pdfSafeText(l10n.totalFeesPaidLabel)}: ${_reportCurrency(totals.totalCharges)}',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
@@ -1636,6 +1750,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                   ),
                 ],
               ),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              '${_pdfSafeText(l10n.feesRoutedLabel)}: ${_pdfSafeText(_formatFeeRoutingSummary(totals))}',
+              style: const pw.TextStyle(fontSize: 9),
             ),
           ];
         },
@@ -1652,30 +1771,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     required _LedgerTotals totals,
   }) {
     final excel = ex.Excel.createExcel();
-    final sheet = excel['Transaction History'];
+    final sheet = excel[context.l10n.walletFlowSheetName];
     final dateFormat = DateFormat('dd MMM yyyy HH:mm');
 
     sheet.appendRow([
-      ex.TextCellValue('Transaction History Report'),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-    ]);
-    sheet.appendRow([
-      ex.TextCellValue(
-        'Period: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
-      ),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
+      ex.TextCellValue(context.l10n.walletFlowReport),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
@@ -1687,11 +1787,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     ]);
     sheet.appendRow([
       ex.TextCellValue(
-        'Generated: ${DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now())}',
+        '${context.l10n.periodLabel}: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
       ),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
       ex.TextCellValue(''),
@@ -1702,18 +1799,39 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ex.TextCellValue(''),
     ]);
     sheet.appendRow([
-      ex.TextCellValue('Date & Time'),
-      ex.TextCellValue('Type'),
-      ex.TextCellValue('Description'),
-      ex.TextCellValue('Category'),
-      ex.TextCellValue('Reference No.'),
-      ex.TextCellValue('Remarks'),
-      ex.TextCellValue('Money In'),
-      ex.TextCellValue('Money Out'),
-      ex.TextCellValue('Service Fee'),
-      ex.TextCellValue('Fee Destination'),
-      ex.TextCellValue('Fee Details'),
-      ex.TextCellValue('Balance'),
+      ex.TextCellValue(
+        '${context.l10n.generatedLabel}: ${DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now())}',
+      ),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+    ]);
+    sheet.appendRow([
+      ex.TextCellValue(context.l10n.legendTitle),
+      ex.TextCellValue(context.l10n.legendPlusMinus),
+      ex.TextCellValue(context.l10n.legendAmountShownNote),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+    ]);
+    sheet.appendRow([
+      ex.TextCellValue(context.l10n.reportDateTimeLabel),
+      ex.TextCellValue(context.l10n.reportTypeLabel),
+      ex.TextCellValue(context.l10n.walletUsedLabel),
+      ex.TextCellValue(context.l10n.reportAmountLabel),
+      ex.TextCellValue(context.l10n.reportFeeLabel),
+      ex.TextCellValue(context.l10n.reportWalletDeltaLabel),
+      ex.TextCellValue(context.l10n.reportCashDeltaLabel),
+      ex.TextCellValue(context.l10n.reportReferenceLabel),
+      ex.TextCellValue(context.l10n.reportDetailsLabel),
     ]);
 
     for (final entry in entries) {
@@ -1721,39 +1839,42 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         ex.TextCellValue(dateFormat.format(entry.createdAt)),
         ex.TextCellValue(
           entry.entryType == 'owner_movement'
-              ? 'Owner Movement'
-              : 'Transaction',
+              ? context.l10n.historyOwnerActivityLabel
+              : context.l10n.historyTransactionLabel,
         ),
-        ex.TextCellValue(entry.title),
-        ex.TextCellValue(entry.tag),
-        ex.TextCellValue(entry.reference),
-        ex.TextCellValue(entry.notes),
-        ex.TextCellValue(entry.inflow > 0 ? _reportCurrency(entry.inflow) : ''),
-        ex.TextCellValue(
-          entry.outflow > 0 ? _reportCurrency(entry.outflow) : '',
-        ),
+        ex.TextCellValue(_displayWalletAccountLabel(entry.walletAccount)),
+        ex.TextCellValue(_reportCurrency(entry.amountShown)),
         ex.TextCellValue(
           entry.chargeAmount > 0 ? _reportCurrency(entry.chargeAmount) : '',
         ),
-        ex.TextCellValue(entry.chargeDestination),
-        ex.TextCellValue(entry.chargeBreakdown),
-        ex.TextCellValue(_reportCurrency(entry.runningBalance)),
+        ex.TextCellValue(_reportSignedCurrency(entry.walletChange)),
+        ex.TextCellValue(_reportSignedCurrency(entry.cashChange)),
+        ex.TextCellValue(entry.reference),
+        ex.TextCellValue(entry.title),
       ]);
     }
 
     sheet.appendRow([
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue('TOTALS'),
-      ex.TextCellValue(_reportCurrency(totals.totalInflow)),
-      ex.TextCellValue(_reportCurrency(totals.totalOutflow)),
+      ex.TextCellValue(context.l10n.gcashMovementLabel),
+      ex.TextCellValue(_reportSignedCurrency(totals.gcashMovement)),
+      ex.TextCellValue(context.l10n.mayaMovementLabel),
+      ex.TextCellValue(_reportSignedCurrency(totals.mayaMovement)),
+      ex.TextCellValue(context.l10n.cashOnHandMovementLabel),
+      ex.TextCellValue(_reportSignedCurrency(totals.cashMovement)),
+      ex.TextCellValue(context.l10n.totalFeesPaidLabel),
       ex.TextCellValue(_reportCurrency(totals.totalCharges)),
       ex.TextCellValue(''),
+    ]);
+    sheet.appendRow([
+      ex.TextCellValue(context.l10n.feesRoutedLabel),
+      ex.TextCellValue(_formatFeeRoutingSummary(totals)),
       ex.TextCellValue(''),
-      ex.TextCellValue(_reportCurrency(totals.net)),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
+      ex.TextCellValue(''),
     ]);
 
     final bytes = excel.encode();
@@ -1764,21 +1885,38 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   _LedgerTotals _calculateLedgerTotals(List<_LedgerExportRow> entries) {
-    double totalInflow = 0;
-    double totalOutflow = 0;
+    double gcashMovement = 0;
+    double mayaMovement = 0;
+    double cashMovement = 0;
     double totalCharges = 0;
+    double routedToGcash = 0;
+    double routedToMaya = 0;
+    double routedToCash = 0;
 
     for (final entry in entries) {
-      totalInflow += entry.inflow;
-      totalOutflow += entry.outflow;
+      gcashMovement += entry.gcashChange;
+      mayaMovement += entry.mayaChange;
+      cashMovement += entry.cashChange;
       totalCharges += entry.chargeAmount;
+
+      final destinationKey = _normalizeWalletKey(entry.chargeDestination);
+      if (destinationKey == 'gcash') {
+        routedToGcash += entry.chargeAmount;
+      } else if (destinationKey == 'maya') {
+        routedToMaya += entry.chargeAmount;
+      } else if (destinationKey == 'on_hand') {
+        routedToCash += entry.chargeAmount;
+      }
     }
 
     return _LedgerTotals(
-      totalInflow: totalInflow,
-      totalOutflow: totalOutflow,
+      gcashMovement: gcashMovement,
+      mayaMovement: mayaMovement,
+      cashMovement: cashMovement,
       totalCharges: totalCharges,
-      net: totalInflow - totalOutflow,
+      routedToGcash: routedToGcash,
+      routedToMaya: routedToMaya,
+      routedToCash: routedToCash,
     );
   }
 
@@ -1812,7 +1950,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     required String chargeDestination,
     required String entryType,
   }) {
-    if (entryType != 'transaction' || chargeAmount <= 0) {
+    if (chargeAmount <= 0) {
       return '';
     }
 
@@ -1824,6 +1962,34 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
   String _reportCurrency(double amount) {
     return 'PHP ${amount.toStringAsFixed(2)}';
+  }
+
+  String _reportSignedCurrency(double amount) {
+    final sign = amount < 0 ? '-' : '+';
+    return '$sign ${_reportCurrency(amount.abs())}';
+  }
+
+  String _formatFeeRoutingSummary(_LedgerTotals totals) {
+    final parts = <String>[];
+    if (totals.routedToGcash > 0) {
+      parts.add(
+        '${context.l10n.gcash}: ${_reportCurrency(totals.routedToGcash)}',
+      );
+    }
+    if (totals.routedToMaya > 0) {
+      parts.add(
+        '${context.l10n.maya}: ${_reportCurrency(totals.routedToMaya)}',
+      );
+    }
+    if (totals.routedToCash > 0) {
+      parts.add(
+        '${context.l10n.onHand}: ${_reportCurrency(totals.routedToCash)}',
+      );
+    }
+    if (parts.isEmpty) {
+      return '-';
+    }
+    return parts.join(' | ');
   }
 
   String _pdfSafeText(String value) {
@@ -1876,9 +2042,100 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     final target = DateTime(dateTime.year, dateTime.month, dateTime.day);
     final difference = today.difference(target).inDays;
 
-    if (difference == 0) return 'Today';
-    if (difference == 1) return 'Yesterday';
+    if (difference == 0) return context.l10n.today;
+    if (difference == 1) return context.l10n.yesterday;
     return _fullDateFormat.format(dateTime);
+  }
+
+  String _buildTileSubtitle(_HistoryRow item) {
+    final parts = <String>[];
+    final movementType = _friendlyOwnerMovementType(item.ownerMovementType);
+    final walletLabel = _displayWalletAccountLabel(item.walletAccount);
+    final reference = item.reference.trim();
+
+    if (movementType != null) {
+      parts.add(movementType);
+    }
+
+    if (walletLabel.isNotEmpty) {
+      parts.add(walletLabel);
+    }
+    if (reference.isNotEmpty) {
+      parts.add(reference);
+    }
+
+    if (parts.isNotEmpty) {
+      return parts.join(' • ');
+    }
+
+    final fallback = item.tag.trim();
+    return fallback.isNotEmpty ? fallback : item.title;
+  }
+
+  String? _buildTileSupportingText(_HistoryRow item) {
+    if (item.entryType == 'transaction' && item.chargeAmount > 0) {
+      return context.l10n.includesFee(
+        _currencyFormat.format(item.chargeAmount),
+      );
+    }
+
+    if (_isCashTransferPerspectiveRow(item)) {
+      return 'On-hand cash moved into ${_displayWalletAccountLabel(item.walletAccount)}';
+    }
+
+    final friendlyOwnerMovementType = _friendlyOwnerMovementType(
+      item.ownerMovementType,
+    );
+    if (friendlyOwnerMovementType != null) {
+      return friendlyOwnerMovementType;
+    }
+
+    final tag = item.tag.trim();
+    if (tag.isEmpty || tag.toLowerCase() == 'transaction') {
+      return null;
+    }
+
+    return tag;
+  }
+
+  String? _friendlyOwnerMovementType(String? movementType) {
+    final normalized = (movementType ?? '').trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    if (normalized == 'borrowed funds' || normalized == 'personal expense') {
+      return 'Borrowed Funds Taken';
+    }
+    if (normalized == 'borrowed funds repayment' ||
+        normalized == 'personal expense payment') {
+      return 'Borrowed Funds Repayment';
+    }
+    return null;
+  }
+
+  String _displayWalletAccountLabel(String walletAccount) {
+    switch (_normalizeWalletKey(walletAccount)) {
+      case 'gcash':
+        return context.l10n.gcash;
+      case 'maya':
+        return context.l10n.maya;
+      case 'on_hand':
+        return context.l10n.onHand;
+      default:
+        return walletAccount.trim();
+    }
+  }
+
+  double _walletDeltaForItem(_HistoryRow item) {
+    if (item.mayaWalletDelta != 0) {
+      return item.mayaWalletDelta;
+    }
+    return item.walletDelta;
+  }
+
+  String _signedCurrency(double amount) {
+    final sign = amount < 0 ? '−' : '+';
+    return '$sign ${_currencyFormat.format(amount.abs())}';
   }
 
   bool _isWalletOutflow(_HistoryRow item) {
@@ -1891,10 +2148,17 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       return item.iconKey == 'cash_in' || item.iconKey == 'maya_cash_in';
     }
 
-    // For owner movements (non-transaction), treat explicit fee withdrawals as outflows.
-    final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
-    if (movementType == 'fee withdrawal') {
-      return true;
+    if (_selectedWalletFilter == 'on_hand' && item.onHandDelta != 0) {
+      return item.onHandDelta < 0;
+    }
+
+    final walletDelta = _walletDeltaForItem(item);
+    if (walletDelta != 0) {
+      return walletDelta < 0;
+    }
+
+    if (item.onHandDelta != 0) {
+      return item.onHandDelta < 0;
     }
 
     return item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
@@ -1923,6 +2187,16 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         ? item.walletDelta.abs()
         : item.mayaWalletDelta.abs();
     final onHandAbs = item.onHandDelta.abs();
+    final isWalletPerspective =
+        _selectedWalletFilter == null ||
+        _selectedWalletFilter == 'gcash' ||
+        _selectedWalletFilter == 'maya';
+    final isCashOut =
+        item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
+
+    if (isWalletPerspective && isCashOut && walletOrMayaAbs > 0) {
+      return walletOrMayaAbs;
+    }
 
     if (walletOrMayaAbs > 0 && onHandAbs > 0) {
       return walletOrMayaAbs < onHandAbs ? walletOrMayaAbs : onHandAbs;
@@ -2036,13 +2310,19 @@ class _LedgerExportRow {
     required this.title,
     required this.tag,
     required this.reference,
+    required this.walletAccount,
     required this.notes,
     required this.inflow,
     required this.outflow,
+    required this.amountShown,
+    required this.gcashChange,
+    required this.mayaChange,
+    required this.cashChange,
     required this.chargeAmount,
+    required this.chargeDestination,
     required this.chargeBreakdown,
     required this.runningBalance,
-    required this.chargeDestination,
+    this.chargeDestinationKey,
   });
 
   final DateTime createdAt;
@@ -2050,25 +2330,38 @@ class _LedgerExportRow {
   final String title;
   final String tag;
   final String reference;
+  final String walletAccount;
   final String notes;
   final double inflow;
   final double outflow;
+  final double amountShown;
+  final double gcashChange;
+  final double mayaChange;
+  final double cashChange;
+  double get walletChange => mayaChange != 0 ? mayaChange : gcashChange;
   final double chargeAmount;
   final String chargeDestination;
   final String chargeBreakdown;
   final double runningBalance;
+  final String? chargeDestinationKey;
 }
 
 class _LedgerTotals {
   const _LedgerTotals({
-    required this.totalInflow,
-    required this.totalOutflow,
+    required this.gcashMovement,
+    required this.mayaMovement,
+    required this.cashMovement,
     required this.totalCharges,
-    required this.net,
+    required this.routedToGcash,
+    required this.routedToMaya,
+    required this.routedToCash,
   });
 
-  final double totalInflow;
-  final double totalOutflow;
+  final double gcashMovement;
+  final double mayaMovement;
+  final double cashMovement;
   final double totalCharges;
-  final double net;
+  final double routedToGcash;
+  final double routedToMaya;
+  final double routedToCash;
 }

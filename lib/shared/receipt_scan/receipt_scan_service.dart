@@ -23,6 +23,15 @@ class ReceiptScanService {
     final path = await pickImagePath(context);
     if (path == null || path.isEmpty) return null;
 
+    return scanFromImagePath(path);
+  }
+
+  /// Runs OCR + parsing on an already selected image path.
+  ///
+  /// This lets callers handle image picking and loading UI separately.
+  Future<ReceiptDraft?> scanFromImagePath(String path) async {
+    if (path.isEmpty) return null;
+
     final rawText = await runOcrOnImagePath(path);
     var mergedText = rawText;
 

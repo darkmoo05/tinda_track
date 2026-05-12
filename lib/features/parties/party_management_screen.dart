@@ -7,7 +7,6 @@ import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import 'data/party_repository.dart';
 import 'widgets/search_input.dart';
-import 'widgets/party_health_card.dart';
 import 'widgets/party_list_item.dart';
 
 class PartyManagementScreen extends StatefulWidget {
@@ -22,80 +21,103 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   final PartyRepository _partyRepository = PartyRepository.instance;
   Timer? _searchDebounce;
   String _searchQuery = '';
-  late Future<List<PartyActivityRecord>> _activePartiesFuture;
-  late final VoidCallback _partyRecordsListener;
+  String _currentFilter = 'all'; // 'all', 'verified', 'pending'
+  String _currentSort = 'newest'; // 'newest', 'oldest', 'name'
 
   @override
   void initState() {
     super.initState();
     _partyRepository.ensureLoaded();
-    _activePartiesFuture = _partyRepository.loadMostActiveParties(limit: 5);
-    _partyRecordsListener = () {
-      if (!mounted) return;
-      setState(() {
-        _activePartiesFuture = _partyRepository.loadMostActiveParties(limit: 5);
-      });
-    };
-    _partyRepository.parties.addListener(_partyRecordsListener);
   }
 
   @override
   void dispose() {
-    _partyRepository.parties.removeListener(_partyRecordsListener);
     _searchDebounce?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = MediaQuery.of(context).size.width < 380;
+    final isVeryCompact = MediaQuery.of(context).size.width < 340;
     return Scaffold(
       key: _scaffoldKey,
       drawer: const AppSideDrawer(),
       appBar: ArchitectAppBar(
-        title: context.l10n.appTitle,
+        title: context.l10n.yourPeople,
         onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.symmetric(
+          horizontal: isCompact ? 16 : 24,
+          vertical: 24,
+        ),
         children: [
           _buildHeader(context),
           const SizedBox(height: 16),
-          ArchitectSearchInput(onChanged: _onSearchChanged),
-          const SizedBox(height: 24),
-          ValueListenableBuilder<List<PartyRecord>>(
-            valueListenable: _partyRepository.parties,
-            builder: (context, parties, child) {
-              final total = parties.length;
-              final verified = parties.where((p) => p.isVerified).length;
-              final rate = total == 0 ? 0.0 : (verified / total) * 100;
-              return FutureBuilder<List<PartyActivityRecord>>(
-                future: _activePartiesFuture,
-                builder: (context, snapshot) {
-                  return PartyHealthHero(
-                    totalEntities: total,
-                    verificationRate: rate,
-                    activeParties: snapshot.data ?? const [],
-                  );
-                },
-              );
-            },
+          ArchitectSearchInput(
+            hintText: context.l10n.searchByNameAccount,
+            onChanged: _onSearchChanged,
           ),
-          const SizedBox(height: 32),
-          _buildListHeader(context),
+          const SizedBox(height: 24),
+          _buildQuickStatsCard(context),
+          const SizedBox(height: 24),
+          _buildFilterAndSortRow(context),
           const SizedBox(height: 16),
           ValueListenableBuilder<List<PartyRecord>>(
             valueListenable: _partyRepository.parties,
             builder: (context, parties, child) {
-              final filteredParties = _applySearch(parties);
-              return _buildPartiesList(
-                filteredParties,
-                hasActiveSearch: _searchQuery.trim().isNotEmpty,
+              final filteredParties = _applyFiltersAndSearch(parties);
+              final animationKey = ValueKey(
+                '${_currentFilter}_${_currentSort}_${_searchQuery.trim()}_${filteredParties.length}',
+              );
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, animation) {
+                  final slideAnimation = Tween<Offset>(
+                    begin: const Offset(0, 0.02),
+                    end: Offset.zero,
+                  ).animate(animation);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: slideAnimation,
+                      child: child,
+                    ),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: animationKey,
+                  child: _buildPartiesList(
+                    filteredParties,
+                    hasActiveSearch: _searchQuery.trim().isNotEmpty,
+                  ),
+                ),
               );
             },
           ),
-          const SizedBox(height: 100), // Bottom padding for FAB
+          const SizedBox(height: 100),
         ],
       ),
+      floatingActionButton: isVeryCompact
+          ? FloatingActionButton(
+              heroTag: 'partyManagementFab',
+              onPressed: _onAddParty,
+              tooltip: context.l10n.addNewPerson,
+              child: const Icon(Icons.add_rounded),
+            )
+          : FloatingActionButton.extended(
+              heroTag: 'partyManagementFab',
+              onPressed: _onAddParty,
+              label: Text(
+                context.l10n.addNewPerson,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              icon: const Icon(Icons.add_rounded),
+            ),
     );
   }
 
@@ -104,46 +126,207 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          context.l10n.registeredParties,
+          context.l10n.yourPeople,
           style: Theme.of(context).textTheme.displayMedium?.copyWith(
             fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 4),
         Text(
-          context.l10n.manageParties,
+          context.l10n.manageCustomersPartners,
           style: Theme.of(context).textTheme.labelMedium,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
   }
 
-  Widget _buildListHeader(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildQuickStatsCard(BuildContext context) {
+    return ValueListenableBuilder<List<PartyRecord>>(
+      valueListenable: _partyRepository.parties,
+      builder: (context, parties, child) {
+        final total = parties.length;
+        final verified = parties.where((p) => p.isVerified).length;
+        final percent = total == 0
+            ? 0
+            : (verified / total * 100).toStringAsFixed(1);
+        final pending = total - verified;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildStatPill(
+                    context,
+                    '👥 $total ${context.l10n.peopleSaved}',
+                    AppColors.surfaceContainerLow,
+                    AppColors.onSurface,
+                  ),
+                  _buildStatPill(
+                    context,
+                    '✓ $verified ${context.l10n.verified} ($percent%)',
+                    AppColors.secondary.withValues(alpha: 0.12),
+                    AppColors.secondary,
+                  ),
+                ],
+              ),
+              if (pending > 0) ...[
+                const SizedBox(height: 8),
+                _buildStatPill(
+                  context,
+                  '⏳ $pending ${context.l10n.waitingToVerify}',
+                  Colors.orange.withValues(alpha: 0.12),
+                  Colors.orange.shade800,
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatPill(
+    BuildContext context,
+    String label,
+    Color bgColor,
+    Color textColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: textColor,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildFilterAndSortRow(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          context.l10n.activeEntities,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.0,
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildFilterChip(
+                context.l10n.all,
+                _currentFilter == 'all',
+                () => setState(() => _currentFilter = 'all'),
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                '✓ ${context.l10n.verified}',
+                _currentFilter == 'verified',
+                () => setState(() => _currentFilter = 'verified'),
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                '⏳ ${context.l10n.pending}',
+                _currentFilter == 'pending',
+                () => setState(() => _currentFilter = 'pending'),
+              ),
+            ],
           ),
         ),
-        ElevatedButton.icon(
-          onPressed: _onAddParty,
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: Text(context.l10n.addParty),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerRight,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: DropdownButton<String>(
+                value: _currentSort,
+                items: [
+                  DropdownMenuItem(
+                    value: 'newest',
+                    child: Text(context.l10n.newest),
+                  ),
+                  DropdownMenuItem(
+                    value: 'oldest',
+                    child: Text(context.l10n.oldest),
+                  ),
+                  DropdownMenuItem(
+                    value: 'name',
+                    child: Text(context.l10n.name),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _currentSort = v ?? 'newest'),
+                isDense: true,
+                underline: const SizedBox(),
+              ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, bool selected, VoidCallback onTap) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.primary
+                    : AppColors.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : AppColors.onSurface,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -151,10 +334,11 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
     List<PartyRecord> parties, {
     required bool hasActiveSearch,
   }) {
+    final isCompact = MediaQuery.sizeOf(context).width < 360;
     if (parties.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isCompact ? 20 : 32),
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(16),
@@ -162,30 +346,44 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
         ),
         child: Column(
           children: [
-            const Icon(
-              Icons.people_outline_rounded,
-              size: 32,
-              color: AppColors.onSurfaceVariant,
+            Text(
+              hasActiveSearch ? '🔍' : '👋',
+              style: const TextStyle(fontSize: 48),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
               hasActiveSearch
                   ? context.l10n.noMatchingParties
-                  : context.l10n.noPartiesSaved,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  : context.l10n.nobodyHereYet,
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               hasActiveSearch
                   ? context.l10n.tryDifferentKeyword
-                  : context.l10n.localDatabaseInfo,
+                  : context.l10n.letAddFirst,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: AppColors.onSurfaceVariant,
               ),
             ),
+            if (!hasActiveSearch) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _onAddParty,
+                icon: const Icon(Icons.add_rounded),
+                label: Text(context.l10n.addNewPerson),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       );
@@ -197,7 +395,8 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
             (party) => PartyListItem(
               name: party.name,
               id: party.entityId,
-              description: '${party.description} • ${party.accountNumber}',
+              description: party.description,
+              accountNumber: party.accountNumber,
               joinDate: party.joinDate,
               status: party.isVerified
                   ? PartyStatus.verified
@@ -220,23 +419,39 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
     });
   }
 
-  List<PartyRecord> _applySearch(List<PartyRecord> parties) {
-    final query = _searchQuery.trim().toLowerCase();
-    final filtered = query.isEmpty
-        ? List<PartyRecord>.of(parties)
-        : parties
-              .where((party) {
-                final searchable = [
-                  party.name,
-                  party.entityId,
-                  party.accountNumber,
-                  party.description,
-                ].join(' ').toLowerCase();
-                return searchable.contains(query);
-              })
-              .toList(growable: false);
+  List<PartyRecord> _applyFiltersAndSearch(List<PartyRecord> parties) {
+    // Apply filter first
+    List<PartyRecord> filtered = List.from(parties);
 
-    filtered.sort((a, b) => b.id.compareTo(a.id));
+    if (_currentFilter == 'verified') {
+      filtered = filtered.where((p) => p.isVerified).toList();
+    } else if (_currentFilter == 'pending') {
+      filtered = filtered.where((p) => !p.isVerified).toList();
+    }
+
+    // Apply search
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      filtered = filtered.where((party) {
+        final searchable = [
+          party.name,
+          party.entityId,
+          party.accountNumber,
+          party.description,
+        ].join(' ').toLowerCase();
+        return searchable.contains(query);
+      }).toList();
+    }
+
+    // Apply sort
+    if (_currentSort == 'newest') {
+      filtered.sort((a, b) => b.id.compareTo(a.id));
+    } else if (_currentSort == 'oldest') {
+      filtered.sort((a, b) => a.id.compareTo(b.id));
+    } else if (_currentSort == 'name') {
+      filtered.sort((a, b) => a.name.compareTo(b.name));
+    }
+
     return filtered;
   }
 
@@ -338,9 +553,9 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
                     size: 16,
                     color: Colors.white,
                   ),
-                  label: const Text(
-                    'Delete',
-                    style: TextStyle(color: Colors.white),
+                  label: Text(
+                    context.l10n.delete,
+                    style: const TextStyle(color: Colors.white),
                   ),
                 ),
               ),

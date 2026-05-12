@@ -204,55 +204,37 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
     final db = await AppDatabase.instance.database;
     await AppDatabase.instance.ensureWalletSchema(db);
 
-    // Total count — shown on the "View all" button.
-    final countResult = await db.rawQuery('''
-      SELECT COUNT(*) AS cnt
-      FROM ${AppDatabase.ledgerTable}
-      WHERE is_deleted = 0
-        AND entry_type = 'owner_movement'
-        AND owner_movement_type IN ('Fee Withdrawal', 'Fee Transfer')
-    ''');
-    final total = (countResult.first['cnt'] as int?) ?? 0;
-
-    // Latest 5 entries only — keeps the inline card compact.
     final rows = await db.rawQuery('''
       SELECT
         created_at,
         owner_movement_type,
         wallet_account,
         owner_party_account,
+        note,
         amount,
         reference
       FROM ${AppDatabase.ledgerTable}
       WHERE is_deleted = 0
         AND entry_type = 'owner_movement'
-        AND owner_movement_type IN ('Fee Withdrawal', 'Fee Transfer')
+        AND owner_movement_type IN (
+          'Fee Withdrawal',
+          'Fee Transfer',
+          'Cash Transfer (On-hand to Wallet)'
+        )
       ORDER BY created_at DESC, id DESC
-      LIMIT 5
     ''');
+    final allEntries = rows
+        .map(_mapFeeMovementEntry)
+        .whereType<_FeeMovementEntry>()
+        .toList(growable: false);
 
     if (!mounted) return;
 
+    final previewEntries = allEntries.take(5).toList(growable: false);
+
     setState(() {
-      _feeMovementsTotal = total;
-      _feeMovements = rows.map((row) {
-        final movementType = (row['owner_movement_type'] as String?) ?? '';
-        final isTransfer = movementType == 'Fee Transfer';
-        return _FeeMovementEntry(
-          createdAt:
-              DateTime.tryParse((row['created_at'] as String?) ?? '') ??
-              DateTime.now(),
-          movementType: movementType,
-          source: isTransfer
-              ? ((row['owner_party_account'] as String?) ?? '')
-              : ((row['wallet_account'] as String?) ?? ''),
-          destination: isTransfer
-              ? ((row['wallet_account'] as String?) ?? '')
-              : null,
-          amount: (row['amount'] as num?)?.toDouble() ?? 0,
-          reference: (row['reference'] as String?) ?? '',
-        );
-      }).toList();
+      _feeMovementsTotal = allEntries.length;
+      _feeMovements = previewEntries;
       _isLoadingFeeMovements = false;
     });
   }
@@ -1106,7 +1088,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Fee Movement Log',
+                    'Fee Earnings Log',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -1115,7 +1097,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
                   ),
                   SizedBox(height: 2),
                   Text(
-                    'Every time fee income was withdrawn or moved to a wallet',
+                    'Every time fee earnings were withdrawn or moved to a wallet',
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.onSurfaceVariant,
@@ -1360,7 +1342,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'No fee movements yet',
+            'No fee earnings yet',
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 14,
@@ -1449,6 +1431,69 @@ class _FeeMovementEntry {
   final String reference;
 }
 
+_FeeMovementEntry? _mapFeeMovementEntry(Map<String, Object?> row) {
+  final movementType = (row['owner_movement_type'] as String?) ?? '';
+  final createdAt =
+      DateTime.tryParse((row['created_at'] as String?) ?? '') ?? DateTime.now();
+  final walletAccount = (row['wallet_account'] as String?) ?? '';
+  final ownerPartyAccount = (row['owner_party_account'] as String?) ?? '';
+  final note = (row['note'] as String?) ?? '';
+  final reference = (row['reference'] as String?) ?? '';
+
+  if (movementType == 'Fee Withdrawal') {
+    return _FeeMovementEntry(
+      createdAt: createdAt,
+      movementType: movementType,
+      source: walletAccount,
+      destination: null,
+      amount: (row['amount'] as num?)?.toDouble() ?? 0,
+      reference: reference,
+    );
+  }
+
+  if (movementType == 'Fee Transfer') {
+    return _FeeMovementEntry(
+      createdAt: createdAt,
+      movementType: movementType,
+      source: ownerPartyAccount,
+      destination: walletAccount,
+      amount: (row['amount'] as num?)?.toDouble() ?? 0,
+      reference: reference,
+    );
+  }
+
+  if (movementType == 'Cash Transfer (On-hand to Wallet)') {
+    final feeAmount = _extractChargeAmountFromNote(note);
+    if (feeAmount <= 0) {
+      return null;
+    }
+
+    return _FeeMovementEntry(
+      createdAt: createdAt,
+      movementType: 'Fee Transfer',
+      source: 'On-hand Cash',
+      destination: walletAccount,
+      amount: feeAmount,
+      reference: reference,
+    );
+  }
+
+  return null;
+}
+
+double _extractChargeAmountFromNote(String note) {
+  final match = RegExp(
+    r'Charge\s*(?:₱|PHP)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)',
+    caseSensitive: false,
+  ).firstMatch(note);
+  if (match == null || match.groupCount < 1) {
+    return 0.0;
+  }
+
+  final rawAmount = (match.group(1) ?? '').replaceAll(',', '');
+  return double.tryParse(rawAmount) ?? 0.0;
+}
+
 class _DayGroup {
   const _DayGroup({
     required this.date,
@@ -1498,34 +1543,25 @@ class _FeeMovementSheetState extends State<_FeeMovementSheet> {
         owner_movement_type,
         wallet_account,
         owner_party_account,
+        note,
         amount,
         reference
       FROM ${AppDatabase.ledgerTable}
       WHERE is_deleted = 0
         AND entry_type = 'owner_movement'
-        AND owner_movement_type IN ('Fee Withdrawal', 'Fee Transfer')
+        AND owner_movement_type IN (
+          'Fee Withdrawal',
+          'Fee Transfer',
+          'Cash Transfer (On-hand to Wallet)'
+        )
       ORDER BY created_at DESC, id DESC
     ''');
     if (!mounted) return;
     setState(() {
-      _all = rows.map((row) {
-        final movementType = (row['owner_movement_type'] as String?) ?? '';
-        final isTransfer = movementType == 'Fee Transfer';
-        return _FeeMovementEntry(
-          createdAt:
-              DateTime.tryParse((row['created_at'] as String?) ?? '') ??
-              DateTime.now(),
-          movementType: movementType,
-          source: isTransfer
-              ? ((row['owner_party_account'] as String?) ?? '')
-              : ((row['wallet_account'] as String?) ?? ''),
-          destination: isTransfer
-              ? ((row['wallet_account'] as String?) ?? '')
-              : null,
-          amount: (row['amount'] as num?)?.toDouble() ?? 0,
-          reference: (row['reference'] as String?) ?? '',
-        );
-      }).toList();
+      _all = rows
+          .map(_mapFeeMovementEntry)
+          .whereType<_FeeMovementEntry>()
+          .toList(growable: false);
       _isLoading = false;
     });
   }
@@ -1598,7 +1634,7 @@ class _FeeMovementSheetState extends State<_FeeMovementSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Fee Movement Log',
+                        'Fee Earnings Log',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -1607,7 +1643,7 @@ class _FeeMovementSheetState extends State<_FeeMovementSheet> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'All withdrawals and wallet transfers of fee income',
+                        'All withdrawals and wallet transfers of fee earnings',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.onSurfaceVariant,
@@ -1987,7 +2023,7 @@ class _FeeMovementSheetState extends State<_FeeMovementSheet> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Fee movements will appear here once you withdraw or transfer fee income.',
+            'Fee earnings entries will appear here once you withdraw or transfer fee earnings.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
           ),

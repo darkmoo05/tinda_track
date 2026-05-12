@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/l10n_extension.dart';
+import '../widgets/app_loading_modal.dart';
 import 'receipt_draft.dart';
 import 'receipt_scan_service.dart';
 
@@ -44,14 +45,32 @@ class _ReceiptScanButtonState extends State<ReceiptScanButton> {
 
     var stage = 'initialization';
     try {
+      final service = ReceiptScanService.instance;
+
       stage = 'image selection';
-      final draft = await ReceiptScanService.instance.scan(context);
+      final imagePath = await service.pickImagePath(context);
       if (!mounted) return;
 
-      if (draft == null) {
+      if (imagePath == null || imagePath.isEmpty) {
         // User cancelled image picker
         return;
       }
+
+      stage = 'OCR parsing';
+      final loading = showAppLoadingModal(
+        context,
+        message: context.l10n.scanningReceiptModalMessage,
+        caption: context.l10n.scanningReceipt,
+      );
+
+      ReceiptDraft? draft;
+      try {
+        draft = await service.scanFromImagePath(imagePath);
+      } finally {
+        loading.close();
+      }
+
+      if (!mounted || draft == null) return;
 
       if (!draft.hasAnySignal) {
         _showMessage(

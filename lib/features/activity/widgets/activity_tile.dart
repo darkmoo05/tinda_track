@@ -4,8 +4,8 @@ import '../../../shared/widgets/architect_card.dart';
 
 class ArchitectActivityTile extends StatelessWidget {
   final String title;
-  final String type;
-  final String reference;
+  final String subtitle;
+  final String? supportingText;
   final String amount;
   final String time;
   final IconData icon;
@@ -15,8 +15,8 @@ class ArchitectActivityTile extends StatelessWidget {
   const ArchitectActivityTile({
     super.key,
     required this.title,
-    required this.type,
-    required this.reference,
+    required this.subtitle,
+    this.supportingText,
     required this.amount,
     required this.time,
     required this.icon,
@@ -28,12 +28,12 @@ class ArchitectActivityTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isIncome = amount.startsWith('+');
     final normalizedTitle = title.toLowerCase();
-    final normalizedType = type.toLowerCase();
+    final normalizedSubtitle = subtitle.toLowerCase();
     final isTopUp =
         normalizedTitle.contains('top-up') ||
         normalizedTitle.contains('top up') ||
-        normalizedType.contains('top-up') ||
-        normalizedType.contains('top up');
+        normalizedSubtitle.contains('top-up') ||
+        normalizedSubtitle.contains('top up');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -41,8 +41,9 @@ class ArchitectActivityTile extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: ArchitectCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
@@ -64,13 +65,37 @@ class ArchitectActivityTile extends StatelessWidget {
                         fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
-                      '$type • $reference',
+                      subtitle,
                       style: Theme.of(
                         context,
-                      ).textTheme.labelMedium?.copyWith(fontSize: 11),
+                      ).textTheme.labelMedium?.copyWith(fontSize: 12),
                     ),
+                    if (supportingText != null &&
+                        supportingText!.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: iconColor.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            supportingText!,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: iconColor,
+                                ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -93,7 +118,7 @@ class ArchitectActivityTile extends StatelessWidget {
                     time,
                     style: Theme.of(
                       context,
-                    ).textTheme.labelMedium?.copyWith(fontSize: 10),
+                    ).textTheme.labelMedium?.copyWith(fontSize: 11),
                   ),
                 ],
               ),

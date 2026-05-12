@@ -2,6 +2,23 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/data/app_database.dart';
 
+enum ChargeRepoErrorCode {
+  overlapRange,
+  updateTargetMissing,
+  lowerBoundNonPositive,
+  upperBoundTooSmall,
+  chargeNegative,
+  chargeTooHigh,
+}
+
+class ChargeRepositoryError {
+  const ChargeRepositoryError(this.code, {this.maxAllowed, this.upperBound});
+
+  final ChargeRepoErrorCode code;
+  final double? maxAllowed;
+  final int? upperBound;
+}
+
 class ChargeBracketRecord {
   final int id;
   final int lowerBound;
@@ -40,7 +57,7 @@ class ChargeRepository {
     return _loadOperation!;
   }
 
-  Future<String?> addBracket({
+  Future<ChargeRepositoryError?> addBracket({
     required int lowerBound,
     required int upperBound,
     required double chargeAmount,
@@ -61,7 +78,7 @@ class ChargeRepository {
       upperBound,
       typeKey: transactionTypeKey,
     )) {
-      return 'This range overlaps with an existing charge bracket for this type.';
+      return const ChargeRepositoryError(ChargeRepoErrorCode.overlapRange);
     }
 
     final db = await _database.database;
@@ -84,7 +101,7 @@ class ChargeRepository {
     return null;
   }
 
-  Future<String?> updateBracket(
+  Future<ChargeRepositoryError?> updateBracket(
     int id, {
     required int lowerBound,
     required int upperBound,
@@ -108,7 +125,7 @@ class ChargeRepository {
           excludedId: id,
           typeKey: existing.transactionTypeKey,
         )) {
-      return 'This range overlaps with an existing charge bracket for this type.';
+      return const ChargeRepositoryError(ChargeRepoErrorCode.overlapRange);
     }
 
     final db = await _database.database;
@@ -127,7 +144,9 @@ class ChargeRepository {
     );
 
     if (count == 0) {
-      return 'Unable to update the selected bracket.';
+      return const ChargeRepositoryError(
+        ChargeRepoErrorCode.updateTargetMissing,
+      );
     }
 
     _loadOperation = null;
@@ -181,24 +200,31 @@ class ChargeRepository {
         .toList(growable: false);
   }
 
-  String? _validateRange({
+  ChargeRepositoryError? _validateRange({
     required int lowerBound,
     required int upperBound,
     required double chargeAmount,
   }) {
     if (lowerBound <= 0) {
-      return 'Lower bound must be greater than zero.';
+      return const ChargeRepositoryError(
+        ChargeRepoErrorCode.lowerBoundNonPositive,
+      );
     }
     if (upperBound < lowerBound) {
-      return 'Upper bound must be greater than or equal to lower bound.';
+      return const ChargeRepositoryError(
+        ChargeRepoErrorCode.upperBoundTooSmall,
+      );
     }
     if (chargeAmount < 0) {
-      return 'Charge amount cannot be negative.';
+      return const ChargeRepositoryError(ChargeRepoErrorCode.chargeNegative);
     }
     final maxAllowed = upperBound * 0.5;
     if (chargeAmount > maxAllowed) {
-      return 'Charge amount cannot exceed 50% of the upper bound '
-          '(max ₱${maxAllowed.toStringAsFixed(2)} for a ₱$upperBound upper bound).';
+      return ChargeRepositoryError(
+        ChargeRepoErrorCode.chargeTooHigh,
+        maxAllowed: maxAllowed,
+        upperBound: upperBound,
+      );
     }
     return null;
   }

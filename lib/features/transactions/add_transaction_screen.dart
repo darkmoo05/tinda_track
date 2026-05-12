@@ -26,12 +26,12 @@ class AddTransactionScreen extends StatefulWidget {
 }
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
-  static const List<MapEntry<String, String>> _serviceOptions = [
-    MapEntry('cashin', 'Cash-In'),
-    MapEntry('cashout', 'Cash-Out'),
-    MapEntry('load', 'Load'),
-    MapEntry('paybills', 'Pay Bills'),
-    MapEntry('qrpayment', 'QR Payment'),
+  static const List<String> _serviceOptions = [
+    'cashin',
+    'cashout',
+    'load',
+    'paybills',
+    'qrpayment',
   ];
 
   final _accountController = TextEditingController();
@@ -51,6 +51,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   TransactionPreviewResponse? _lastPreview;
   String? _previewErrorMessage;
   _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+  bool _showSummaryDetails = false;
 
   String _selectedTypeKey = 'gcash_cashin';
   PartyRecord? _matchedParty;
@@ -68,7 +69,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   ChargeBracketRecord? get _matchedChargeBracket {
-    final principal = double.tryParse(_principalController.text) ?? 0;
+    final principal = _parseAmount(_principalController.text);
     if (principal <= 0) {
       return null;
     }
@@ -83,7 +84,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   double get _chargeFee {
-    final principal = double.tryParse(_principalController.text) ?? 0;
+    final principal = _parseAmount(_principalController.text);
     if (principal <= 0) {
       return 0;
     }
@@ -91,7 +92,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   double get _enteredAmount {
-    return double.tryParse(_principalController.text) ?? 0;
+    return _parseAmount(_principalController.text);
   }
 
   double get _amountToSend {
@@ -129,6 +130,59 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return _ChargeHandlingMode.addOnTop;
   }
 
+  double get _walletDeltaPreview {
+    final amount = _enteredAmount;
+    final fee = _chargeFee;
+    if (!_isOutflowSelection) {
+      return _effectiveChargeHandlingMode ==
+              _ChargeHandlingMode.deductFromEnteredAmount
+          ? -(amount - fee)
+          : -amount;
+    }
+    return _effectiveChargeHandlingMode ==
+            _ChargeHandlingMode.deductFromEnteredAmount
+        ? amount
+        : amount + fee;
+  }
+
+  double get _cashDeltaPreview {
+    final amount = _enteredAmount;
+    final fee = _chargeFee;
+    if (!_isOutflowSelection) {
+      return _effectiveChargeHandlingMode ==
+              _ChargeHandlingMode.deductFromEnteredAmount
+          ? amount
+          : amount + fee;
+    }
+    return _effectiveChargeHandlingMode ==
+            _ChargeHandlingMode.deductFromEnteredAmount
+        ? -(amount - fee)
+        : -amount;
+  }
+
+  String _signedMoney(double value) {
+    final sign = value < 0 ? '-' : '+';
+    return '$sign$_pesoLabel ${value.abs().toStringAsFixed(2)}';
+  }
+
+  bool get _useLocalBreakdownInDialog => !_canCustomizeFeeHandling;
+
+  double _dialogFeeAmount(TransactionPreviewResponse preview) {
+    return _useLocalBreakdownInDialog ? _chargeFee : preview.chargeAmount;
+  }
+
+  double _dialogWalletChange(TransactionPreviewResponse preview) {
+    return _useLocalBreakdownInDialog
+        ? _walletDeltaPreview
+        : preview.walletCredit;
+  }
+
+  double _dialogCashChange(TransactionPreviewResponse preview) {
+    return _useLocalBreakdownInDialog
+        ? _cashDeltaPreview
+        : preview.onHandChange;
+  }
+
   double get _netCashToDrawer {
     return _isOutflowSelection ? _amountToSend : _totalCollected;
   }
@@ -136,7 +190,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   String get _chargeDestinationAccount {
     // Inflow: fee always goes to on-hand (store receives cash)
     // Outflow: fee always goes to wallet (customer's wallet is charged)
-    return _isOutflowSelection ? _selectedWalletAccount : 'On-hand Cash';
+    return _isOutflowSelection
+        ? _selectedWalletAccount
+        : context.l10n.onHandCashLabel;
   }
 
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
@@ -147,29 +203,49 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _showRequiredIndicators && _accountController.text.trim().isEmpty;
 
   bool get _isPrincipalMissing =>
-      _showRequiredIndicators &&
-      (double.tryParse(_principalController.text.trim()) ?? 0) <= 0;
+      _showRequiredIndicators && _parseAmount(_principalController.text) <= 0;
 
   bool get _isOutflowSelection =>
       _selectedFlowDirection == _FlowDirection.outflow;
 
   String get _selectedWalletAccount {
-    return _selectedWallet == _WalletSelection.maya ? 'Maya Wallet' : 'GCash';
+    return _selectedWallet == _WalletSelection.maya
+        ? context.l10n.mayaWalletOption
+        : context.l10n.gcash;
   }
 
   Color get _selectedWalletColor {
-    return _selectedWalletAccount == 'Maya Wallet'
+    return _selectedWallet == _WalletSelection.maya
         ? AppColors.secondary
         : AppColors.primary;
   }
 
   String get _selectedFlowLabel {
     return _isOutflowSelection
-        ? 'Customer Receives from Wallet'
-        : 'Customer Sends to Wallet';
+        ? context.l10n.amountCustomerSends
+        : context.l10n.amountSentToCustomerWallet;
   }
 
   String get _pesoLabel => '\u20B1';
+
+  double _parseAmount(String raw) {
+    final normalized = raw.replaceAll(',', '').trim();
+    return double.tryParse(normalized) ?? 0;
+  }
+
+  static final TextInputFormatter _amountInputFormatter =
+      TextInputFormatter.withFunction((oldValue, newValue) {
+        final text = newValue.text;
+        if (text.isEmpty) {
+          return newValue;
+        }
+
+        final regex = RegExp(r'^\d{0,9}(\.\d{0,2})?$');
+        if (regex.hasMatch(text)) {
+          return newValue;
+        }
+        return oldValue;
+      });
 
   @override
   void initState() {
@@ -227,7 +303,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               Text(
-                context.l10n.recordTransaction,
+                context.l10n.recordOwnerMovement,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: AppColors.onSurface,
                   fontWeight: FontWeight.bold,
@@ -238,6 +314,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _buildSectionTitle(context.l10n.recordTransactionDetails),
+                    const SizedBox(height: 4),
+                    Text(
+                      context.l10n.phase3Description,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     _buildTypeSelector(),
                     const SizedBox(height: 16),
                     _buildTextField(
@@ -275,6 +361,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      inputFormatters: [_amountInputFormatter],
                       onChanged: _onPrincipalChanged,
                       isRequired: true,
                       hasError: _isPrincipalMissing,
@@ -283,7 +370,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       const SizedBox(height: 16),
                       _buildChargeHandlingSelector(),
                     ],
-                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionTitle(context.l10n.optionalDetailsSection),
+                    const SizedBox(height: 12),
                     _buildTextField(
                       controller: _referenceController,
                       label: context.l10n.referenceOptional,
@@ -328,7 +424,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '$name - Verified account record found',
+              context.l10n.verifiedAccountFound(name),
               style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.secondary,
@@ -372,10 +468,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 size: 18,
               ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Party not registered. Tap here to register details before saving.',
-                  style: TextStyle(
+                  context.l10n.accountNotInContacts,
+                  style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.error,
                     fontWeight: FontWeight.w700,
@@ -400,51 +496,108 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.receipt_long_rounded,
-                color: AppColors.primary,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Calculation Preview',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: AppColors.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 360;
+              return Row(
+                children: [
+                  const Icon(
+                    Icons.receipt_long_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      context.l10n.reviewTotals,
+                      maxLines: compact ? 2 : 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: AppColors.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  if (compact)
+                    IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _showSummaryDetails = !_showSummaryDetails;
+                        });
+                      },
+                      tooltip: _showSummaryDetails
+                          ? context.l10n.hideDetails
+                          : context.l10n.showDetails,
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        _showSummaryDetails
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                      ),
+                    )
+                  else
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _showSummaryDetails = !_showSummaryDetails;
+                        });
+                      },
+                      child: Text(
+                        _showSummaryDetails
+                            ? context.l10n.hideDetails
+                            : context.l10n.showDetails,
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
-          _buildPreviewRow(
-            'Service Fee Mode',
-            _effectiveChargeHandlingMode == _ChargeHandlingMode.addOnTop
-                ? 'Fee charged to customer'
-                : 'Fee taken from amount sent',
-          ),
-          const SizedBox(height: 4),
-          _buildPreviewRow('Using Wallet', _selectedWalletAccount),
-          const SizedBox(height: 4),
-          _buildPreviewRow(
-            'Service Fee',
-            '$_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
-          ),
-          const SizedBox(height: 4),
-          _buildPreviewRow('Fee Goes To', _chargeDestinationAccount),
-          if (_matchedChargeBracket != null) ...[
-            const SizedBox(height: 4),
-            _buildPreviewRow(
-              'Fee Bracket',
-              '$_pesoLabel ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} - $_pesoLabel ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              children: [
+                _buildPreviewRow(
+                  context.l10n.whoPaysServiceFee,
+                  _effectiveChargeHandlingMode == _ChargeHandlingMode.addOnTop
+                      ? context.l10n.customerPaysFeeLabel
+                      : context.l10n.deductedFromSentLabel,
+                ),
+                const SizedBox(height: 4),
+                _buildPreviewRow(
+                  context.l10n.usingWallet,
+                  _selectedWalletAccount,
+                ),
+                const SizedBox(height: 4),
+                _buildPreviewRow(
+                  context.l10n.serviceFee,
+                  '$_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
+                ),
+                const SizedBox(height: 4),
+                _buildPreviewRow(
+                  context.l10n.feeDestination,
+                  _chargeDestinationAccount,
+                ),
+                if (_matchedChargeBracket != null) ...[
+                  const SizedBox(height: 4),
+                  _buildPreviewRow(
+                    context.l10n.feeRange,
+                    '$_pesoLabel ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} - $_pesoLabel ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
+                  ),
+                ],
+                const SizedBox(height: 4),
+              ],
             ),
-          ],
-          const SizedBox(height: 4),
+            crossFadeState: _showSummaryDetails
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 180),
+          ),
           _buildHighlightedPreviewRow(
             _isOutflowSelection
-                ? 'E-money Received from Customer'
-                : 'E-money You Send to Customer',
+                ? context.l10n.amountCustomerSends
+                : context.l10n.amountSentToCustomerWallet,
             '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
             _selectedWalletColor,
           ),
@@ -456,108 +609,92 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(color: AppColors.outlineVariant, thickness: 0.5),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  _isOutflowSelection
-                      ? 'E-money to Receive from Customer'
-                      : 'Total to Collect from Customer',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.onSurface,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '$_pesoLabel ${_totalCollected.toStringAsFixed(2)}',
-
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
-          ),
+          _buildCustomerPaysRow(context),
           const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    _isOutflowSelection ? 'Cash to Pay Out' : 'Cash You Keep',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: _isOutflowSelection
-                        ? 'Cash you hand out to the customer from your drawer.'
-                        : 'Cash that goes into your drawer after this transaction.',
-                    child: Icon(
-                      Icons.info_outline_rounded,
-                      size: 14,
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
+          _buildCashDrawerRow(context),
+          if (_showSummaryDetails) ...[
+            const SizedBox(height: 12),
+            Text(
+              _effectiveChargeHandlingMode == _ChargeHandlingMode.addOnTop
+                  ? context.l10n.feeAddedExample
+                  : context.l10n.feeDeductedExample,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.82),
+                fontStyle: FontStyle.italic,
               ),
-              Text(
-                '$_pesoLabel ${_netCashToDrawer.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _effectiveChargeHandlingMode == _ChargeHandlingMode.addOnTop
-                ? 'Service fee is added on top. Example: ${_pesoLabel}100 transaction + ${_pesoLabel}5 fee = collect ${_pesoLabel}105 from customer, send ${_pesoLabel}100.'
-                : 'Fee is deducted before sending. Example: ${_pesoLabel}100 entered, ${_pesoLabel}5 fee deducted = only ${_pesoLabel}95 is sent to the customer\'s wallet.',
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
-              fontStyle: FontStyle.italic,
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildPreviewRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Flexible(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceVariant,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 340;
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  value,
+                  textAlign: TextAlign.end,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              flex: 6,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.onSurface,
-          ),
-        ),
-      ],
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 4,
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -569,43 +706,244 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Flexible(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 340;
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.account_balance_wallet_rounded,
-                  size: 14,
-                  color: color,
+                Row(
+                  children: [
+                    Icon(
+                      Icons.account_balance_wallet_rounded,
+                      size: 14,
+                      color: color,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Flexible(
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
                   child: Text(
-                    label,
+                    value,
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
                       color: color,
                     ),
                   ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
+            );
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.account_balance_wallet_rounded,
+                      size: 14,
+                      color: color,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildCustomerPaysRow(BuildContext context) {
+    final value = '$_pesoLabel ${_totalCollected.toStringAsFixed(2)}';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 340;
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.customerPays,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                context.l10n.customerPays,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCashDrawerRow(BuildContext context) {
+    final value = '$_pesoLabel ${_netCashToDrawer.toStringAsFixed(2)}';
+    final label = _isOutflowSelection
+        ? context.l10n.cashPaidOut
+        : context.l10n.cashAddedToDrawer;
+    final tooltip = _isOutflowSelection
+        ? context.l10n.cashPaidOutTooltip
+        : context.l10n.cashAddedToDrawerTooltip;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 340;
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Tooltip(
+                    message: tooltip,
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      size: 14,
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: tooltip,
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      size: 14,
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -617,14 +955,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 14),
-          SizedBox(width: 6),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: AppColors.error,
+            size: 14,
+          ),
+          const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'No fee range set for this amount. Fee shown as ₱0. Create a fee range first.',
-              style: TextStyle(
+              context.l10n.noFeeRuleForAmount,
+              style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.error,
                 fontWeight: FontWeight.w600,
@@ -637,39 +979,58 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Widget _buildChargeHandlingSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _fieldLabel('Fee Handling'),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              label: Text(context.l10n.customerPaysFee),
-              selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
-              onSelected: (_) {
-                setState(() {
-                  _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
-                });
-              },
-            ),
-            ChoiceChip(
-              label: Text(context.l10n.deductFeeFromSent),
-              selected:
-                  _chargeHandlingMode ==
-                  _ChargeHandlingMode.deductFromEnteredAmount,
-              onSelected: (_) {
-                setState(() {
-                  _chargeHandlingMode =
-                      _ChargeHandlingMode.deductFromEnteredAmount;
-                });
-              },
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.outlineVariant.withValues(alpha: 0.55),
         ),
-      ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _fieldLabel(context.l10n.whoPaysServiceFee),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                label: Text(context.l10n.customerPaysFeeLabel),
+                selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
+                onSelected: (_) {
+                  setState(() {
+                    _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+                  });
+                },
+              ),
+              ChoiceChip(
+                label: Text(context.l10n.deductedFromSentLabel),
+                selected:
+                    _chargeHandlingMode ==
+                    _ChargeHandlingMode.deductFromEnteredAmount,
+                onSelected: (_) {
+                  setState(() {
+                    _chargeHandlingMode =
+                        _ChargeHandlingMode.deductFromEnteredAmount;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Applicable fee: $_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.onSurface,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -682,6 +1043,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           colors: [AppColors.primary, AppColors.primaryContainer],
         ),
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: ElevatedButton(
         onPressed: _isSaving ? null : _onSaveTransaction,
@@ -702,13 +1070,25 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   color: Colors.white,
                 ),
               )
-            : const Text(
-                'SAVE TRANSACTION',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.check_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    context.l10n.saveTransactionAction,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
               ),
       ),
     );
@@ -736,56 +1116,240 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final walletPrefix = _selectedWallet == _WalletSelection.maya
         ? 'maya'
         : 'gcash';
+    final selectedServiceLabel = _serviceLabel(_selectedService);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _fieldLabel('Wallet & Service', isRequired: true),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 360;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ChoiceChip(
-              label: const Text('GCash'),
-              selected: _selectedWallet == _WalletSelection.gcash,
-              onSelected: (_) {
-                setState(() {
-                  _selectedTypeKey = 'gcash_$_selectedService';
-                });
-              },
+            _fieldLabel(context.l10n.walletAndService, isRequired: true),
+            const SizedBox(height: 8),
+            _buildSelectorStepCard(
+              compact: compact,
+              title: context.l10n.stepOneChooseWallet,
+              subtitle: '💳 How will you send it?',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildWalletOptionButton(
+                      compact: compact,
+                      label: context.l10n.gcash,
+                      icon: Icons.account_balance_wallet_rounded,
+                      selected: _selectedWallet == _WalletSelection.gcash,
+                      onTap: () {
+                        setState(() {
+                          _selectedTypeKey = 'gcash_$_selectedService';
+                        });
+                      },
+                    ),
+                  ),
+                  SizedBox(width: compact ? 6 : 8),
+                  Expanded(
+                    child: _buildWalletOptionButton(
+                      compact: compact,
+                      label: context.l10n.mayaWalletOption,
+                      icon: Icons.account_balance_wallet_outlined,
+                      selected: _selectedWallet == _WalletSelection.maya,
+                      onTap: () {
+                        setState(() {
+                          _selectedTypeKey = 'maya_$_selectedService';
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-            ChoiceChip(
-              label: const Text('Maya Wallet'),
-              selected: _selectedWallet == _WalletSelection.maya,
-              onSelected: (_) {
-                setState(() {
-                  _selectedTypeKey = 'maya_$_selectedService';
-                });
-              },
+            SizedBox(height: compact ? 8 : 10),
+            _buildSelectorStepCard(
+              compact: compact,
+              title: context.l10n.stepTwoChooseService,
+              subtitle: '📊 What type of transaction?',
+              child: Wrap(
+                spacing: compact ? 6 : 8,
+                runSpacing: compact ? 6 : 8,
+                children: _serviceOptions
+                    .map((serviceKey) {
+                      final selected = _selectedService == serviceKey;
+                      return ChoiceChip(
+                        visualDensity: compact
+                            ? VisualDensity.compact
+                            : VisualDensity.standard,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        avatar: Icon(
+                          _serviceIcon(serviceKey),
+                          size: compact ? 14 : 16,
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.onSurfaceVariant,
+                        ),
+                        label: Text(_serviceLabel(serviceKey)),
+                        labelStyle: TextStyle(fontSize: compact ? 11.5 : 12),
+                        selected: selected,
+                        selectedColor: AppColors.primary.withValues(
+                          alpha: 0.12,
+                        ),
+                        side: BorderSide(
+                          color: selected
+                              ? AppColors.primary.withValues(alpha: 0.35)
+                              : AppColors.outlineVariant,
+                        ),
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedTypeKey = '${walletPrefix}_$serviceKey';
+                          });
+                        },
+                      );
+                    })
+                    .toList(growable: false),
+              ),
+            ),
+            SizedBox(height: compact ? 8 : 10),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 10 : 12,
+                vertical: compact ? 8 : 10,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    size: compact ? 14 : 16,
+                    color: AppColors.primary,
+                  ),
+                  SizedBox(width: compact ? 6 : 8),
+                  Expanded(
+                    child: Text(
+                      context.l10n.selectedWalletService(
+                        _selectedWalletAccount,
+                        selectedServiceLabel,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: compact ? 11.5 : 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSelectorStepCard({
+    required bool compact,
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(compact ? 10 : 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.outlineVariant.withValues(alpha: 0.55),
         ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _serviceOptions
-              .map((entry) {
-                final selected = _selectedService == entry.key;
-                return ChoiceChip(
-                  label: Text(entry.value),
-                  selected: selected,
-                  onSelected: (_) {
-                    setState(() {
-                      _selectedTypeKey = '${walletPrefix}_${entry.key}';
-                    });
-                  },
-                );
-              })
-              .toList(growable: false),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: compact ? 11.5 : 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: compact ? 10.5 : 11,
+              color: AppColors.onSurfaceVariant.withValues(alpha: 0.92),
+            ),
+          ),
+          SizedBox(height: compact ? 8 : 10),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWalletOptionButton({
+    required bool compact,
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 8 : 12,
+            vertical: compact ? 9 : 10,
+          ),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.12)
+                : AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? AppColors.primary.withValues(alpha: 0.4)
+                  : AppColors.outlineVariant,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: compact ? 14 : 16,
+                color: selected
+                    ? AppColors.primary
+                    : AppColors.onSurfaceVariant,
+              ),
+              SizedBox(width: compact ? 4 : 6),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: compact ? 11.5 : 12,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? AppColors.primary : AppColors.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
     );
   }
 
@@ -839,6 +1403,40 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ),
       ],
     );
+  }
+
+  String _serviceLabel(String serviceKey) {
+    switch (serviceKey) {
+      case 'cashin':
+        return context.l10n.cashIn;
+      case 'cashout':
+        return context.l10n.cashOut;
+      case 'load':
+        return context.l10n.loadService;
+      case 'paybills':
+        return context.l10n.payBillsService;
+      case 'qrpayment':
+        return context.l10n.qrPaymentService;
+      default:
+        return serviceKey;
+    }
+  }
+
+  IconData _serviceIcon(String serviceKey) {
+    switch (serviceKey) {
+      case 'cashin':
+        return Icons.south_west_rounded;
+      case 'cashout':
+        return Icons.north_east_rounded;
+      case 'load':
+        return Icons.mobile_friendly_rounded;
+      case 'paybills':
+        return Icons.receipt_long_rounded;
+      case 'qrpayment':
+        return Icons.qr_code_scanner_rounded;
+      default:
+        return Icons.tune_rounded;
+    }
   }
 
   Future<void> _openAccountSearchPicker() async {
@@ -926,7 +1524,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     _onPrincipalChanged(_principalController.text);
 
     if (!mounted) return;
-    _showMessage('Receipt data applied. Please review before saving.');
+    _showMessage(context.l10n.receiptDataAppliedReview);
   }
 
   Future<void> _resolvePartyFromAccount(String accountNumber) async {
@@ -946,9 +1544,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   void _onPrincipalChanged(String _) {
-    setState(() {});
+    setState(() {
+      if (_parseAmount(_principalController.text) > 0) {
+        _showSummaryDetails = true;
+      }
+    });
 
-    final principal = double.tryParse(_principalController.text.trim()) ?? 0;
+    final principal = _parseAmount(_principalController.text);
     final hasRange = _matchedChargeBracket != null;
 
     if (principal <= 0 || hasRange) {
@@ -997,20 +1599,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
-                'No Fee Range Found',
+              Text(
+                context.l10n.noFeeRangeFoundTitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: AppColors.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'The entered amount does not match any configured fee range. Please create a new fee range first.',
+              Text(
+                context.l10n.noFeeRangeFoundMessage,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 13,
                   color: AppColors.onSurfaceVariant,
                 ),
@@ -1032,7 +1634,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     ),
                   ),
                   onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.cancel),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1094,36 +1696,28 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<void> _runSaveTransaction() async {
+    final l10n = context.l10n;
     final accountNumber = _accountController.text.trim();
-    final principal = double.tryParse(_principalController.text.trim()) ?? 0;
+    final principal = _parseAmount(_principalController.text);
 
     if (accountNumber.isEmpty) {
-      _showMessage('Account number is required before saving.', isError: true);
+      _showMessage(l10n.accountNumberRequiredBeforeSaving, isError: true);
       return;
     }
 
     if (principal <= 0) {
-      _showMessage(
-        'Transaction amount is required before saving.',
-        isError: true,
-      );
+      _showMessage(l10n.transactionAmountRequiredBeforeSaving, isError: true);
       return;
     }
 
     if (_matchedChargeBracket == null) {
-      _showMessage(
-        'No fee range found for this amount. Create a new range first.',
-        isError: true,
-      );
+      _showMessage(l10n.noFeeRangeFoundForAmount, isError: true);
       _showMissingChargeRangeAlert();
       return;
     }
 
     if (_amountToSend <= 0) {
-      _showMessage(
-        'Amount to send must be greater than zero. Adjust entered amount or charge handling.',
-        isError: true,
-      );
+      _showMessage(l10n.amountToSendMustBeGreaterThanZero, isError: true);
       return;
     }
 
@@ -1135,10 +1729,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
 
     final selectedWalletAccount = _selectedWalletAccount;
-    final selectedWalletBalance = selectedWalletAccount == 'Maya Wallet'
+    final selectedWalletBalance = _selectedWallet == _WalletSelection.maya
         ? mayaWalletBalance
         : gcashBalance;
-    final sourceLabel = isOutflow ? 'On-hand Cash' : selectedWalletAccount;
+    final sourceLabel = isOutflow
+        ? l10n.onHandCashLabel
+        : selectedWalletAccount;
     final requiredSourceAmount =
         _effectiveChargeHandlingMode ==
             _ChargeHandlingMode.deductFromEnteredAmount
@@ -1147,7 +1743,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final available = isOutflow ? onHandBalance : selectedWalletBalance;
     if (requiredSourceAmount > available) {
       _showMessage(
-        'Insufficient $sourceLabel balance. Available: ₱ ${available.toStringAsFixed(2)}',
+        l10n.insufficientBalance(sourceLabel, available.toStringAsFixed(2)),
         isError: true,
       );
       return;
@@ -1160,7 +1756,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     if (!_isRegisteredAccount) {
       _showMessage(
-        'Party is not registered yet. Register details first.',
+        l10n.partyNotRegisteredYet,
         isError: true,
         messenger: messenger,
       );
@@ -1179,10 +1775,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (!mounted) return;
 
       if (_isRegisteredAccount) {
-        _showMessage(context.l10n.partyRegisteredSaving, messenger: messenger);
+        _showMessage(l10n.partyRegisteredSaving, messenger: messenger);
       } else {
         _showMessage(
-          context.l10n.unableToVerifyRegistration,
+          l10n.unableToVerifyRegistration,
           isError: true,
           messenger: messenger,
         );
@@ -1192,23 +1788,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     if (!mounted) return;
 
-    // Load and validate transaction preview from backend
+    // Try backend preview when available, but do not block local save if
+    // preview cannot be loaded.
     final previewLoaded = await _loadAndValidatePreview();
-    if (!previewLoaded) {
-      if (!mounted) return;
-      _showMessage(
-        _previewErrorMessage ?? 'Failed to validate transaction fees.',
-        isError: true,
-        messenger: messenger,
-      );
-      return;
-    }
+    final proceed = previewLoaded
+        ? await _showFeeBreakdownDialog()
+        : await _showProceedWithoutPreviewDialog();
 
-    // Show fee breakdown dialog - user must confirm before proceeding
-    final userConfirmed = await _showFeeBreakdownDialog();
-    if (!userConfirmed) {
+    if (!proceed) {
       if (!mounted) return;
-      return; // User cancelled
+      return;
     }
 
     if (!mounted) return;
@@ -1217,7 +1806,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (!saved) {
       if (!mounted) return;
       _showMessage(
-        context.l10n.unableToSaveTransaction,
+        l10n.unableToSaveTransaction,
         isError: true,
         messenger: messenger,
       );
@@ -1226,27 +1815,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     if (!mounted) return;
 
-    // Sync transaction to backend - now awaited with error handling
+    // Sync transaction to backend.
     final synced = await _syncTransactionToBackendAwaited();
-    if (!synced) {
-      if (!mounted) return;
-      _showMessage(
-        'Transaction saved locally but backend sync failed. It will be retried on next sync.',
-        isError: false,
-        messenger: messenger,
-      );
-    } else {
-      if (!mounted) return;
-      _showMessage(
-        'Transaction saved and synced to backend successfully.',
-        messenger: messenger,
-      );
-    }
-
     if (!mounted) return;
 
+    final partyName = _matchedParty!.name;
     _showMessage(
-      context.l10n.transactionSaved(_matchedParty!.name),
+      synced
+          ? l10n.transactionSaved(partyName)
+          : l10n.transactionSavedSyncRetry(partyName),
       messenger: messenger,
     );
     Navigator.of(context).pop(true);
@@ -1267,7 +1844,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final selectedType = FixedTransactionType.forKey(_selectedTypeKey).label;
     final isOutflow = _isOutflowSelection;
     final walletAccount = _selectedWalletAccount;
-    final usesMayaWallet = walletAccount == 'Maya Wallet';
+    final usesMayaWallet = _selectedWallet == _WalletSelection.maya;
     final amount = _enteredAmount;
     final isDeductFromAmount =
         _effectiveChargeHandlingMode ==
@@ -1399,15 +1976,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       );
       debugPrint('✓ Transaction synced to backend: $syncId');
       return true;
-    } on Exception catch (e) {
-      debugPrint('✗ Failed to sync transaction to backend: $e');
-      if (e.toString().contains('409')) {
+    } on TransactionApiException catch (e) {
+      debugPrint('✗ Failed to sync transaction to backend: ${e.message}');
+      if (e.statusCode == 409) {
         debugPrint('  Error: Duplicate transaction (syncId already exists)');
-      } else if (e.toString().contains('400')) {
+      } else if (e.statusCode == 400) {
         debugPrint(
           '  Error: Invalid transaction (may be insufficient balance)',
         );
       }
+      return false;
+    } on Exception catch (e) {
+      debugPrint('✗ Failed to sync transaction to backend: $e');
       return false;
     }
   }
@@ -1418,7 +1998,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   Future<bool> _loadAndValidatePreview() async {
     final amount = _enteredAmount;
     if (amount <= 0) {
-      setState(() => _previewErrorMessage = 'Amount must be greater than 0');
+      setState(
+        () => _previewErrorMessage = context.l10n.amountMustBeGreaterThanZero,
+      );
       return false;
     }
 
@@ -1446,10 +2028,48 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         _previewErrorMessage = null;
       });
       return true;
+    } on TransactionApiException catch (e) {
+      final status = e.statusCode == null ? '' : ' (${e.statusCode})';
+      setState(
+        () => _previewErrorMessage = context.l10n.feeValidationFailedStatus(
+          status,
+          e.message,
+        ),
+      );
+      return false;
     } catch (e) {
-      setState(() => _previewErrorMessage = 'Fee validation failed: $e');
+      setState(
+        () => _previewErrorMessage = context.l10n.feeValidationFailed('$e'),
+      );
       return false;
     }
+  }
+
+  Future<bool> _showProceedWithoutPreviewDialog() async {
+    final proceed =
+        await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(context.l10n.backendPreviewUnavailable),
+            content: Text(
+              _previewErrorMessage ??
+                  context.l10n.unableToValidateFeePreviewNow,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(context.l10n.cancel),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(context.l10n.saveLocally),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    return proceed;
   }
 
   /// Show fee breakdown dialog to user with backend-calculated details.
@@ -1462,37 +2082,40 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            title: const Text('Fee Breakdown'),
+            title: Text(context.l10n.feeBreakdownTitle),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    context.l10n.reviewTotals,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
                   _buildPreviewField(
-                    'Amount',
-                    '₱${preview.chargeAmount.toStringAsFixed(2)}',
+                    _isOutflowSelection
+                        ? context.l10n.amountCustomerSends
+                        : context.l10n.amountSentToCustomerWallet,
+                    '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
                   ),
                   _buildPreviewField(
-                    'Charge',
-                    '₱${preview.chargeAmount.toStringAsFixed(2)}',
+                    context.l10n.serviceFee,
+                    '$_pesoLabel ${_dialogFeeAmount(preview).toStringAsFixed(2)}',
                   ),
                   _buildPreviewField(
-                    'Total Collected',
-                    '₱${preview.totalCollected.toStringAsFixed(2)}',
+                    context.l10n.walletChangeLabel,
+                    _signedMoney(_dialogWalletChange(preview)),
                   ),
                   _buildPreviewField(
-                    'Wallet Credit',
-                    '₱${preview.walletCredit.toStringAsFixed(2)}',
-                  ),
-                  _buildPreviewField(
-                    'On-Hand Change',
-                    '₱${preview.onHandChange.toStringAsFixed(2)}',
+                    context.l10n.cashChangeLabel,
+                    _signedMoney(_dialogCashChange(preview)),
                   ),
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
                   Text(
-                    'Fee Routing',
+                    context.l10n.feeRouting,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
@@ -1500,24 +2123,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     preview.feeRoutingExplanation,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Post-Transaction Balance: ₱${preview.postTransactionWalletBalance.toStringAsFixed(2)}',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
                 ],
               ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
+                child: Text(context.l10n.cancel),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Confirm & Save'),
+                child: Text(context.l10n.confirmAndSave),
               ),
             ],
           ),
@@ -1663,6 +2279,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  Widget _buildSectionTitle(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: AppColors.onSurface,
+      ),
+    );
+  }
+
   InputDecoration _inputDecoration({bool hasError = false}) {
     return InputDecoration(
       filled: true,
@@ -1765,8 +2392,8 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Select Registered Contact',
+              Text(
+                context.l10n.selectRegisteredContact,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -1777,7 +2404,7 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
               TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search name or account number',
+                  hintText: context.l10n.searchNameOrAccount,
                   prefixIcon: const Icon(Icons.search_rounded),
                   filled: true,
                   fillColor: AppColors.surfaceContainerLow,
@@ -1792,21 +2419,20 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                 child: widget.parties.isEmpty
                     ? _PartyPickerEmptyState(
                         title: context.l10n.noContactsFound,
-                        subtitle:
-                            'Register a party first, then use search to pick an account.',
+                        subtitle: context.l10n.registerPartyFirstThenSearch,
                       )
                     : (filtered.isEmpty
                           ? _PartyPickerEmptyState(
                               title: context.l10n.noMatchingContact,
-                              subtitle:
-                                  'Try searching with a different name or account number.',
+                              subtitle: context.l10n.tryDifferentNameOrAccount,
                             )
                           : ListView.separated(
                               itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const Divider(
-                                height: 1,
-                                color: AppColors.outlineVariant,
-                              ),
+                              separatorBuilder: (context, index) =>
+                                  const Divider(
+                                    height: 1,
+                                    color: AppColors.outlineVariant,
+                                  ),
                               itemBuilder: (context, index) {
                                 final party = filtered[index];
                                 return ListTile(
@@ -1831,7 +2457,9 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                                     ),
                                   ),
                                   subtitle: Text(
-                                    'Account: ${party.accountNumber}',
+                                    context.l10n.accountWithNumber(
+                                      party.accountNumber,
+                                    ),
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                   trailing: party.isVerified
@@ -1945,7 +2573,7 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
 
     if (fullName.isEmpty || accountNumber.isEmpty) {
       setState(() {
-        _errorText = 'Please complete full name and account number.';
+        _errorText = context.l10n.completeNameAndAccount;
       });
       return;
     }
@@ -1965,7 +2593,7 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
       if (!mounted) return;
       setState(() {
         _isSaving = false;
-        _errorText = 'Unable to save party. Please try again.';
+        _errorText = context.l10n.unableToSaveParty;
       });
       return;
     }
@@ -1975,7 +2603,7 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
     if (!inserted) {
       setState(() {
         _isSaving = false;
-        _errorText = 'Account already registered.';
+        _errorText = context.l10n.accountAlreadyRegistered;
       });
       return;
     }
@@ -2013,10 +2641,10 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Text(
-                'Party Registration',
-                style: TextStyle(
+                context.l10n.partyRegistrationTitle,
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: AppColors.onSurface,
@@ -2031,9 +2659,12 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 12),
-          const Text(
-            'Define a new financial entity before recording this transaction.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+          Text(
+            context.l10n.defineFinancialEntityBeforeTransaction,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 16),
           _dialogField(
@@ -2104,7 +2735,9 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
                         size: 16,
                         color: Colors.white,
                       ),
-                label: Text(_isSaving ? 'Saving\u2026' : 'Register Party'),
+                label: Text(
+                  _isSaving ? context.l10n.saving : context.l10n.registerParty,
+                ),
               ),
             ),
           ],

@@ -279,11 +279,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       value: _dashboardRepository.formatCurrency(
                         dashboard.remainingWithdrawableTotal,
                       ),
-                      caption: 'Withdrawable fee now',
+                      caption: 'Withdrawable now',
                       icon: Icons.trending_up_rounded,
-                      backgroundColor: AppColors.primaryContainer,
+                      backgroundColor: const Color(0xFF4A7EA6),
                       titleMaxLines: 2,
-                      titleSpacerHeight: 16,
                       onTap: () => _openChargesEarnings(dashboard),
                     ),
                   ],
@@ -305,87 +304,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String caption,
     required IconData icon,
     required Color backgroundColor,
-    double titleFontSize = 12,
-    double titleLetterSpacing = 1.2,
+    double titleFontSize = 11,
+    double titleLetterSpacing = 1.0,
     int titleMaxLines = 1,
-    double titleSpacerHeight = 40,
     VoidCallback? onTap,
   }) {
     final foregroundColor = AppColors.onPrimary;
-    final mutedForegroundColor = AppColors.onPrimary.withValues(alpha: 0.78);
+    final mutedForegroundColor = AppColors.onPrimary.withValues(alpha: 0.68);
 
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(24),
       child: InkWell(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         onTap: onTap,
         child: Ink(
           width: width,
           decoration: BoxDecoration(
             color: backgroundColor,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: backgroundColor.withValues(alpha: 0.26),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+                color: backgroundColor.withValues(alpha: 0.24),
+                blurRadius: 16,
+                offset: const Offset(0, 7),
               ),
             ],
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 168),
+            constraints: const BoxConstraints(minHeight: 156),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: titleMaxLines,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: mutedForegroundColor,
-                            fontSize: titleFontSize,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: titleLetterSpacing,
+                  SizedBox(
+                    height: 42,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: titleMaxLines,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: mutedForegroundColor,
+                              fontSize: titleFontSize,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: titleLetterSpacing,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(icon, color: mutedForegroundColor, size: 22),
-                    ],
+                        const SizedBox(width: 8),
+                        Icon(icon, color: mutedForegroundColor, size: 20),
+                      ],
+                    ),
                   ),
-                  SizedBox(height: titleSpacerHeight),
                   SizedBox(
                     width: double.infinity,
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
+                      alignment: Alignment.center,
                       child: Text(
                         value,
                         maxLines: 1,
                         style: TextStyle(
                           color: foregroundColor,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     caption,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: mutedForegroundColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -401,72 +403,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
-    final totalCapital = dashboard.businessFundingTotal;
-    final chargeEarnings = dashboard.recordedFlow;
-    final computedTotalFunds = totalCapital + chargeEarnings;
+    final totalBusinessCash = dashboard.businessUsableCash;
+    final withdrawableEarnings = dashboard.remainingWithdrawableTotal;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: const Color(0xFF1E3A5F),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A5F).withValues(alpha: 0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF1E3A5F).withValues(alpha: 0.26),
+            blurRadius: 20,
+            offset: const Offset(0, 9),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                context.l10n.totalFunds,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.7,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      _dashboardRepository.formatCurrency(computedTotalFunds),
-                      maxLines: 1,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
           Text(
-            'Capital ${_dashboardRepository.formatCurrency(totalCapital)} + Charges ${_dashboardRepository.formatCurrency(chargeEarnings)}',
+            context.l10n.totalFunds,
             style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+              color: Colors.white60,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
             ),
           ),
-          const SizedBox(height: 2),
-          const Text(
-            'Computation: Initial Capital/Top-ups + Total Charge Earnings',
-            style: TextStyle(color: Colors.white60, fontSize: 11),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Text(
+                _dashboardRepository.formatCurrency(totalBusinessCash),
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.businessCashComputation,
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            context.l10n.withdrawableEarningsNote(
+              _dashboardRepository.formatCurrency(withdrawableEarnings),
+            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 10.5),
           ),
         ],
       ),

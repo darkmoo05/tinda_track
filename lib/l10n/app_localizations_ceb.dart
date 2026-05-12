@@ -18,16 +18,16 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get walletOverview => 'Kinatibuk-ang Pitaka';
 
   @override
-  String get gcashWallet => 'GCASH WALLET';
+  String get gcashWallet => 'GCash Wallet';
 
   @override
-  String get mayaWallet => 'MAYA WALLET';
+  String get mayaWallet => 'Maya Wallet';
 
   @override
-  String get onHandCash => 'CASH SA KAMOT';
+  String get onHandCash => 'Cash sa Kamot';
 
   @override
-  String get chargesEarnings => 'KITA SA BAYAD';
+  String get chargesEarnings => 'Kita sa Bayad';
 
   @override
   String get availableBalance => 'Balanse nga magamit';
@@ -68,14 +68,17 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get transactionTypeLabel => 'Klase sa Transaksyon';
 
   @override
-  String get accountNumber => 'Numero sa Account';
+  String get accountNumber => 'Recipient Account';
 
   @override
-  String get searchOrEnterAccountNumber =>
-      'Pangita o isulat ang numero sa account';
+  String get searchOrEnterAccountNumber => 'Ngalan o numero';
 
   @override
   String get scanningReceipt => 'Gi-scan ang resibo…';
+
+  @override
+  String get scanningReceiptModalMessage =>
+      'Gibasa ang hulagway ug gi-parse ang data sa resibo...';
 
   @override
   String get scanReceiptButton => 'I-scan ang Resibo (Camera/Gallery)';
@@ -219,6 +222,243 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get customerSends => 'Magpadala ang Customer';
 
   @override
+  String get recordTransactionDetails => 'Setup sa Transaksyon';
+
+  @override
+  String get optionalDetailsSection =>
+      'Magdagdag ug Reference o Notes (Opsyonal)';
+
+  @override
+  String get reviewTotals => 'Breakdown sa Kantidad';
+
+  @override
+  String get showDetails => 'Ipakita ang detalye';
+
+  @override
+  String get hideDetails => 'Itago ang detalye';
+
+  @override
+  String get whoPaysServiceFee => 'Fee Handling';
+
+  @override
+  String get customerPaysFeeLabel => 'Customer ang mobayad sa fee';
+
+  @override
+  String get deductedFromSentLabel => 'Isama sa kantidad';
+
+  @override
+  String get usingWallet => 'Gigamit nga wallet';
+
+  @override
+  String get serviceFee => 'Bayad na dapat bayaran';
+
+  @override
+  String get feeDestination => 'Gipadala ang fee sa';
+
+  @override
+  String get feeRange => 'Sakop sa fee';
+
+  @override
+  String get amountSentToCustomerWallet => 'Kantidad sa Customer';
+
+  @override
+  String get amountCustomerSends => 'Kantidad nga gipadala sa customer';
+
+  @override
+  String get customerPays => 'Bayran sa customer';
+
+  @override
+  String get cashPaidOut => 'Cash nga ihatag';
+
+  @override
+  String get cashAddedToDrawer => 'Sa Inyong Drawer';
+
+  @override
+  String get feeAddedExample =>
+      'Idungag sa ibabaw ang service fee. Pananglitan: ₱100 transaksyon + ₱5 fee = kolektahon ang ₱105 gikan sa customer, ipadala ang ₱100.';
+
+  @override
+  String get feeDeductedExample =>
+      'Ibawas una ang service fee sa dili pa magpadala. Pananglitan: ₱100 ang gisulod, ₱5 fee ang gibawas = ₱95 ra ang maabot sa wallet sa customer.';
+
+  @override
+  String get accountNotInContacts =>
+      'Wala pa sa contacts kining account. I-tap dinhi aron idugang sa dili pa mag-save.';
+
+  @override
+  String get saveTransactionAction => 'I-record ang Transaksyon';
+
+  @override
+  String get walletAndService => 'Klase sa Transaksyon (Kinakalangan)';
+
+  @override
+  String verifiedAccountFound(String name) {
+    return '$name - Nakumpirmang naa ang record sa account';
+  }
+
+  @override
+  String get onHandCashLabel => 'Cash sa kamot';
+
+  @override
+  String get cashPaidOutTooltip =>
+      'Cash nga imong ihatag sa customer gikan sa imong drawer.';
+
+  @override
+  String get cashAddedToDrawerTooltip =>
+      'Cash nga musulod sa imong drawer human sa transaksyon.';
+
+  @override
+  String get noFeeRuleForAmount =>
+      'Wala pay fee rule para ani nga kantidad. Ang fee kay ₱0. Pagdugang una ug fee rule.';
+
+  @override
+  String get receiptDataAppliedReview =>
+      'Na-apply ang data sa resibo. Palihug susiha una sa dili pa i-save.';
+
+  @override
+  String get noFeeRangeFoundTitle => 'Walay fee range nga nakita';
+
+  @override
+  String get noFeeRangeFoundMessage =>
+      'Ang gisulod nga kantidad wala mosulod sa bisan unsang fee range. Paghimo una ug bag-ong fee range.';
+
+  @override
+  String get accountNumberRequiredBeforeSaving =>
+      'Kinahanglan ang numero sa account sa dili pa mag-save.';
+
+  @override
+  String get transactionAmountRequiredBeforeSaving =>
+      'Kinahanglan ang kantidad sa transaksyon sa dili pa mag-save.';
+
+  @override
+  String get noFeeRangeFoundForAmount =>
+      'Walay fee range para ani nga kantidad. Paghimo una ug bag-ong range.';
+
+  @override
+  String get amountToSendMustBeGreaterThanZero =>
+      'Ang kantidad nga ipadala kinahanglan mas dako sa zero. Ayuha ang kantidad o fee setting.';
+
+  @override
+  String insufficientBalance(String source, String amount) {
+    return 'Kulang ang balanse sa $source. Available: ₱ $amount';
+  }
+
+  @override
+  String get partyNotRegisteredYet =>
+      'Wala pa na-rehistro ang party. Irehistro una ang detalye.';
+
+  @override
+  String transactionSavedSyncRetry(String name) {
+    return 'Na-save ang transaksyon para kang $name. Sulayan pag-usab ang backend sync.';
+  }
+
+  @override
+  String get amountMustBeGreaterThanZero =>
+      'Ang kantidad kinahanglan mas dako sa 0';
+
+  @override
+  String feeValidationFailedStatus(String status, String message) {
+    return 'Napakyas ang fee validation$status: $message';
+  }
+
+  @override
+  String feeValidationFailed(String error) {
+    return 'Napakyas ang fee validation: $error';
+  }
+
+  @override
+  String get backendPreviewUnavailable => 'Dili available ang backend preview';
+
+  @override
+  String get unableToValidateFeePreviewNow =>
+      'Dili ma-validate ang fee preview gikan sa backend karon.';
+
+  @override
+  String get saveLocally => 'I-save lokal';
+
+  @override
+  String get feeBreakdownTitle => 'Breakdown sa fee';
+
+  @override
+  String get charge => 'Bayad';
+
+  @override
+  String get totalCollected => 'Kinatibuk-ang nakolekta';
+
+  @override
+  String get walletCredit => 'Credit sa wallet';
+
+  @override
+  String get onHandChange => 'Pagbag-o sa cash sa kamot';
+
+  @override
+  String get feeRouting => 'Asa moadto ang fee';
+
+  @override
+  String get confirmAndSave => 'Kumpirma ug i-save';
+
+  @override
+  String get selectRegisteredContact => 'Pilia ang na-rehistrong contact';
+
+  @override
+  String get registerPartyFirstThenSearch =>
+      'Pagrehistro una ug party, dayon gamita ang search aron mopili ug account.';
+
+  @override
+  String get tryDifferentNameOrAccount =>
+      'Sulayi ang laing ngalan o numero sa account sa pagpangita.';
+
+  @override
+  String accountWithNumber(String number) {
+    return 'Account: $number';
+  }
+
+  @override
+  String get completeNameAndAccount =>
+      'Palihug kompletoha ang bug-os nga ngalan ug numero sa account.';
+
+  @override
+  String get unableToSaveParty => 'Dili ma-save ang party. Sulayi pag-usab.';
+
+  @override
+  String get accountAlreadyRegistered => 'Na-rehistro na ang account.';
+
+  @override
+  String get partyRegistrationTitle => 'Pagrehistro sa Party';
+
+  @override
+  String get defineFinancialEntityBeforeTransaction =>
+      'Paghimo una ug bag-ong financial entity sa dili pa irekord ang transaksyon.';
+
+  @override
+  String get loadService => 'Load';
+
+  @override
+  String get payBillsService => 'Bayad Bills';
+
+  @override
+  String get qrPaymentService => 'QR Payment';
+
+  @override
+  String get stepOneChooseWallet => 'Lakáng 1: Pilia ang wallet';
+
+  @override
+  String get pickWalletHelper =>
+      'Ang wallet buttons para mopili sa account nga gamiton.';
+
+  @override
+  String get stepTwoChooseService => 'Lakáng 2: Pilia ang serbisyo';
+
+  @override
+  String get pickServiceHelper =>
+      'Ang service buttons para mopili sa klase sa transaksyon.';
+
+  @override
+  String selectedWalletService(String wallet, String service) {
+    return 'Napili: $wallet • $service';
+  }
+
+  @override
   String get newOwnerMovement => 'Bag-ong Rekord sa Kwarta';
 
   @override
@@ -308,7 +548,7 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get rename => 'Ilisan';
 
   @override
-  String get delete => 'Tangtangon';
+  String get delete => 'Tangtanga';
 
   @override
   String get categoryDeleted => 'Natangtang ang kategorya.';
@@ -323,40 +563,94 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get categoryPending => 'Wala pay napiling kategorya';
 
   @override
-  String get movements => 'Mga Lihok';
+  String get movements => 'Kasaysayan sa Wallet';
 
   @override
-  String get reports => 'Mga Taho';
+  String get walletHistorySubtitle =>
+      'Subaya ang lihok sa GCash, Maya, ug cash.';
 
   @override
-  String get transactions => 'MGA TRANSAKSYON';
+  String get reports => 'I-download ang Taho';
 
   @override
-  String get ownerMovements => 'MGA LIHOK SA TAG-IYA';
+  String get transactions => 'Mga Transaksyon';
 
   @override
-  String get noMatchingTransactions => 'Walay katugmang transaksyon';
+  String get ownerMovements => 'Aktibidad sa Tag-iya';
+
+  @override
+  String get historyTransactionLabel => 'Transaksyon';
+
+  @override
+  String get historyOwnerActivityLabel => 'Aktibidad sa Tag-iya';
+
+  @override
+  String get historyTypeLabel => 'Klase';
+
+  @override
+  String get historyCategoryLabel => 'Kategorya';
+
+  @override
+  String get historyAccountLabel => 'Account';
+
+  @override
+  String get historyAmountShownLabel => 'Gipakitang kantidad';
+
+  @override
+  String get walletChangeLabel => 'Kausaban sa wallet';
+
+  @override
+  String get cashChangeLabel => 'Kausaban sa cash';
+
+  @override
+  String get savedOnLabel => 'Naluwas niadtong';
+
+  @override
+  String get transactionBreakdown => 'Breakdown sa Transaksyon';
+
+  @override
+  String get entryDetails => 'Detalye sa Entry';
+
+  @override
+  String includesFee(String amount) {
+    return 'Apil ang bayad: $amount';
+  }
+
+  @override
+  String get today => 'Karon';
+
+  @override
+  String get yesterday => 'Kagahapon';
+
+  @override
+  String get noMatchingTransactions => 'Walay nakit-ang resulta';
 
   @override
   String get trySearchingBy =>
-      'Sulayi ang pagpangita pinaagi sa titulo, numero sa account, ID sa reperensiya, nota, o petsa.';
+      'Sulayi pag-usab pinaagi sa wallet, petsa, o pagpangita.';
 
   @override
   String get noHistoryYet => 'Wala pay kasaysayan';
 
   @override
   String get newEntriesWillAppear =>
-      'Makita ang mga bag-ong entry dinhi kung maka-save ka na ug mga transaksyon o lihok sa tag-iya.';
+      'Makita dinhi ang imong naluwas nga mga transaksyon ug aktibidad sa tag-iya.';
 
   @override
   String get searchAccountRefParty =>
-      'Pangita ug account, ref ID, party, o nota';
+      'Pangita pinaagi sa account, ref no., o nota';
 
   @override
-  String get beginningDate => 'Petsa sa Sugod';
+  String get beginningDate => 'Gikan sa petsa';
 
   @override
-  String get endDate => 'Petsa sa Katapusan';
+  String get endDate => 'Hangtod sa petsa';
+
+  @override
+  String get filterBeginDate => 'I-filter gikan sa petsa';
+
+  @override
+  String get filterEndDate => 'I-filter hangtod sa petsa';
 
   @override
   String get gcash => 'GCash';
@@ -365,7 +659,7 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get maya => 'Maya';
 
   @override
-  String get onHand => 'Sa Kamot';
+  String get onHand => 'Cash on hand';
 
   @override
   String get pdf => 'PDF';
@@ -380,35 +674,188 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get close => 'Isira';
 
   @override
+  String get selectBeginningDate => 'Pilia ang gikan sa petsa';
+
+  @override
+  String get selectEndDate => 'Pilia ang hangtod sa petsa';
+
+  @override
+  String get generalLedgerReport => 'Taho sa General Ledger';
+
+  @override
+  String get generalLedgerReportDescription =>
+      'Pilia ang sakop sa petsa, dayon pagpili ug PDF o Excel nga output.';
+
+  @override
+  String get fileFormat => 'Pormat sa file';
+
+  @override
+  String get endDateValidationMessage =>
+      'Ang hangtod sa petsa kinahanglan pareho o mas ulahi kaysa gikan sa petsa.';
+
+  @override
+  String get preparingReport => 'Ginaandam ang taho...';
+
+  @override
+  String get noLedgerRecordsForDateRange =>
+      'Walay ledger record alang sa napiling sakop sa petsa.';
+
+  @override
+  String get reportGenerationCanceled =>
+      'Nakansela ang paghimo sa taho. Walay napiling folder.';
+
+  @override
+  String get generatingReport => 'Ginahimo ang taho...';
+
+  @override
+  String get reportShareUnavailable =>
+      'Nahimo ang taho, pero dili available ang pag-share sa kini nga device. Naluwas ang file sa lokal.';
+
+  @override
+  String get reportGenerationFailed =>
+      'Napakyas ang paghimo sa taho. Palihog sulayi pag-usab.';
+
+  @override
+  String reportSavedTo(String path) {
+    return 'Malampuson nga nahimo ang taho. Naluwas sa $path';
+  }
+
+  @override
+  String get walletHistoryReport => 'Taho sa Kasaysayan sa Wallet';
+
+  @override
+  String get walletHistorySheetName => 'Kasaysayan sa Wallet';
+
+  @override
+  String get walletFlowReport => 'Daloy sa Wallet';
+
+  @override
+  String get walletFlowSheetName => 'Daloy sa Wallet';
+
+  @override
+  String get periodLabel => 'Sakop';
+
+  @override
+  String get generatedLabel => 'Nahimo niadtong';
+
+  @override
+  String get legendTitle => 'Paspas nga giya';
+
+  @override
+  String get legendPlusMinus => 'Gamita ang + kung nisaka ug - kung niubos.';
+
+  @override
+  String get legendAmountShownNote =>
+      'Ang kantidad parehas sa history. Sa cash out, posible nga apil na ang bayad.';
+
+  @override
+  String get reportDateTimeLabel => 'Petsa/Oras';
+
+  @override
+  String get reportTypeLabel => 'Klase';
+
+  @override
+  String get reportAmountLabel => 'Gipakitang kantidad';
+
+  @override
+  String get reportFeeLabel => 'Bayad';
+
+  @override
+  String get reportWalletDeltaLabel => 'Kausaban sa wallet';
+
+  @override
+  String get reportCashDeltaLabel => 'Kausaban sa cash';
+
+  @override
+  String get reportReferenceLabel => 'Ref #';
+
+  @override
+  String get reportDetailsLabel => 'Detalye';
+
+  @override
+  String get dateTimeLabel => 'Petsa ug Oras';
+
+  @override
+  String get walletUsedLabel => 'Wallet';
+
+  @override
+  String get amountShownLabel => 'Kantidad sa History';
+
+  @override
+  String get descriptionLabel => 'Deskripsyon';
+
+  @override
+  String get remarksLabel => 'Mga Pahimangno';
+
+  @override
+  String get moneyInLabel => 'Pera Sulod';
+
+  @override
+  String get moneyOutLabel => 'Pera Gawas';
+
+  @override
+  String get feeDetailsLabel => 'Detalye sa Bayad';
+
+  @override
+  String get balanceLabel => 'Balanse';
+
+  @override
+  String get totalsLabel => 'MGA TOTAL';
+
+  @override
+  String get gcashMovementLabel => 'Kausaban sa GCash';
+
+  @override
+  String get mayaMovementLabel => 'Kausaban sa Maya';
+
+  @override
+  String get cashOnHandMovementLabel => 'Kausaban sa Cash';
+
+  @override
+  String get feesRoutedLabel => 'Giadtoan sa Bayad';
+
+  @override
+  String get totalMoneyInLabel => 'Kinatibuk-ang Pera Sulod';
+
+  @override
+  String get totalMoneyOutLabel => 'Kinatibuk-ang Pera Gawas';
+
+  @override
+  String get netBalanceLabel => 'Netong Balanse';
+
+  @override
+  String get totalFeesPaidLabel => 'Kinatibuk-ang Bayad';
+
+  @override
   String get chooseFolder => 'Pilia ang folder alang sa taho sa General Ledger';
 
   @override
-  String get chargesManagement => 'Pagdumala sa Bayad';
+  String get chargesManagement => 'I-setup ang Bayad';
 
   @override
   String get setServiceFeeBrackets =>
-      'Itakda ang mga bracket sa bayad sa serbisyo alang sa matag klase sa transaksyon.';
+      'Pamahalaan ang presyo para sa lahat ng serbisyo';
 
   @override
-  String get configureFeesFor => 'I-configure ang Bayad Alang sa';
+  String get configureFeesFor => 'Nag-setup ng bayad para sa:';
 
   @override
-  String get gcashWalletOption => 'GCash Wallet';
+  String get gcashWalletOption => 'GCash';
 
   @override
-  String get mayaWalletOption => 'Maya Wallet';
+  String get mayaWalletOption => 'Maya';
 
   @override
-  String get addNewBracket => 'Magdugang ug Bag-ong Bracket';
+  String get addNewBracket => 'Magdugang ug Bag-ong Tier';
 
   @override
-  String get lowerBound => 'Pinakaubos nga Utlanan (PHP)';
+  String get lowerBound => 'Simula ng Halaga (PHP)';
 
   @override
   String get lowerBoundHint => 'ex. 1000';
 
   @override
-  String get upperBound => 'Pinakataas nga Utlanan (PHP)';
+  String get upperBound => 'Katapusan ng Halaga (PHP)';
 
   @override
   String get upperBoundHint => 'ex. 1500';
@@ -432,39 +879,317 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get goBack => 'Balik';
 
   @override
-  String get registeredParties => 'Mga Naarehistrong Party';
+  String get serviceCashIn => 'Cash-In';
+
+  @override
+  String get serviceCashOut => 'Cash-Out';
+
+  @override
+  String get serviceLoad => 'Load';
+
+  @override
+  String get servicePayBills => 'Bayad Bills';
+
+  @override
+  String get serviceQrPayment => 'QR Payment';
+
+  @override
+  String selectFeeType(String type) {
+    return 'Pilia ang klase sa bayad: $type';
+  }
+
+  @override
+  String get selectWalletAndTransactionType =>
+      'Pilia ang wallet ug klase sa transaksyon';
+
+  @override
+  String feePreview(String from, String fee) {
+    return 'Preview: ₱$from → Bayad ₱$fee';
+  }
+
+  @override
+  String get startingAmountLabel => 'Sugod nga Kantidad';
+
+  @override
+  String get endingAmountLabel => 'Kataposang Kantidad';
+
+  @override
+  String get feeAmountLabel => 'Kantidad sa Bayad';
+
+  @override
+  String totalTiers(String count) {
+    return 'Total: $count ka tier';
+  }
+
+  @override
+  String get smallTransactions => 'Gagmay nga Transaksyon';
+
+  @override
+  String get mediumTransactions => 'Tunga-tunga nga Transaksyon';
+
+  @override
+  String get largeTransactions => 'Dagko nga Transaksyon';
+
+  @override
+  String get availableForTransactions => '(Magamit alang sa mga transaksyon)';
+
+  @override
+  String get chargeInputInvalid =>
+      'Isulod ang sakto nga sugod, katapusan, ug kantidad sa bayad.';
+
+  @override
+  String get chargeBracketAdded => 'Nadugang ang charge bracket.';
+
+  @override
+  String get chargeBracketDeleted => 'Natangtang ang charge bracket.';
+
+  @override
+  String get unableToDeleteBracket => 'Dili matangtang ang bracket.';
+
+  @override
+  String get deleteBracketTitle => 'Tangtanga ang Bracket';
+
+  @override
+  String deleteBracketMessage(String lower, String upper) {
+    return 'Tangtangon ang charge range nga ₱$lower–₱$upper? Dili na kini mabawi.';
+  }
+
+  @override
+  String get editChargeBracketTitle => 'Usba ang Charge Bracket';
+
+  @override
+  String get editChargeBracketHint =>
+      'Usba ang eksaktong sugod ug katapusan sa kini nga charge range.';
+
+  @override
+  String get saveChanges => 'I-save ang mga Kausaban';
+
+  @override
+  String get chargeErrorOverlapRange =>
+      'Nag-overlap kini nga range sa existing nga charge bracket para ani nga klase.';
+
+  @override
+  String get chargeErrorUpdateTargetMissing =>
+      'Dili ma-update ang napiling bracket.';
+
+  @override
+  String get chargeErrorLowerBoundNonPositive =>
+      'Ang sugod nga kantidad kinahanglan mas dako sa zero.';
+
+  @override
+  String get chargeErrorUpperBoundTooSmall =>
+      'Ang kataposang kantidad kinahanglan mas dako o kapareho sa sugod nga kantidad.';
+
+  @override
+  String get chargeErrorNegative => 'Ang bayad dili pwede nga negatibo.';
+
+  @override
+  String chargeErrorTooHigh(String max, String upper) {
+    return 'Ang bayad dili pwede molapas sa 50% sa upper bound (max ₱$max para sa upper bound nga ₱$upper).';
+  }
+
+  @override
+  String get activeTiers => 'Active Fee Tiers';
+
+  @override
+  String get feeTierOverview => 'Tier Overview';
+
+  @override
+  String get switchService => 'Switch Service';
+
+  @override
+  String tierName(String number, String description) {
+    return 'Tier $number: $description';
+  }
+
+  @override
+  String feeAmount(String amount) {
+    return 'Fee: ₱$amount';
+  }
+
+  @override
+  String tierStatus(String status) {
+    return 'Status: $status';
+  }
+
+  @override
+  String usedXTimes(String count) {
+    return '$count transactions used';
+  }
+
+  @override
+  String get simpleMode => 'Simple Mode';
+
+  @override
+  String get advancedMode => 'Advanced Mode';
+
+  @override
+  String get whatTheseFieldsMean => 'What do these fields mean?';
+
+  @override
+  String get startingAmountHelp =>
+      'The lowest transaction amount that this fee applies to';
+
+  @override
+  String get endingAmountHelp =>
+      'The highest transaction amount that this fee applies to';
+
+  @override
+  String get feeAmountHelp =>
+      'How much you earn from each transaction in this range';
+
+  @override
+  String get exampleTransactionText =>
+      'Example: If ₱1,500 is sent, and your tier is ₱1,000-₱2,000 with fee ₱50, you earn ₱50.';
+
+  @override
+  String get noFeeTiersTitle => 'No Fee Tiers Configured Yet';
+
+  @override
+  String get noFeeTiersMessage =>
+      'Start earning immediately by setting up your first fee structure.';
+
+  @override
+  String lastUsed(String time) {
+    return 'Last used: $time';
+  }
+
+  @override
+  String get registeredParties => 'Imong Mga Tao';
+
+  @override
+  String get yourPeople => 'Imong Mga Tao';
 
   @override
   String get manageParties =>
-      'Dumala ang imong ecosystem sa customer ug mga kasamahan.';
+      'Dumala ang mga customer ug partner nga ka-transaksyon nimo';
 
   @override
-  String get activeEntities => 'MGA AKTIBONG ENTITY';
+  String get manageCustomersPartners =>
+      'Dumala ang mga customer ug partner nga ka-transaksyon nimo';
 
   @override
-  String get addParty => 'MAGDUGANG UG PARTY';
+  String get searchByNameAccount =>
+      'Pangitaa gamit ang ngalan o account number...';
 
   @override
-  String get noMatchingParties => 'Walay nakit-an nga katugmang party';
+  String get activeEntities => 'Paspas nga Summary';
 
   @override
-  String get tryDifferentKeyword =>
-      'Sulayi ang lain nga keyword alang sa ngalan, entity ID, account, o deskripsyon.';
+  String get addParty => 'Dugang Tao';
 
   @override
-  String get noPartiesSaved => 'Wala pay naarehistrong party';
+  String get addNewPerson => 'Dugang Tao';
+
+  @override
+  String get noMatchingParties => 'Walay tao nga nagtugma sa imong pagpangita';
+
+  @override
+  String get tryDifferentKeyword => 'Sulayi ang laing ngalan o account number';
+
+  @override
+  String get noPartiesSaved => 'Wala pay tao dinhi';
 
   @override
   String get localDatabaseInfo =>
-      'Gipakita na lang sa screen nga kini ang mga rekord nga gitipigan sa imong lokal nga database.';
+      'Wala pay sulod ang imong listahan. Pagdugang sa unang customer o business partner.';
 
   @override
-  String get deleteParty => 'Tangtangon ang Party';
+  String get deleteParty => 'Tangtanga ang Tao';
 
   @override
   String deletePartyConfirm(String name) {
-    return 'Sigurado ka ba nga gusto mong tangtangon ang \"$name\"? Dili na kini mabawi.';
+    return 'Sigurado ka ba nga gusto nimo tangtangon si $name? Dili na kini mabawi.';
   }
+
+  @override
+  String get peopleSaved => 'ka tawo nga nasave';
+
+  @override
+  String get verified => 'Beripikado';
+
+  @override
+  String get waitingToVerify => 'naghulat ma-beripika';
+
+  @override
+  String get verificationStatus => 'Status sa Beripikasyon';
+
+  @override
+  String get statusVerified => 'Beripikado';
+
+  @override
+  String get statusPending => 'Naghulat sa Beripikasyon';
+
+  @override
+  String joinedDate(String date) {
+    return 'Miapil niadtong $date';
+  }
+
+  @override
+  String theirAccount(String account) {
+    return 'Account: $account';
+  }
+
+  @override
+  String get viewHistory => 'Tan-awa ang History';
+
+  @override
+  String get allPeople => 'Tanang Tao';
+
+  @override
+  String get pendingPeople => 'Naghulat';
+
+  @override
+  String get nobodyHereYet => 'Wala pay tao dinhi';
+
+  @override
+  String get letAddFirst =>
+      'Wala pay sulod ang imong listahan. Pagdugang sa unang customer o business partner.';
+
+  @override
+  String get show => 'Ipakita';
+
+  @override
+  String get sort => 'Ihan-ay';
+
+  @override
+  String get newest => 'Pinakabag-o';
+
+  @override
+  String get oldest => 'Pinakaluma';
+
+  @override
+  String get all => 'Tanan';
+
+  @override
+  String get active => 'Aktibo';
+
+  @override
+  String get pending => 'Naghulat';
+
+  @override
+  String get partiesManagement => 'Pagdumala sa mga Tao';
+
+  @override
+  String get lastUpdated => 'Katapusang Update';
+
+  @override
+  String get total => 'Total';
+
+  @override
+  String get account => 'Account';
+
+  @override
+  String get status => 'Status';
+
+  @override
+  String get edit => 'Usba';
+
+  @override
+  String get history => 'History';
+
+  @override
+  String get name => 'Ngalan';
 
   @override
   String get backupSync => 'I-backup ug I-sync';
@@ -574,7 +1299,7 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get selectLanguage => 'Pilia ang Pinulongan';
 
   @override
-  String get totalFunds => 'KINATIBUK-ANG PONDO';
+  String get totalFunds => 'KARONG BUSINESS CASH';
 
   @override
   String get recentActivities => 'Bag-ong mga Aktibidad';
@@ -605,11 +1330,15 @@ class AppLocalizationsCeb extends AppLocalizations {
       'Makita ang trend data kung adunay narekord na aktibidad sa pitaka.';
 
   @override
-  String capitalPlusCharges(String capital, String charges) {
-    return 'Kapital $capital + Bayad $charges';
+  String businessCashBreakdown(String wallets, String cash, String credit) {
+    return 'Mga Wallet $wallets + Cash sa kamot $cash + Kredito sa tag-iya $credit';
   }
 
   @override
-  String get capitalComputation =>
-      'Pagkwenta: Unang Kapital/Top-ups + Kinatibuk-ang Kita sa Bayad';
+  String get businessCashComputation => 'Magamit karon para sa business use';
+
+  @override
+  String withdrawableEarningsNote(String amount) {
+    return 'Withdrawable nga kita karon: $amount';
+  }
 }

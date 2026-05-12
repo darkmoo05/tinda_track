@@ -6,8 +6,6 @@ class TransactionPreviewResponse {
   final double walletCredit;
   final double onHandChange;
   final String feeRoutingExplanation;
-  final double currentWalletBalance;
-  final double postTransactionWalletBalance;
 
   TransactionPreviewResponse({
     required this.chargeAmount,
@@ -15,8 +13,6 @@ class TransactionPreviewResponse {
     required this.walletCredit,
     required this.onHandChange,
     required this.feeRoutingExplanation,
-    required this.currentWalletBalance,
-    required this.postTransactionWalletBalance,
   });
 
   factory TransactionPreviewResponse.fromJson(Map<String, dynamic> json) {
@@ -26,9 +22,6 @@ class TransactionPreviewResponse {
       walletCredit: (json['walletCredit'] as num).toDouble(),
       onHandChange: (json['onHandChange'] as num).toDouble(),
       feeRoutingExplanation: json['feeRoutingExplanation'] as String,
-      currentWalletBalance: (json['currentWalletBalance'] as num).toDouble(),
-      postTransactionWalletBalance:
-          (json['postTransactionWalletBalance'] as num).toDouble(),
     );
   }
 }

@@ -305,6 +305,11 @@ class DashboardRepository {
           } else {
             feeWithdrawnOnHand += amount;
           }
+        } else if (movementType == 'cash transfer (on-hand to wallet)') {
+          final transferredFeeAmount = _extractChargeAmount(row);
+          if (transferredFeeAmount > 0) {
+            feeWithdrawnOnHand += transferredFeeAmount;
+          }
         }
       }
 
