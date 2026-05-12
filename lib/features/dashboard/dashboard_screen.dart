@@ -234,56 +234,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   spacing: spacing,
                   runSpacing: spacing,
                   children: [
-                    _buildWalletMetricTile(
-                      width: tileWidth,
-                      title: context.l10n.gcashWallet,
-                      value: _dashboardRepository.formatCurrency(
-                        dashboard.walletBalance,
-                      ),
-                      caption: context.l10n.availableBalance,
-                      icon: Icons.account_balance_wallet_rounded,
-                      backgroundColor: AppColors.primary,
-                      onTap: () => _openWalletPerspectiveHistory(
-                        HistoryWalletPerspective.gcash,
-                      ),
-                    ),
-                    _buildWalletMetricTile(
-                      width: tileWidth,
-                      title: context.l10n.mayaWallet,
-                      value: _dashboardRepository.formatCurrency(
-                        dashboard.mayaWalletBalance,
-                      ),
-                      caption: context.l10n.availableBalance,
-                      icon: Icons.account_balance_rounded,
-                      backgroundColor: AppColors.secondary,
-                      onTap: () => _openWalletPerspectiveHistory(
-                        HistoryWalletPerspective.maya,
+                    _WalletCardAnimator(
+                      delay: const Duration(milliseconds: 0),
+                      child: _buildWalletMetricTile(
+                        width: tileWidth,
+                        title: context.l10n.gcashWallet,
+                        value: _dashboardRepository.formatCurrency(
+                          dashboard.walletBalance,
+                        ),
+                        caption: context.l10n.availableBalance,
+                        icon: Icons.account_balance_wallet_rounded,
+                        accentColor: AppColors.primary,
+                        onTap: () => _openWalletPerspectiveHistory(
+                          HistoryWalletPerspective.gcash,
+                        ),
                       ),
                     ),
-                    _buildWalletMetricTile(
-                      width: tileWidth,
-                      title: context.l10n.onHandCash,
-                      value: _dashboardRepository.formatCurrency(
-                        dashboard.onHandCash,
-                      ),
-                      caption: context.l10n.physicalCash,
-                      icon: Icons.payments_outlined,
-                      backgroundColor: const Color(0xFF8E6C00),
-                      onTap: () => _openWalletPerspectiveHistory(
-                        HistoryWalletPerspective.onHand,
+                    _WalletCardAnimator(
+                      delay: const Duration(milliseconds: 80),
+                      child: _buildWalletMetricTile(
+                        width: tileWidth,
+                        title: context.l10n.mayaWallet,
+                        value: _dashboardRepository.formatCurrency(
+                          dashboard.mayaWalletBalance,
+                        ),
+                        caption: context.l10n.availableBalance,
+                        icon: Icons.account_balance_rounded,
+                        accentColor: AppColors.secondary,
+                        onTap: () => _openWalletPerspectiveHistory(
+                          HistoryWalletPerspective.maya,
+                        ),
                       ),
                     ),
-                    _buildWalletMetricTile(
-                      width: tileWidth,
-                      title: context.l10n.chargesEarnings,
-                      value: _dashboardRepository.formatCurrency(
-                        dashboard.remainingWithdrawableTotal,
+                    _WalletCardAnimator(
+                      delay: const Duration(milliseconds: 160),
+                      child: _buildWalletMetricTile(
+                        width: tileWidth,
+                        title: context.l10n.onHandCash,
+                        value: _dashboardRepository.formatCurrency(
+                          dashboard.onHandCash,
+                        ),
+                        caption: context.l10n.physicalCash,
+                        icon: Icons.payments_outlined,
+                        accentColor: const Color(0xFF8E6C00),
+                        onTap: () => _openWalletPerspectiveHistory(
+                          HistoryWalletPerspective.onHand,
+                        ),
                       ),
-                      caption: 'Withdrawable now',
-                      icon: Icons.trending_up_rounded,
-                      backgroundColor: const Color(0xFF4A7EA6),
-                      titleMaxLines: 2,
-                      onTap: () => _openChargesEarnings(dashboard),
+                    ),
+                    _WalletCardAnimator(
+                      delay: const Duration(milliseconds: 240),
+                      child: _buildWalletMetricTile(
+                        width: tileWidth,
+                        title: context.l10n.chargesEarnings,
+                        value: _dashboardRepository.formatCurrency(
+                          dashboard.remainingWithdrawableTotal,
+                        ),
+                        caption: 'Withdrawable now',
+                        icon: Icons.trending_up_rounded,
+                        accentColor: const Color(0xFF4A7EA6),
+                        titleMaxLines: 2,
+                        onTap: () => _openChargesEarnings(dashboard),
+                      ),
                     ),
                   ],
                 ),
@@ -303,45 +315,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String value,
     required String caption,
     required IconData icon,
-    required Color backgroundColor,
-    double titleFontSize = 11,
-    double titleLetterSpacing = 1.0,
+    required Color accentColor,
     int titleMaxLines = 1,
     VoidCallback? onTap,
   }) {
-    final foregroundColor = AppColors.onPrimary;
-    final mutedForegroundColor = AppColors.onPrimary.withValues(alpha: 0.68);
-
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(24),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: onTap,
-        child: Ink(
-          width: width,
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: backgroundColor.withValues(alpha: 0.24),
-                blurRadius: 16,
-                offset: const Offset(0, 7),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Ink(
+            width: width,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              border: Border(
+                left: BorderSide(color: accentColor, width: 4),
+                top: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                ),
+                right: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                ),
+                bottom: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                ),
               ),
-            ],
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 156),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 42,
-                    child: Row(
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.onSurface.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 120),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
@@ -350,47 +366,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             maxLines: titleMaxLines,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: mutedForegroundColor,
-                              fontSize: titleFontSize,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: titleLetterSpacing,
+                              color: AppColors.onSurfaceVariant,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Icon(icon, color: mutedForegroundColor, size: 20),
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(icon, color: accentColor, size: 15),
+                        ),
                       ],
                     ),
-                  ),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FittedBox(
+                    const SizedBox(height: 10),
+                    FittedBox(
                       fit: BoxFit.scaleDown,
-                      alignment: Alignment.center,
+                      alignment: Alignment.centerLeft,
                       child: Text(
                         value,
                         maxLines: 1,
                         style: TextStyle(
-                          color: foregroundColor,
-                          fontSize: 26,
-                          fontWeight: FontWeight.w900,
+                          color: accentColor,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    caption,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: mutedForegroundColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 4),
+                    Text(
+                      caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.onSurfaceVariant,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -405,67 +426,104 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     final totalBusinessCash = dashboard.businessUsableCash;
     final withdrawableEarnings = dashboard.remainingWithdrawableTotal;
+    const accentColor = Color(0xFF1E3A5F);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E3A5F),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1E3A5F).withValues(alpha: 0.26),
-            blurRadius: 20,
-            offset: const Offset(0, 9),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.l10n.totalFunds,
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 16, 16, 16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          border: Border(
+            left: const BorderSide(color: accentColor, width: 4),
+            top: BorderSide(
+              color: AppColors.outlineVariant.withValues(alpha: 0.4),
+            ),
+            right: BorderSide(
+              color: AppColors.outlineVariant.withValues(alpha: 0.4),
+            ),
+            bottom: BorderSide(
+              color: AppColors.outlineVariant.withValues(alpha: 0.4),
             ),
           ),
-          const SizedBox(height: 6),
-          SizedBox(
-            width: double.infinity,
-            child: FittedBox(
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.onSurface.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    context.l10n.totalFunds,
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_rounded,
+                    color: accentColor,
+                    size: 15,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            FittedBox(
               fit: BoxFit.scaleDown,
-              alignment: Alignment.center,
+              alignment: Alignment.centerLeft,
               child: Text(
                 _dashboardRepository.formatCurrency(totalBusinessCash),
                 maxLines: 1,
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
+                  color: accentColor,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            context.l10n.businessCashComputation,
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
+            const SizedBox(height: 8),
+            Text(
+              context.l10n.businessCashComputation,
+              style: const TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+              ),
             ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            context.l10n.withdrawableEarningsNote(
-              _dashboardRepository.formatCurrency(withdrawableEarnings),
+            const SizedBox(height: 4),
+            Text(
+              context.l10n.withdrawableEarningsNote(
+                _dashboardRepository.formatCurrency(withdrawableEarnings),
+              ),
+              style: const TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+              ),
             ),
-            style: const TextStyle(color: Colors.white54, fontSize: 10.5),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -882,6 +940,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: AppColors.surfaceContainerHigh),
+    );
+  }
+}
+
+// ── Stagger animation wrapper for wallet cards ──────────────────────────────
+class _WalletCardAnimator extends StatefulWidget {
+  const _WalletCardAnimator({required this.delay, required this.child});
+
+  final Duration delay;
+  final Widget child;
+
+  @override
+  State<_WalletCardAnimator> createState() => _WalletCardAnimatorState();
+}
+
+class _WalletCardAnimatorState extends State<_WalletCardAnimator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
+    _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.15),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    Future.delayed(widget.delay, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }

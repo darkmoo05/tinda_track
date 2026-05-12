@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import '../../../shared/widgets/architect_card.dart';
 
 class ArchitectActivityTile extends StatelessWidget {
   final String title;
@@ -35,92 +34,143 @@ class ArchitectActivityTile extends StatelessWidget {
         normalizedSubtitle.contains('top-up') ||
         normalizedSubtitle.contains('top up');
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: ArchitectCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: IntrinsicHeight(
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // Timeline left column
+              SizedBox(
+                width: 52,
+                child: Stack(
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                    // Full-height connecting line
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      left: 25,
+                      child: Container(
+                        width: 1.5,
+                        color: AppColors.outlineVariant.withValues(alpha: 0.45),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelMedium?.copyWith(fontSize: 12),
-                    ),
-                    if (supportingText != null &&
-                        supportingText!.trim().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: iconColor.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            supportingText!,
-                            style: Theme.of(context).textTheme.labelMedium
-                                ?.copyWith(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: iconColor,
-                                ),
+                    // Icon circle with white background to cut through line
+                    Positioned(
+                      top: 14,
+                      left: 8,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: AppColors.background,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: iconColor.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: iconColor.withValues(alpha: 0.35),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Icon(icon, color: iconColor, size: 14),
                           ),
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    amount,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: isTopUp
-                          ? AppColors.primary
-                          : (isIncome ? AppColors.secondary : AppColors.error),
-                    ),
+              // Content area
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 14, bottom: 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: AppColors.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              subtitle,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                            if (supportingText != null &&
+                                supportingText!.trim().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: iconColor.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    supportingText!,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: iconColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            amount,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: isTopUp
+                                  ? AppColors.primary
+                                  : (isIncome
+                                        ? AppColors.secondary
+                                        : AppColors.error),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            time,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    time,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelMedium?.copyWith(fontSize: 11),
-                  ),
-                ],
+                ),
               ),
             ],
           ),

@@ -100,3 +100,41 @@ class TransactionCreateResponse {
     );
   }
 }
+
+class TransactionListItem {
+  final String id;
+  final String walletProvider;
+  final String direction;
+  final double amount;
+  final double chargeAmount;
+  final String status;
+  final String? syncId;
+  final String? reference;
+  final String? entryDate;
+
+  TransactionListItem({
+    required this.id,
+    required this.walletProvider,
+    required this.direction,
+    required this.amount,
+    required this.chargeAmount,
+    required this.status,
+    this.syncId,
+    this.reference,
+    this.entryDate,
+  });
+
+  factory TransactionListItem.fromJson(Map<String, dynamic> json) {
+    return TransactionListItem(
+      id: json['id'] as String,
+      walletProvider: (json['walletProvider'] as String?) ?? '',
+      direction: (json['direction'] as String?) ?? '',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      chargeAmount: (json['chargeAmount'] as num?)?.toDouble() ?? 0,
+      status: (json['status'] as String?) ?? '',
+      syncId: json['syncId'] as String?,
+      reference: json['reference'] as String?,
+      entryDate: json['entryDate'] as String?,
+    );
+  }
+}

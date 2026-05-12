@@ -242,26 +242,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: ArchitectAppBar(
-        title: context.l10n.appTitle,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: IconButton.filledTonal(
-              tooltip: context.l10n.goBack,
-              onPressed: () => Navigator.of(context).pop(),
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.surfaceContainerLow,
-              ),
-              icon: const Icon(
-                Icons.arrow_back_rounded,
-                color: AppColors.onSurfaceVariant,
-                size: 20,
-              ),
-            ),
-          ),
-        ],
-      ),
+      appBar: ArchitectAppBar(title: context.l10n.appTitle),
       body: CustomScrollView(
         slivers: [
           // ── Fixed top content ──────────────────────────────────

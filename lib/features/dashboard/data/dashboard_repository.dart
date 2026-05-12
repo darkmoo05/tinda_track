@@ -424,6 +424,24 @@ class DashboardRepository {
         remainingWithdrawableGcash +
         remainingWithdrawableMaya;
 
+    final computedChargeTxSum = chargeTransactions.fold<double>(
+      0,
+      (sum, tx) => sum + tx.chargeAmount,
+    );
+    final alreadyWithdrawn = (chargesCollected - remainingWithdrawableTotal)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    assert(() {
+      debugPrint(
+        '[DashboardSnapshot sanity] '
+        'chargesCollected=${chargesCollected.toStringAsFixed(2)} '
+        'chargeTxSum=${computedChargeTxSum.toStringAsFixed(2)} '
+        'remainingWithdrawable=${remainingWithdrawableTotal.toStringAsFixed(2)} '
+        'alreadyWithdrawn=${alreadyWithdrawn.toStringAsFixed(2)}',
+      );
+      return true;
+    }());
+
     return DashboardSnapshot(
       walletBalance: walletBalance,
       mayaWalletBalance: mayaWalletBalance,

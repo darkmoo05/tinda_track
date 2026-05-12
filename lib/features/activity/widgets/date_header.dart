@@ -9,24 +9,28 @@ class ArchitectDateHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.only(top: 16, bottom: 4),
       child: Row(
         children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: AppColors.onSurfaceVariant,
-              letterSpacing: 1.2,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurfaceVariant,
+                letterSpacing: 0.3,
+              ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
-            child: Container(
-              height: 1,
-              color: AppColors.surfaceContainerLow,
-            ),
+            child: Container(height: 1, color: AppColors.surfaceContainerHigh),
           ),
         ],
       ),

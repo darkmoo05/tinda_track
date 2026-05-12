@@ -233,11 +233,12 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.outlineVariant.withValues(alpha: 0.5),
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primaryContainer],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,14 +252,15 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                   style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.onSurface,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   context.l10n.walletHistorySubtitle,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.onSurfaceVariant,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.white70,
                     height: 1.35,
                   ),
                 ),
@@ -266,13 +268,19 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          FilledButton.icon(
+          OutlinedButton.icon(
             onPressed: _openLedgerReportSheet,
-            icon: const Icon(Icons.download_rounded, size: 18),
-            label: Text(context.l10n.reports),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
+            icon: const Icon(
+              Icons.download_rounded,
+              size: 18,
+              color: Colors.white,
+            ),
+            label: Text(
+              context.l10n.reports,
+              style: const TextStyle(color: Colors.white),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.white54),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             ),
           ),
@@ -282,181 +290,173 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Widget _buildSearchAndFilter({required bool showWalletFilters}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: AppColors.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) {
-                final newQuery = value.trim().toLowerCase();
-                if (newQuery == _searchQuery) return;
-                setState(() => _searchQuery = newQuery);
-                _debounce?.cancel();
-                _debounce = Timer(
-                  const Duration(milliseconds: 300),
-                  _applyFilters,
-                );
-              },
-              decoration: InputDecoration(
-                hintText: context.l10n.searchAccountRefParty,
-                hintStyle: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.onSurfaceVariant,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  size: 20,
-                  color: AppColors.onSurfaceVariant,
-                ),
-                suffixIcon: _searchQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                          _debounce?.cancel();
-                          setState(() => _searchQuery = '');
-                          _applyFilters();
-                        },
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          size: 18,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                border: InputBorder.none,
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.outlineVariant.withValues(alpha: 0.4),
             ),
           ),
-          if (showWalletFilters) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _buildWalletFilterChip(
-                  label: context.l10n.filterAll,
-                  icon: Icons.grid_view_rounded,
-                  color: AppColors.primary,
-                  walletKey: null,
-                ),
-                _buildWalletFilterChip(
-                  label: context.l10n.gcash,
-                  icon: Icons.account_balance_wallet_outlined,
-                  color: AppColors.primary,
-                  walletKey: 'gcash',
-                ),
-                _buildWalletFilterChip(
-                  label: context.l10n.maya,
-                  icon: Icons.wallet_rounded,
-                  color: AppColors.secondary,
-                  walletKey: 'maya',
-                ),
-                _buildWalletFilterChip(
-                  label: context.l10n.onHand,
-                  icon: Icons.payments_outlined,
-                  color: const Color(0xFF8E6C00),
-                  walletKey: 'on_hand',
-                ),
-              ],
-            ),
-          ],
-          if (_beginDateFilter != null || _endDateFilter != null) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (_beginDateFilter != null)
-                  Chip(
-                    label: Text(
-                      '${context.l10n.beginningDate}: ${_fullDateFormat.format(_beginDateFilter!)}',
-                    ),
-                    labelStyle: const TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                    side: BorderSide.none,
-                    deleteIcon: const Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: AppColors.primary,
-                    ),
-                    onDeleted: () {
-                      _beginDateFilter = null;
-                      _applyFilters();
-                    },
-                  ),
-                if (_endDateFilter != null)
-                  Chip(
-                    label: Text(
-                      '${context.l10n.endDate}: ${_fullDateFormat.format(_endDateFilter!)}',
-                    ),
-                    labelStyle: const TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                    side: BorderSide.none,
-                    deleteIcon: const Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: AppColors.primary,
-                    ),
-                    onDeleted: () {
-                      _endDateFilter = null;
-                      _applyFilters();
-                    },
-                  ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickBeginDateFilter,
-                  icon: const Icon(Icons.event_available_rounded, size: 16),
-                  label: Text(
-                    _beginDateFilter == null
-                        ? context.l10n.beginningDate
-                        : _fullDateFormat.format(_beginDateFilter!),
-                  ),
-                ),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (value) {
+              final newQuery = value.trim().toLowerCase();
+              if (newQuery == _searchQuery) return;
+              setState(() => _searchQuery = newQuery);
+              _debounce?.cancel();
+              _debounce = Timer(
+                const Duration(milliseconds: 300),
+                _applyFilters,
+              );
+            },
+            decoration: InputDecoration(
+              hintText: context.l10n.searchAccountRefParty,
+              hintStyle: const TextStyle(
+                fontSize: 14,
+                color: AppColors.onSurfaceVariant,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickEndDateFilter,
-                  icon: const Icon(Icons.event_rounded, size: 16),
-                  label: Text(
-                    _endDateFilter == null
-                        ? context.l10n.endDate
-                        : _fullDateFormat.format(_endDateFilter!),
-                  ),
-                ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: AppColors.onSurfaceVariant,
+              ),
+              suffixIcon: _searchQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        _debounce?.cancel();
+                        setState(() => _searchQuery = '');
+                        _applyFilters();
+                      },
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+              border: InputBorder.none,
+            ),
+          ),
+        ),
+        if (showWalletFilters) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildWalletFilterChip(
+                label: context.l10n.filterAll,
+                icon: Icons.grid_view_rounded,
+                color: AppColors.primary,
+                walletKey: null,
+              ),
+              _buildWalletFilterChip(
+                label: context.l10n.gcash,
+                icon: Icons.account_balance_wallet_outlined,
+                color: AppColors.primary,
+                walletKey: 'gcash',
+              ),
+              _buildWalletFilterChip(
+                label: context.l10n.maya,
+                icon: Icons.wallet_rounded,
+                color: AppColors.secondary,
+                walletKey: 'maya',
+              ),
+              _buildWalletFilterChip(
+                label: context.l10n.onHand,
+                icon: Icons.payments_outlined,
+                color: const Color(0xFF8E6C00),
+                walletKey: 'on_hand',
               ),
             ],
           ),
         ],
-      ),
+        if (_beginDateFilter != null || _endDateFilter != null) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (_beginDateFilter != null)
+                Chip(
+                  label: Text(
+                    '${context.l10n.beginningDate}: ${_fullDateFormat.format(_beginDateFilter!)}',
+                  ),
+                  labelStyle: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                  side: BorderSide.none,
+                  deleteIcon: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  onDeleted: () {
+                    _beginDateFilter = null;
+                    _applyFilters();
+                  },
+                ),
+              if (_endDateFilter != null)
+                Chip(
+                  label: Text(
+                    '${context.l10n.endDate}: ${_fullDateFormat.format(_endDateFilter!)}',
+                  ),
+                  labelStyle: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                  side: BorderSide.none,
+                  deleteIcon: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  onDeleted: () {
+                    _endDateFilter = null;
+                    _applyFilters();
+                  },
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickBeginDateFilter,
+                icon: const Icon(Icons.event_available_rounded, size: 16),
+                label: Text(
+                  _beginDateFilter == null
+                      ? context.l10n.beginningDate
+                      : _fullDateFormat.format(_beginDateFilter!),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickEndDateFilter,
+                icon: const Icon(Icons.event_rounded, size: 16),
+                label: Text(
+                  _endDateFilter == null
+                      ? context.l10n.endDate
+                      : _fullDateFormat.format(_endDateFilter!),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -890,79 +890,124 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildDetailRow(
-                            context.l10n.historyTypeLabel,
-                            entryTypeLabel,
-                          ),
-                          _buildDetailRow(
-                            context.l10n.historyCategoryLabel,
-                            item.title,
-                          ),
-                          if (hasWalletAccount)
-                            _buildDetailRow(
-                              context.l10n.walletLabel,
-                              _displayWalletAccountLabel(item.walletAccount),
-                            ),
-                          if (hasDistinctReferenceId)
-                            _buildDetailRow(
-                              context.l10n.referenceNo,
-                              item.rawReference,
-                            ),
-                          if (hasAccountNumber)
-                            _buildDetailRow(
-                              context.l10n.historyAccountLabel,
-                              item.accountNumber!,
-                            ),
-                          if (!hasDistinctReferenceId && !hasAccountNumber)
-                            _buildDetailRow(
-                              context.l10n.referenceNo,
-                              item.rawReference,
-                            ),
-                          _buildDetailRow(
-                            context.l10n.historyAmountShownLabel,
-                            amountText,
-                            valueColor: accentColor,
-                          ),
-                          if (item.chargeAmount > 0)
-                            _buildDetailRow(
-                              context.l10n.serviceFee,
-                              _currencyFormat.format(item.chargeAmount),
-                            ),
-                          if (hasWalletAccount)
-                            _buildDetailRow(
-                              context.l10n.walletChangeLabel,
-                              walletChangeText,
-                              valueColor: walletDelta < 0
-                                  ? AppColors.error
-                                  : AppColors.secondary,
-                            ),
-                          _buildDetailRow(
-                            context.l10n.cashChangeLabel,
-                            cashChangeText,
-                            valueColor: item.onHandDelta < 0
-                                ? AppColors.error
-                                : AppColors.secondary,
-                          ),
-                          _buildDetailRow(
-                            context.l10n.savedOnLabel,
-                            dateTimeText,
+                          // Build rows list so we can intersperse dividers
+                          Builder(
+                            builder: (context) {
+                              final rows = <Widget>[
+                                _buildDetailRow(
+                                  context.l10n.historyTypeLabel,
+                                  entryTypeLabel,
+                                ),
+                                _buildDetailRow(
+                                  context.l10n.historyCategoryLabel,
+                                  item.title,
+                                ),
+                                if (hasWalletAccount)
+                                  _buildDetailRow(
+                                    context.l10n.walletLabel,
+                                    _displayWalletAccountLabel(
+                                      item.walletAccount,
+                                    ),
+                                  ),
+                                if (hasDistinctReferenceId)
+                                  _buildDetailRow(
+                                    context.l10n.referenceNo,
+                                    item.rawReference,
+                                  ),
+                                if (hasAccountNumber)
+                                  _buildDetailRow(
+                                    context.l10n.historyAccountLabel,
+                                    item.accountNumber!,
+                                  ),
+                                if (!hasDistinctReferenceId &&
+                                    !hasAccountNumber)
+                                  _buildDetailRow(
+                                    context.l10n.referenceNo,
+                                    item.rawReference,
+                                  ),
+                                _buildDetailRow(
+                                  context.l10n.historyAmountShownLabel,
+                                  amountText,
+                                  valueColor: accentColor,
+                                ),
+                                if (item.chargeAmount > 0)
+                                  _buildDetailRow(
+                                    context.l10n.serviceFee,
+                                    _currencyFormat.format(item.chargeAmount),
+                                  ),
+                                if (hasWalletAccount)
+                                  _buildDetailRow(
+                                    context.l10n.walletChangeLabel,
+                                    walletChangeText,
+                                    valueColor: walletDelta < 0
+                                        ? AppColors.error
+                                        : AppColors.secondary,
+                                  ),
+                                _buildDetailRow(
+                                  context.l10n.cashChangeLabel,
+                                  cashChangeText,
+                                  valueColor: item.onHandDelta < 0
+                                      ? AppColors.error
+                                      : AppColors.secondary,
+                                ),
+                                _buildDetailRow(
+                                  context.l10n.savedOnLabel,
+                                  dateTimeText,
+                                ),
+                              ];
+
+                              return Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceContainerLowest,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: AppColors.outlineVariant.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Column(
+                                    children: [
+                                      for (int i = 0; i < rows.length; i++) ...[
+                                        rows[i],
+                                        if (i < rows.length - 1)
+                                          const Divider(
+                                            height: 1,
+                                            thickness: 1,
+                                            indent: 14,
+                                            endIndent: 14,
+                                            color:
+                                                AppColors.surfaceContainerHigh,
+                                          ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                           if (hasNotes) _buildNotesSection(item.note),
                         ],
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                      child: Align(
-                        alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                      child: SizedBox(
+                        width: double.infinity,
                         child: FilledButton(
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: AppColors.onPrimary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
                           ),
                           onPressed: () => Navigator.of(context).pop(),
                           child: Text(context.l10n.close),
@@ -981,97 +1026,83 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
   Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppColors.outlineVariant.withValues(alpha: 0.6),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 4,
+            child: Text(
               label,
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 color: AppColors.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 5,
+            child: Text(
               value,
+              textAlign: TextAlign.end,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 color: valueColor ?? AppColors.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildNotesSection(String value) {
     return Padding(
-      padding: const EdgeInsets.only(top: 6, bottom: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: const [
-              Icon(
-                Icons.sticky_note_2_outlined,
-                size: 16,
-                color: AppColors.primary,
-              ),
-              SizedBox(width: 6),
-              Text(
-                'Notes',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
+      padding: const EdgeInsets.only(top: 12, bottom: 0),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(
+                  Icons.sticky_note_2_outlined,
+                  size: 14,
+                  color: AppColors.primary,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primary.withValues(alpha: 0.06),
-                  AppColors.surfaceContainerLowest,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.25),
-              ),
+                SizedBox(width: 5),
+                Text(
+                  'Notes',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
             ),
-            child: Text(
+            const SizedBox(height: 6),
+            Text(
               value,
               style: const TextStyle(
                 fontSize: 13,
                 color: AppColors.onSurface,
                 height: 1.5,
-                fontStyle: FontStyle.italic,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

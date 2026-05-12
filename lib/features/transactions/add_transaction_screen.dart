@@ -1974,6 +1974,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         note: _notesController.text.trim(),
         entryDate: DateTime.now().toIso8601String(),
       );
+
+      // Consume /transactions list endpoint to verify server visibility
+      // of the latest saved item without blocking the user flow.
+      try {
+        final latest = await _transactionRepository.listTransactions(limit: 1);
+        if (latest.isNotEmpty) {
+          debugPrint('✓ Latest transaction from server: ${latest.first.id}');
+        }
+      } catch (_) {
+        // Non-blocking verification step.
+      }
+
       debugPrint('✓ Transaction synced to backend: $syncId');
       return true;
     } on TransactionApiException catch (e) {

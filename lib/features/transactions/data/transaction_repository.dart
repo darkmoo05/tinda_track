@@ -147,4 +147,52 @@ class TransactionRepository {
       rethrow;
     }
   }
+
+  /// Fetch latest transactions from server.
+  Future<List<TransactionListItem>> listTransactions({
+    String? walletProvider,
+    String? direction,
+    int limit = 20,
+    String? status,
+  }) async {
+    try {
+      final response = await _apiClient.get(
+        '/transactions',
+        params: {
+          if (walletProvider != null) 'walletProvider': walletProvider,
+          if (direction != null) 'direction': direction,
+          'limit': limit,
+          if (status != null) 'status': status,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data as Map<String, dynamic>;
+        if (data['success'] == true && data['data'] is List) {
+          final rows = data['data'] as List<dynamic>;
+          return rows
+              .whereType<Map<String, dynamic>>()
+              .map(TransactionListItem.fromJson)
+              .toList(growable: false);
+        }
+        throw TransactionApiException('Transaction list failed');
+      }
+
+      throw TransactionApiException(
+        'Unexpected response status while listing transactions',
+        statusCode: response.statusCode,
+      );
+    } on DioException catch (e) {
+      final responseData = e.response?.data;
+      final serverMessage = responseData is Map<String, dynamic>
+          ? (responseData['message'] ?? responseData['error']) as String?
+          : null;
+      throw TransactionApiException(
+        serverMessage ?? 'Failed to list transactions: ${e.message}',
+        statusCode: e.response?.statusCode,
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
 }
