@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import '../activity/activity_history_screen.dart';
+import '../charges/charges_earnings_screen.dart';
 import '../transactions/add_owner_movement_screen.dart';
 import 'data/dashboard_repository.dart';
+import 'personal_expense_statement_screen.dart';
 import 'widgets/activity_item.dart';
 import 'widgets/alert_card.dart';
-import 'widgets/analytics_card.dart';
 import 'widgets/income_architecture_card.dart';
 
 enum _DashboardActivityFilter { all, business, personal, transactions }
@@ -55,7 +57,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             key: _scaffoldKey,
             drawer: const AppSideDrawer(),
             appBar: ArchitectAppBar(
-              title: 'PocketLedger',
+              title: context.l10n.appTitle,
               onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
             body: const Center(child: CircularProgressIndicator()),
@@ -67,12 +69,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             key: _scaffoldKey,
             drawer: const AppSideDrawer(),
             appBar: ArchitectAppBar(
-              title: 'PocketLedger',
+              title: context.l10n.appTitle,
               onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
-            body: const Center(
-              child: Text('Unable to load dashboard right now.'),
-            ),
+            body: Center(child: Text(context.l10n.unableToLoadDashboard)),
           );
         }
 
@@ -82,10 +82,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             key: _scaffoldKey,
             drawer: const AppSideDrawer(),
             appBar: ArchitectAppBar(
-              title: 'PocketLedger',
+              title: context.l10n.appTitle,
               onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
-            body: const Center(child: Text('No dashboard data available yet.')),
+            body: Center(child: Text(context.l10n.noDashboardData)),
           );
         }
 
@@ -93,7 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           key: _scaffoldKey,
           drawer: const AppSideDrawer(),
           appBar: ArchitectAppBar(
-            title: 'PocketLedger',
+            title: context.l10n.appTitle,
             onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
           body: ListView(
@@ -111,15 +111,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 16),
               _buildBalanceTrendSection(dashboard),
               const SizedBox(height: 16),
-              _buildChargesAnalyticsSection(dashboard),
-              const SizedBox(height: 16),
-              _buildBorrowingRepaymentCard(context, dashboard),
+              _buildPersonalExpenseCard(context, dashboard),
               const SizedBox(height: 24),
               _buildRecentActivityHeader(context),
               const SizedBox(height: 16),
-              _buildActivityTabs(),
+              _buildActivityTabs(context),
               const SizedBox(height: 16),
-              _buildRecentActivityList(dashboard),
+              _buildRecentActivityList(context, dashboard),
               const SizedBox(height: 100),
             ],
           ),
@@ -166,6 +164,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _openChargesEarnings(DashboardSnapshot dashboard) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ChargesEarningsScreen(
+          totalEarnings: dashboard.recordedFlow,
+          transactionCount: dashboard.transactionCount,
+          chargesToOnHand: dashboard.chargesToOnHand,
+          chargesToGcash: dashboard.chargesToGcash,
+          chargesToMaya: dashboard.chargesToMaya,
+          remainingWithdrawableOnHand: dashboard.remainingWithdrawableOnHand,
+          remainingWithdrawableGcash: dashboard.remainingWithdrawableGcash,
+          remainingWithdrawableMaya: dashboard.remainingWithdrawableMaya,
+          remainingWithdrawableTotal: dashboard.remainingWithdrawableTotal,
+          flowSpots: dashboard.flowSpots,
+          flowLabels: dashboard.flowLabels,
+          flowDates: dashboard.flowDates,
+          chargeTransactions: dashboard.chargeTransactions,
+        ),
+      ),
+    );
+
+    if (saved == true && mounted) {
+      widget.onDataChanged?.call();
+      _reloadDashboardSnapshot();
+    }
+  }
+
   Future<void> _openWalletPerspectiveHistory(
     HistoryWalletPerspective perspective,
   ) async {
@@ -191,7 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Wallet Overview',
+          context.l10n.walletOverview,
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w700,
             color: AppColors.onSurface,
@@ -209,61 +234,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   spacing: spacing,
                   runSpacing: spacing,
                   children: [
-                    _buildWalletMetricTile(
-                      width: tileWidth,
-                      title: 'GCASH WALLET',
-                      value: _dashboardRepository.formatCurrency(
-                        dashboard.walletBalance,
-                      ),
-                      caption: 'Available balance',
-                      icon: Icons.account_balance_wallet_rounded,
-                      backgroundColor: AppColors.primary,
-                      onTap: () => _openWalletPerspectiveHistory(
-                        HistoryWalletPerspective.gcash,
-                      ),
-                    ),
-                    _buildWalletMetricTile(
-                      width: tileWidth,
-                      title: 'MAYA WALLET',
-                      value: _dashboardRepository.formatCurrency(
-                        dashboard.mayaWalletBalance,
-                      ),
-                      caption: 'Available balance',
-                      icon: Icons.account_balance_rounded,
-                      backgroundColor: AppColors.secondary,
-                      onTap: () => _openWalletPerspectiveHistory(
-                        HistoryWalletPerspective.maya,
+                    _WalletCardAnimator(
+                      delay: const Duration(milliseconds: 0),
+                      child: _buildWalletMetricTile(
+                        width: tileWidth,
+                        title: context.l10n.gcashWallet,
+                        value: _dashboardRepository.formatCurrency(
+                          dashboard.walletBalance,
+                        ),
+                        caption: context.l10n.availableBalance,
+                        icon: Icons.account_balance_wallet_rounded,
+                        accentColor: AppColors.primary,
+                        onTap: () => _openWalletPerspectiveHistory(
+                          HistoryWalletPerspective.gcash,
+                        ),
                       ),
                     ),
-                    _buildWalletMetricTile(
-                      width: tileWidth,
-                      title: 'ON-HAND CASH',
-                      value: _dashboardRepository.formatCurrency(
-                        dashboard.onHandCash,
-                      ),
-                      caption: 'Physical cash',
-                      icon: Icons.payments_outlined,
-                      backgroundColor: const Color(0xFF8E6C00),
-                      onTap: () => _openWalletPerspectiveHistory(
-                        HistoryWalletPerspective.onHand,
+                    _WalletCardAnimator(
+                      delay: const Duration(milliseconds: 80),
+                      child: _buildWalletMetricTile(
+                        width: tileWidth,
+                        title: context.l10n.mayaWallet,
+                        value: _dashboardRepository.formatCurrency(
+                          dashboard.mayaWalletBalance,
+                        ),
+                        caption: context.l10n.availableBalance,
+                        icon: Icons.account_balance_rounded,
+                        accentColor: AppColors.secondary,
+                        onTap: () => _openWalletPerspectiveHistory(
+                          HistoryWalletPerspective.maya,
+                        ),
                       ),
                     ),
-                    _buildWalletMetricTile(
-                      width: tileWidth,
-                      title: 'CHARGES EARNINGS',
-                      value: _dashboardRepository.formatCurrency(
-                        dashboard.recordedFlow,
+                    _WalletCardAnimator(
+                      delay: const Duration(milliseconds: 160),
+                      child: _buildWalletMetricTile(
+                        width: tileWidth,
+                        title: context.l10n.onHandCash,
+                        value: _dashboardRepository.formatCurrency(
+                          dashboard.onHandCash,
+                        ),
+                        caption: context.l10n.physicalCash,
+                        icon: Icons.payments_outlined,
+                        accentColor: const Color(0xFF8E6C00),
+                        onTap: () => _openWalletPerspectiveHistory(
+                          HistoryWalletPerspective.onHand,
+                        ),
                       ),
-                      caption: dashboard.flowTrendLabel,
-                      icon: Icons.trending_up_rounded,
-                      backgroundColor: AppColors.primaryContainer,
-                      titleFontSize: 11,
-                      titleLetterSpacing: 0.8,
+                    ),
+                    _WalletCardAnimator(
+                      delay: const Duration(milliseconds: 240),
+                      child: _buildWalletMetricTile(
+                        width: tileWidth,
+                        title: context.l10n.chargesEarnings,
+                        value: _dashboardRepository.formatCurrency(
+                          dashboard.remainingWithdrawableTotal,
+                        ),
+                        caption: 'Withdrawable now',
+                        icon: Icons.trending_up_rounded,
+                        accentColor: const Color(0xFF4A7EA6),
+                        titleMaxLines: 2,
+                        onTap: () => _openChargesEarnings(dashboard),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                _buildTotalFundsTile(dashboard),
+                _buildTotalFundsTile(context, dashboard),
               ],
             );
           },
@@ -278,89 +315,103 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String value,
     required String caption,
     required IconData icon,
-    required Color backgroundColor,
-    double titleFontSize = 12,
-    double titleLetterSpacing = 1.2,
+    required Color accentColor,
+    int titleMaxLines = 1,
     VoidCallback? onTap,
   }) {
-    final foregroundColor = AppColors.onPrimary;
-    final mutedForegroundColor = AppColors.onPrimary.withValues(alpha: 0.78);
-
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(28),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(28),
-        onTap: onTap,
-        child: Ink(
-          width: width,
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: backgroundColor.withValues(alpha: 0.26),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Ink(
+            width: width,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              border: Border(
+                left: BorderSide(color: accentColor, width: 4),
+                top: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                ),
+                right: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                ),
+                bottom: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                ),
               ),
-            ],
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 168),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: mutedForegroundColor,
-                            fontSize: titleFontSize,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: titleLetterSpacing,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.onSurface.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 120),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: titleMaxLines,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.onSurfaceVariant,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(icon, color: mutedForegroundColor, size: 22),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FittedBox(
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(icon, color: accentColor, size: 15),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
                       child: Text(
                         value,
                         maxLines: 1,
                         style: TextStyle(
-                          color: foregroundColor,
-                          fontSize: 24,
+                          color: accentColor,
+                          fontSize: 22,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    caption,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: mutedForegroundColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 4),
+                    Text(
+                      caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.onSurfaceVariant,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -369,75 +420,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildTotalFundsTile(DashboardSnapshot dashboard) {
-    final totalCapital = dashboard.businessFundingTotal;
-    final chargeEarnings = dashboard.recordedFlow;
-    final computedTotalFunds = totalCapital + chargeEarnings;
+  Widget _buildTotalFundsTile(
+    BuildContext context,
+    DashboardSnapshot dashboard,
+  ) {
+    final totalBusinessCash = dashboard.businessUsableCash;
+    final withdrawableEarnings = dashboard.remainingWithdrawableTotal;
+    const accentColor = Color(0xFF1E3A5F);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E3A5F),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1E3A5F).withValues(alpha: 0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 16, 16, 16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          border: Border(
+            left: const BorderSide(color: accentColor, width: 4),
+            top: BorderSide(
+              color: AppColors.outlineVariant.withValues(alpha: 0.4),
+            ),
+            right: BorderSide(
+              color: AppColors.outlineVariant.withValues(alpha: 0.4),
+            ),
+            bottom: BorderSide(
+              color: AppColors.outlineVariant.withValues(alpha: 0.4),
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'TOTAL FUNDS',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.7,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      _dashboardRepository.formatCurrency(computedTotalFunds),
-                      maxLines: 1,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                      ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.onSurface.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    context.l10n.totalFunds,
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Capital ${_dashboardRepository.formatCurrency(totalCapital)} + Charges ${_dashboardRepository.formatCurrency(chargeEarnings)}',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+                const SizedBox(width: 8),
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_rounded,
+                    color: accentColor,
+                    size: 15,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'Computation: Initial Capital/Top-ups + Total Charge Earnings',
-            style: TextStyle(color: Colors.white60, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 10),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _dashboardRepository.formatCurrency(totalBusinessCash),
+                maxLines: 1,
+                style: const TextStyle(
+                  color: accentColor,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.l10n.businessCashComputation,
+              style: const TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              context.l10n.withdrawableEarningsNote(
+                _dashboardRepository.formatCurrency(withdrawableEarnings),
+              ),
+              style: const TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -451,9 +537,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (!hasTrendData) {
       return _buildChartPlaceholder(
-        title: 'Wallet and Cash Balance Trend',
-        message:
-            'Trend data will appear once wallet activity has been recorded.',
+        title: context.l10n.walletCashBalanceTrend,
+        message: context.l10n.walletTrendPlaceholder,
       );
     }
 
@@ -462,31 +547,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       mayaSpots: dashboard.mayaSpots,
       cashSpots: dashboard.cashSpots,
       xLabels: dashboard.xLabels,
-    );
-  }
-
-  Widget _buildChargesAnalyticsSection(DashboardSnapshot dashboard) {
-    final safeLength = [
-      dashboard.flowSpots.length,
-      dashboard.flowLabels.length,
-      dashboard.flowDates.length,
-    ].reduce((a, b) => a < b ? a : b);
-
-    if (safeLength == 0) {
-      return _buildChartPlaceholder(
-        title: 'Charges Collected',
-        message: 'Charges analytics will appear after transactions are added.',
-      );
-    }
-
-    return ArchitectAnalyticsCard(
-      title: 'Charges\nCollected',
-      value: _dashboardRepository.formatCurrency(dashboard.recordedFlow),
-      trend: dashboard.flowTrendLabel,
-      subtitle: dashboard.flowCaption,
-      spots: dashboard.flowSpots.take(safeLength).toList(growable: false),
-      xLabels: dashboard.flowLabels.take(safeLength).toList(growable: false),
-      dates: dashboard.flowDates.take(safeLength).toList(growable: false),
     );
   }
 
@@ -524,7 +584,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildRecentActivityHeader(BuildContext context) {
     return Text(
-      'Recent Activities',
+      context.l10n.recentActivities,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.w700,
         color: AppColors.onSurface,
@@ -532,34 +592,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildActivityTabs() {
+  Widget _buildActivityTabs(BuildContext context) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         _buildPillTab(
-          'All',
+          context.l10n.filterAll,
           _activityFilter == _DashboardActivityFilter.all,
           () {
             setState(() => _activityFilter = _DashboardActivityFilter.all);
           },
         ),
         _buildPillTab(
-          'Business',
+          context.l10n.filterBusiness,
           _activityFilter == _DashboardActivityFilter.business,
           () {
             setState(() => _activityFilter = _DashboardActivityFilter.business);
           },
         ),
         _buildPillTab(
-          'Personal',
+          context.l10n.filterPersonal,
           _activityFilter == _DashboardActivityFilter.personal,
           () {
             setState(() => _activityFilter = _DashboardActivityFilter.personal);
           },
         ),
         _buildPillTab(
-          'Transactions',
+          context.l10n.filterTransactions,
           _activityFilter == _DashboardActivityFilter.transactions,
           () {
             setState(
@@ -593,7 +653,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentActivityList(DashboardSnapshot dashboard) {
+  Widget _buildRecentActivityList(
+    BuildContext context,
+    DashboardSnapshot dashboard,
+  ) {
     final activities =
         dashboard.activities
             .where((activity) {
@@ -617,16 +680,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return a.title.toLowerCase().compareTo(b.title.toLowerCase());
           });
 
-    final recentActivities = activities.take(5).toList(growable: false);
+    final recentActivities = activities.take(3).toList(growable: false);
 
     if (recentActivities.isEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(18),
         decoration: _minimalCardDecoration(),
-        child: const Text(
-          'No activities match the selected filter yet.',
-          style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
+        child: Text(
+          context.l10n.noActivitiesFilter,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -647,118 +713,159 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildBorrowingRepaymentCard(
+  Widget _buildPersonalExpenseCard(
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
-    final outstanding = dashboard.netBorrowOutstanding;
-    final outstandingColor = outstanding > 0
-        ? AppColors.error
-        : (outstanding < 0 ? AppColors.secondary : AppColors.onSurfaceVariant);
+    final taken = dashboard.personalExpenseAmount;
+    final returned = dashboard.personalExpensePaymentAmount;
+    final outstanding = dashboard.personalExpenseOutstanding <= 0
+        ? 0.0
+        : dashboard.personalExpenseOutstanding;
+    final isFullyPaid = outstanding == 0;
+    final settledPercent = taken > 0
+        ? (returned / taken * 100).clamp(0.0, 100.0)
+        : 100.0;
+    final statusColor = isFullyPaid ? AppColors.secondary : AppColors.error;
+    final statusLabel = isFullyPaid
+        ? 'Fully Paid'
+        : '${settledPercent.toStringAsFixed(0)}% Settled';
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _minimalCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Borrowing Status',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _buildSplitCard(
-                title: 'Borrowed',
-                subtitle: 'Total personal funds taken by owner',
-                value: _dashboardRepository.formatCurrency(
-                  dashboard.totalBorrowed,
-                ),
-                accentColor: AppColors.primary,
-                icon: Icons.call_received_rounded,
-              ),
-              _buildSplitCard(
-                title: 'Repaid',
-                subtitle: 'Total personal funds returned to business',
-                value: _dashboardRepository.formatCurrency(
-                  dashboard.totalRepaid,
-                ),
-                accentColor: AppColors.secondary,
-                icon: Icons.call_made_rounded,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Owner Credit Outstanding: ${_dashboardRepository.formatCurrency(outstanding)}',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: outstandingColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSplitCard({
-    required String title,
-    required String subtitle,
-    required String value,
-    required Color accentColor,
-    required IconData icon,
-  }) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 260, maxWidth: 360),
+    return GestureDetector(
+      onTap: _openPersonalExpenseStatementScreen,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: _minimalCardDecoration(),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: accentColor),
+            Text(
+              'Borrowed Funds Status',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildComparisonItem(
+                    label: 'Taken',
+                    amount: _dashboardRepository.formatCurrency(taken),
+                    icon: Icons.shopping_bag_rounded,
+                    color: AppColors.error,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildComparisonItem(
+                    label: 'Paid Back',
+                    amount: _dashboardRepository.formatCurrency(returned),
+                    icon: Icons.check_circle_rounded,
+                    color: AppColors.secondary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+              ),
+              child: Row(
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Outstanding Amount',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _dashboardRepository.formatCurrency(outstanding),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: settledPercent / 100,
+                minHeight: 8,
+                backgroundColor: AppColors.surfaceContainerHigh,
+                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (isFullyPaid) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No outstanding balance to pay.'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                    return;
+                  }
+                  _navigateToPersonalExpensePayment();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isFullyPaid
+                      ? AppColors.secondary
+                      : AppColors.error,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(
+                  isFullyPaid ? 'All Settled' : 'Pay Borrowed Funds',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],
@@ -767,11 +874,121 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildComparisonItem({
+    required String label,
+    required String amount,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            amount,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openPersonalExpenseStatementScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const PersonalExpenseStatementScreen()),
+    );
+  }
+
+  Future<void> _navigateToPersonalExpensePayment() async {
+    final screen = const AddOwnerMovementScreen(
+      initialMovementType: 'Borrowed Funds Repayment',
+    );
+
+    final result = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (context) => screen));
+
+    if (result == true && mounted) {
+      widget.onDataChanged?.call();
+      _reloadDashboardSnapshot();
+    }
+  }
+
   BoxDecoration _minimalCardDecoration() {
     return BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: AppColors.surfaceContainerHigh),
+    );
+  }
+}
+
+// ── Stagger animation wrapper for wallet cards ──────────────────────────────
+class _WalletCardAnimator extends StatefulWidget {
+  const _WalletCardAnimator({required this.delay, required this.child});
+
+  final Duration delay;
+  final Widget child;
+
+  @override
+  State<_WalletCardAnimator> createState() => _WalletCardAnimatorState();
+}
+
+class _WalletCardAnimatorState extends State<_WalletCardAnimator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
+    _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.15),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    Future.delayed(widget.delay, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }

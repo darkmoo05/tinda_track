@@ -6,8 +6,6 @@ class TransactionPreviewResponse {
   final double walletCredit;
   final double onHandChange;
   final String feeRoutingExplanation;
-  final double currentWalletBalance;
-  final double postTransactionWalletBalance;
 
   TransactionPreviewResponse({
     required this.chargeAmount,
@@ -15,8 +13,6 @@ class TransactionPreviewResponse {
     required this.walletCredit,
     required this.onHandChange,
     required this.feeRoutingExplanation,
-    required this.currentWalletBalance,
-    required this.postTransactionWalletBalance,
   });
 
   factory TransactionPreviewResponse.fromJson(Map<String, dynamic> json) {
@@ -26,9 +22,6 @@ class TransactionPreviewResponse {
       walletCredit: (json['walletCredit'] as num).toDouble(),
       onHandChange: (json['onHandChange'] as num).toDouble(),
       feeRoutingExplanation: json['feeRoutingExplanation'] as String,
-      currentWalletBalance: (json['currentWalletBalance'] as num).toDouble(),
-      postTransactionWalletBalance:
-          (json['postTransactionWalletBalance'] as num).toDouble(),
     );
   }
 }
@@ -45,6 +38,7 @@ class TransactionCreateRequest {
   final String? entryDate;
   final String? externalProvider;
   final String? externalTransactionId;
+  final String? transactionTypeKey; // e.g., gcash_cashin, maya_paybills
 
   TransactionCreateRequest({
     required this.walletProvider,
@@ -58,6 +52,7 @@ class TransactionCreateRequest {
     this.entryDate,
     this.externalProvider,
     this.externalTransactionId,
+    this.transactionTypeKey,
   });
 
   Map<String, dynamic> toJson() => {
@@ -73,6 +68,7 @@ class TransactionCreateRequest {
     if (externalProvider != null) 'externalProvider': externalProvider,
     if (externalTransactionId != null)
       'externalTransactionId': externalTransactionId,
+    if (transactionTypeKey != null) 'transactionTypeKey': transactionTypeKey,
   };
 }
 
@@ -101,6 +97,44 @@ class TransactionCreateResponse {
       chargeHandling: json['chargeHandling'] as String,
       externalProvider: json['externalProvider'] as String?,
       externalTransactionId: json['externalTransactionId'] as String?,
+    );
+  }
+}
+
+class TransactionListItem {
+  final String id;
+  final String walletProvider;
+  final String direction;
+  final double amount;
+  final double chargeAmount;
+  final String status;
+  final String? syncId;
+  final String? reference;
+  final String? entryDate;
+
+  TransactionListItem({
+    required this.id,
+    required this.walletProvider,
+    required this.direction,
+    required this.amount,
+    required this.chargeAmount,
+    required this.status,
+    this.syncId,
+    this.reference,
+    this.entryDate,
+  });
+
+  factory TransactionListItem.fromJson(Map<String, dynamic> json) {
+    return TransactionListItem(
+      id: json['id'] as String,
+      walletProvider: (json['walletProvider'] as String?) ?? '',
+      direction: (json['direction'] as String?) ?? '',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      chargeAmount: (json['chargeAmount'] as num?)?.toDouble() ?? 0,
+      status: (json['status'] as String?) ?? '',
+      syncId: json['syncId'] as String?,
+      reference: json['reference'] as String?,
+      entryDate: json['entryDate'] as String?,
     );
   }
 }

@@ -30,7 +30,7 @@ class PartyHealthHero extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
+            color: AppColors.primary.withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -62,12 +62,12 @@ class PartyHealthHero extends StatelessWidget {
             children: [
               _buildMetricPill(
                 '$totalEntities Total',
-                Colors.white.withOpacity(0.2),
+                Colors.white.withValues(alpha: 0.2),
               ),
               const SizedBox(width: 12),
               _buildMetricPill(
                 '${verificationRate.toStringAsFixed(1)}% Verified',
-                const Color(0xFF4DB6AC).withOpacity(0.3),
+                const Color(0xFF4DB6AC).withValues(alpha: 0.3),
               ),
             ],
           ),
@@ -131,7 +131,7 @@ class PartyHealthHero extends StatelessWidget {
             child: LinearProgressIndicator(
               value: ratio,
               minHeight: 8,
-              backgroundColor: Colors.white.withOpacity(0.18),
+              backgroundColor: Colors.white.withValues(alpha: 0.18),
               valueColor: const AlwaysStoppedAnimation<Color>(
                 Color(0xFF80CBC4),
               ),

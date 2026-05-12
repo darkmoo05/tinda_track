@@ -294,6 +294,8 @@ class SyncService {
               'lowerBound': row['lower_bound'],
               'upperBound': row['upper_bound'],
               'chargeAmount': _asDouble(row['charge_amount']),
+              'transactionTypeKey':
+                  row[AppDatabase.transactionTypeKeyColumn] ?? 'gcash_cashin',
               'isDeleted': _toBool(row[AppDatabase.isDeletedColumn]),
             };
           })
@@ -319,6 +321,10 @@ class SyncService {
         'lower_bound': _asInt(item['lowerBound']),
         'upper_bound': _asInt(item['upperBound']),
         'charge_amount': _asDouble(item['chargeAmount']),
+        AppDatabase.transactionTypeKeyColumn: _asString(
+          item['transactionTypeKey'],
+          fallback: 'gcash_cashin',
+        ),
         AppDatabase.syncIdColumn: syncId,
         AppDatabase.deviceIdColumn: _asString(item['deviceId']),
         AppDatabase.updatedAtMsColumn: remoteUpdated,

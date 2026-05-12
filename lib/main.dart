@@ -1,12 +1,18 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
 import 'core/data/app_database.dart';
 import 'core/data/sync_service.dart';
+import 'core/l10n_extension.dart';
+import 'core/locale_provider.dart';
 import 'features/main_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppDatabase.instance.init();
+  await LocaleProvider.instance.load();
   runApp(const TindaTrackApp());
 }
 
@@ -15,13 +21,69 @@ class TindaTrackApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Tinda Tracker',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: const StartupSyncGate(),
+    return ListenableBuilder(
+      listenable: LocaleProvider.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'PocketLedger',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          locale: LocaleProvider.instance.locale,
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            // Falls back to English for locales not covered by the global
+            // material/cupertino/widgets delegates (e.g. Cebuano).
+            const _FallbackMaterialLocalizationsDelegate(),
+            const _FallbackCupertinoLocalizationsDelegate(),
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('en'), Locale('fil'), Locale('ceb')],
+          home: const StartupSyncGate(),
+        );
+      },
     ); //yes von
   }
+}
+
+/// MaterialLocalizations delegate that falls back to English for any locale
+/// not supported by [GlobalMaterialLocalizations] (e.g. Cebuano).
+class _FallbackMaterialLocalizationsDelegate
+    extends LocalizationsDelegate<MaterialLocalizations> {
+  const _FallbackMaterialLocalizationsDelegate();
+
+  static final _delegate = GlobalMaterialLocalizations.delegate;
+
+  @override
+  bool isSupported(Locale locale) => true;
+
+  @override
+  Future<MaterialLocalizations> load(Locale locale) =>
+      _delegate.isSupported(locale)
+      ? _delegate.load(locale)
+      : _delegate.load(const Locale('en'));
+
+  @override
+  bool shouldReload(_FallbackMaterialLocalizationsDelegate old) => false;
+}
+
+/// CupertinoLocalizations delegate with the same English fallback.
+class _FallbackCupertinoLocalizationsDelegate
+    extends LocalizationsDelegate<CupertinoLocalizations> {
+  const _FallbackCupertinoLocalizationsDelegate();
+
+  static final _delegate = GlobalCupertinoLocalizations.delegate;
+
+  @override
+  bool isSupported(Locale locale) => true;
+
+  @override
+  Future<CupertinoLocalizations> load(Locale locale) =>
+      _delegate.isSupported(locale)
+      ? _delegate.load(locale)
+      : _delegate.load(const Locale('en'));
+
+  @override
+  bool shouldReload(_FallbackCupertinoLocalizationsDelegate old) => false;
 }
 
 class StartupSyncGate extends StatefulWidget {
@@ -107,8 +169,8 @@ class _StartupLoadingScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    const Text(
-                      'Syncing your data…',
+                    Text(
+                      context.l10n.syncingData,
                       style: TextStyle(
                         color: AppColors.onPrimary,
                         fontSize: 14,

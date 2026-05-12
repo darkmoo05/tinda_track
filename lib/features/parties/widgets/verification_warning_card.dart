@@ -22,7 +22,7 @@ class VerificationWarningCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFCC99).withOpacity(0.4),
+              color: const Color(0xFFFFCC99).withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
@@ -43,10 +43,7 @@ class VerificationWarningCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '$count',
-            style: const TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           GestureDetector(
@@ -62,7 +59,11 @@ class VerificationWarningCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 4),
-                Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.primary),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
               ],
             ),
           ),

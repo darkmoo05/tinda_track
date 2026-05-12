@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/l10n_extension.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: Text(l10n.profile),
         backgroundColor: AppColors.background,
       ),
       body: Padding(
@@ -28,16 +30,19 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Your Profile',
+              l10n.yourProfile,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: AppColors.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Set your display name, contact details, and business identity settings.',
-              style: TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant),
+            Text(
+              l10n.profileDescription,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
           ],
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'statement_entry.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/data/app_database.dart';
@@ -17,17 +18,26 @@ class DashboardSnapshot {
     required this.recordedFlow,
     required this.businessFundingTotal,
     required this.personalExpenseTotal,
-    required this.totalBorrowed,
-    required this.totalRepaid,
+    required this.personalExpenseAmount,
+    required this.personalExpensePaymentAmount,
+    required this.personalExpenseOutstanding,
     required this.ownerCreditAdjustment,
-    required this.netBorrowOutstanding,
     required this.flowTrendLabel,
     required this.flowCaption,
+    required this.chargesToOnHand,
+    required this.chargesToGcash,
+    required this.chargesToMaya,
+    required this.remainingWithdrawableOnHand,
+    required this.remainingWithdrawableGcash,
+    required this.remainingWithdrawableMaya,
+    required this.remainingWithdrawableTotal,
+    required this.transactionCount,
     required this.alertTitle,
     required this.alertMessage,
     required this.alertActionLabel,
     required this.showAlertCard,
     required this.activities,
+    required this.chargeTransactions,
     required this.walletSpots,
     required this.mayaSpots,
     required this.cashSpots,
@@ -47,17 +57,26 @@ class DashboardSnapshot {
   final double recordedFlow;
   final double businessFundingTotal;
   final double personalExpenseTotal;
-  final double totalBorrowed;
-  final double totalRepaid;
+  final double personalExpenseAmount;
+  final double personalExpensePaymentAmount;
+  final double personalExpenseOutstanding;
   final double ownerCreditAdjustment;
-  final double netBorrowOutstanding;
   final String flowTrendLabel;
   final String flowCaption;
+  final double chargesToOnHand;
+  final double chargesToGcash;
+  final double chargesToMaya;
+  final double remainingWithdrawableOnHand;
+  final double remainingWithdrawableGcash;
+  final double remainingWithdrawableMaya;
+  final double remainingWithdrawableTotal;
+  final int transactionCount;
   final String alertTitle;
   final String alertMessage;
   final String alertActionLabel;
   final bool showAlertCard;
   final List<DashboardActivity> activities;
+  final List<ChargeTransaction> chargeTransactions;
   final List<FlSpot> walletSpots;
   final List<FlSpot> mayaSpots;
   final List<FlSpot> cashSpots;
@@ -89,6 +108,20 @@ class DashboardActivity {
   final Color iconColor;
 }
 
+class ChargeTransaction {
+  const ChargeTransaction({
+    required this.title,
+    required this.createdAt,
+    required this.chargeAmount,
+    required this.chargeDestination,
+  });
+
+  final String title;
+  final DateTime createdAt;
+  final double chargeAmount;
+  final String chargeDestination;
+}
+
 class DashboardRepository {
   DashboardRepository({AppDatabase? database})
     : _database = database ?? AppDatabase.instance;
@@ -102,6 +135,57 @@ class DashboardRepository {
   final DateFormat _activityDateFormat = DateFormat('dd MMM yyyy');
   final DateFormat _chartDateFormat = DateFormat('dd MMM');
   static const double _lowBalanceRatio = 0.10;
+
+  Future<List<StatementEntry>> loadStatementEntries() async {
+    final db = await _database.database;
+    final rows = await db.query(
+      AppDatabase.ledgerTable,
+      columns: ['amount', 'created_at', 'owner_movement_type', 'note'],
+      where: "entry_type = ? AND owner_movement_type IS NOT NULL",
+      whereArgs: ['owner_movement'],
+      orderBy: 'created_at DESC, id DESC',
+    );
+
+    final entries = <StatementEntry>[];
+    for (final row in rows) {
+      final movementType = ((row['owner_movement_type'] as String?) ?? '')
+          .trim();
+      if (movementType.isEmpty) {
+        continue;
+      }
+
+      final normalizedType = movementType.toLowerCase();
+      final isDebit =
+          normalizedType == 'personal expense' ||
+          normalizedType == 'borrowed funds';
+      final isRepayment =
+          normalizedType == 'personal expense payment' ||
+          normalizedType == 'borrowed funds repayment';
+
+      if (!isDebit && !isRepayment) {
+        continue;
+      }
+
+      final createdAtRaw = row['created_at'] as String?;
+      final createdAt = createdAtRaw == null
+          ? null
+          : DateTime.tryParse(createdAtRaw);
+      final amount = (row['amount'] as num?)?.toDouble() ?? 0;
+
+      entries.add(
+        StatementEntry(
+          date: createdAt == null ? '' : _activityDateFormat.format(createdAt),
+          createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+          type: movementType,
+          amount: '${isRepayment ? '-' : '+'}${formatCurrency(amount)}',
+          amountColor: isRepayment ? AppColors.secondary : AppColors.error,
+          note: (row['note'] as String?)?.trim(),
+        ),
+      );
+    }
+
+    return entries;
+  }
 
   Future<DashboardSnapshot> loadSnapshot() async {
     final db = await _database.database;
@@ -123,10 +207,13 @@ class DashboardRepository {
     double chargesToOnHand = 0;
     double chargesToGcash = 0;
     double chargesToMaya = 0;
+    double feeWithdrawnOnHand = 0;
+    double feeWithdrawnGcash = 0;
+    double feeWithdrawnMaya = 0;
     double businessFundingTotal = 0;
     double personalExpenseTotal = 0;
-    double totalBorrowed = 0;
-    double totalRepaid = 0;
+    double personalExpenseAmount = 0;
+    double personalExpensePaymentAmount = 0;
     int transactionCount = 0;
 
     final walletSpots = <FlSpot>[];
@@ -137,6 +224,7 @@ class DashboardRepository {
     final flowDates = <DateTime>[];
     final xLabels = <String>[];
     final chargesByDay = <DateTime, double>{};
+    final chargeTransactions = <ChargeTransaction>[];
     final walletClosingByDay = <DateTime, double>{};
     final mayaWalletClosingByDay = <DateTime, double>{};
     final cashClosingByDay = <DateTime, double>{};
@@ -190,16 +278,38 @@ class DashboardRepository {
           businessFundingTotal += amount;
         }
 
-        if (ownerScope == 'personal' || movementType == 'personal expense') {
+        if (ownerScope == 'personal' ||
+            movementType == 'personal expense' ||
+            movementType == 'borrowed funds') {
           personalExpenseTotal += amount;
         }
 
-        if (movementType == 'borrowing' || movementType == 'personal expense') {
-          totalBorrowed += amount;
+        // Track borrowed-funds-only totals
+        if (movementType == 'personal expense' ||
+            movementType == 'borrowed funds') {
+          personalExpenseAmount += amount;
         }
 
-        if (movementType == 'repayment') {
-          totalRepaid += amount;
+        if (movementType == 'personal expense payment' ||
+            movementType == 'borrowed funds repayment') {
+          personalExpensePaymentAmount += amount;
+        }
+
+        if (movementType == 'fee withdrawal' ||
+            movementType == 'fee transfer') {
+          final withdrawalSource = _resolveFeeMovementSource(row, movementType);
+          if (withdrawalSource.contains('maya')) {
+            feeWithdrawnMaya += amount;
+          } else if (withdrawalSource.contains('gcash')) {
+            feeWithdrawnGcash += amount;
+          } else {
+            feeWithdrawnOnHand += amount;
+          }
+        } else if (movementType == 'cash transfer (on-hand to wallet)') {
+          final transferredFeeAmount = _extractChargeAmount(row);
+          if (transferredFeeAmount > 0) {
+            feeWithdrawnOnHand += transferredFeeAmount;
+          }
         }
       }
 
@@ -216,6 +326,14 @@ class DashboardRepository {
           } else {
             chargesToOnHand += chargeAmount;
           }
+          chargeTransactions.add(
+            ChargeTransaction(
+              title: (row['title'] as String?) ?? 'Transaction',
+              createdAt: createdAt,
+              chargeAmount: chargeAmount,
+              chargeDestination: chargeDestination,
+            ),
+          );
         }
         transactionCount++;
         chargesByDay.update(
@@ -290,7 +408,39 @@ class DashboardRepository {
       onHandTopUpBaseline: onHandTopUpBaseline,
     );
 
-    final ownerCreditAdjustment = totalRepaid - totalBorrowed;
+    final ownerCreditAdjustment =
+        personalExpensePaymentAmount - personalExpenseAmount;
+    final remainingWithdrawableOnHand = (chargesToOnHand - feeWithdrawnOnHand)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final remainingWithdrawableGcash = (chargesToGcash - feeWithdrawnGcash)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final remainingWithdrawableMaya = (chargesToMaya - feeWithdrawnMaya)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final remainingWithdrawableTotal =
+        remainingWithdrawableOnHand +
+        remainingWithdrawableGcash +
+        remainingWithdrawableMaya;
+
+    final computedChargeTxSum = chargeTransactions.fold<double>(
+      0,
+      (sum, tx) => sum + tx.chargeAmount,
+    );
+    final alreadyWithdrawn = (chargesCollected - remainingWithdrawableTotal)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    assert(() {
+      debugPrint(
+        '[DashboardSnapshot sanity] '
+        'chargesCollected=${chargesCollected.toStringAsFixed(2)} '
+        'chargeTxSum=${computedChargeTxSum.toStringAsFixed(2)} '
+        'remainingWithdrawable=${remainingWithdrawableTotal.toStringAsFixed(2)} '
+        'alreadyWithdrawn=${alreadyWithdrawn.toStringAsFixed(2)}',
+      );
+      return true;
+    }());
 
     return DashboardSnapshot(
       walletBalance: walletBalance,
@@ -307,18 +457,28 @@ class DashboardRepository {
       recordedFlow: chargesCollected,
       businessFundingTotal: businessFundingTotal,
       personalExpenseTotal: personalExpenseTotal,
-      totalBorrowed: totalBorrowed,
-      totalRepaid: totalRepaid,
+      personalExpenseAmount: personalExpenseAmount,
+      personalExpensePaymentAmount: personalExpensePaymentAmount,
+      personalExpenseOutstanding:
+          personalExpenseAmount - personalExpensePaymentAmount,
       ownerCreditAdjustment: ownerCreditAdjustment,
-      netBorrowOutstanding: totalBorrowed - totalRepaid,
       flowTrendLabel: '$transactionCount transactions',
       flowCaption:
           'Charges routed • On-hand: ${formatCurrency(chargesToOnHand)} • GCash: ${formatCurrency(chargesToGcash)} • Maya: ${formatCurrency(chargesToMaya)}',
+      chargesToOnHand: chargesToOnHand,
+      chargesToGcash: chargesToGcash,
+      chargesToMaya: chargesToMaya,
+      remainingWithdrawableOnHand: remainingWithdrawableOnHand,
+      remainingWithdrawableGcash: remainingWithdrawableGcash,
+      remainingWithdrawableMaya: remainingWithdrawableMaya,
+      remainingWithdrawableTotal: remainingWithdrawableTotal,
+      transactionCount: transactionCount,
       alertTitle: alertContent.title,
       alertMessage: alertContent.message,
       alertActionLabel: alertContent.actionLabel,
       showAlertCard: alertContent.show,
       activities: activities,
+      chargeTransactions: chargeTransactions,
       walletSpots: walletSpots,
       mayaSpots: mayaSpots,
       cashSpots: cashSpots,
@@ -380,6 +540,29 @@ class DashboardRepository {
     }
 
     return _ChargeRouting(amount: chargeAmount, destination: destination);
+  }
+
+  String _resolveFeeMovementSource(
+    Map<String, Object?> row,
+    String movementType,
+  ) {
+    if (movementType == 'fee transfer') {
+      final explicitSource = ((row['owner_party_account'] as String?) ?? '')
+          .trim()
+          .toLowerCase();
+      if (explicitSource.isNotEmpty) {
+        return explicitSource;
+      }
+
+      // Legacy fallback for older rows without explicit fee source.
+      final title = ((row['title'] as String?) ?? '').toLowerCase();
+      final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
+      if (title.contains('from on-hand cash') || onHandDelta < 0) {
+        return 'on-hand cash';
+      }
+    }
+
+    return ((row['wallet_account'] as String?) ?? '').trim().toLowerCase();
   }
 
   String _extractChargeDestination(Map<String, Object?> row) {
@@ -538,11 +721,31 @@ class DashboardRepository {
       activityColor = _colorFor(iconKey);
     }
 
+    // For transactions, show the net amount (excluding the store's service fee)
+    // using the delta columns, which already reflect the actual money movement.
+    final double displayAmount;
+    if (entryType == 'transaction') {
+      final walletDelta = (row['wallet_delta'] as num?)?.toDouble() ?? 0;
+      final mayaWalletDelta =
+          (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0;
+      final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
+      final walletOrMayaAbs = walletDelta != 0
+          ? walletDelta.abs()
+          : mayaWalletDelta.abs();
+      final onHandAbs = onHandDelta.abs();
+      displayAmount = (walletOrMayaAbs > 0 && onHandAbs > 0)
+          ? (walletOrMayaAbs < onHandAbs ? walletOrMayaAbs : onHandAbs)
+          : amount;
+    } else {
+      displayAmount = amount;
+    }
+
     return DashboardActivity(
       title: row['title'] as String,
       subtitle:
           '${walletAccount != null && walletAccount.isNotEmpty ? '$walletAccount • ' : ''}$subtitleRef • ${_activityDateFormat.format(createdAt)}',
-      amount: '${isNegative ? '-' : '+'}${_currencyFormat.format(amount)}',
+      amount:
+          '${isNegative ? '-' : '+'}${_currencyFormat.format(displayAmount)}',
       tag: _activityTag(row),
       scope: scope,
       createdAt: createdAt,

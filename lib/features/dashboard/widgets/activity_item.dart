@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import '../../../shared/widgets/architect_card.dart';
 
 class ArchitectActivityItem extends StatelessWidget {
   final String title;
@@ -25,71 +24,130 @@ class ArchitectActivityItem extends StatelessWidget {
     final isPositive = amount.startsWith('+');
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: ArchitectCard(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: iconColor,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      Text(
-                        subtitle,
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  amount,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: isPositive ? AppColors.secondary : const Color(0xFFD32F2F),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const SizedBox(width: 50), // Align with title
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    tag,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.onSurfaceVariant,
+            // Timeline left column
+            SizedBox(
+              width: 52,
+              child: Stack(
+                children: [
+                  // Full-height connecting line
+                  Positioned(
+                    top: 0,
+                    bottom: 0,
+                    left: 25,
+                    child: Container(
+                      width: 1.5,
+                      color: AppColors.outlineVariant.withValues(alpha: 0.45),
                     ),
                   ),
+                  // Icon circle cutting through the line
+                  Positioned(
+                    top: 14,
+                    left: 8,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                        color: AppColors.background,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: iconColor.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: iconColor.withValues(alpha: 0.35),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Icon(icon, color: iconColor, size: 14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Content area
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 14, bottom: 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                          if (tag.trim().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: iconColor.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  tag,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: iconColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      amount,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: isPositive
+                            ? AppColors.secondary
+                            : AppColors.error,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ],
         ),
