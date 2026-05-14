@@ -62,6 +62,9 @@ class _ReceiptScanButtonState extends State<ReceiptScanButton> {
         message: context.l10n.scanningReceiptModalMessage,
         caption: context.l10n.scanningReceipt,
       );
+      // Give the dialog one frame to render before starting OCR,
+      // so loading.close() is never called before the dialog is on the stack.
+      await Future<void>.delayed(Duration.zero);
 
       ReceiptDraft? draft;
       try {

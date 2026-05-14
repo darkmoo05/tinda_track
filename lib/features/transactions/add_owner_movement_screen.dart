@@ -6,6 +6,8 @@ import '../../core/app_theme.dart';
 import '../../shared/receipt_scan/receipt_draft.dart';
 import '../../shared/receipt_scan/receipt_scan_button.dart';
 import '../../shared/receipt_scan/receipt_scan_service.dart';
+import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import '../../core/l10n_extension.dart';
 
 class AddOwnerMovementScreen extends StatefulWidget {
@@ -329,46 +331,29 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surfaceContainerLowest,
-        elevation: 0,
+      appBar: ArchitectAppBar(
+        title: context.l10n.appTitle,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded, color: AppColors.onSurface),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          context.l10n.newOwnerMovement,
-          style: const TextStyle(
-            color: AppColors.onSurfaceVariant,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        centerTitle: false,
+        actions: const [],
       ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          Text(
-            context.l10n.recordOwnerMovement,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppColors.onSurface,
-              fontWeight: FontWeight.bold,
-            ),
+          ScreenHeaderCard(
+            title: 'Owner Movement',
+            subtitle:
+                'Record a top-up, cash transfer, borrowed funds, or fee withdrawal.',
           ),
-          const SizedBox(height: 6),
-          Text(
-            context.l10n.phase3Description,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           _buildCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _buildSectionTitle('Movement Details'),
+                const SizedBox(height: 12),
                 _buildDropdownField(
                   label: context.l10n.movementType,
                   value: _movementType,
@@ -833,10 +818,11 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -920,6 +906,17 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
           ).copyWith(hintText: hint, prefixText: prefixText),
         ),
       ],
+    );
+  }
+
+  Widget _buildSectionTitle(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: AppColors.onSurface,
+      ),
     );
   }
 

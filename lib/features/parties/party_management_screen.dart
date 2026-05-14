@@ -5,6 +5,7 @@ import '../../core/app_theme.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import 'data/party_repository.dart';
 import 'widgets/search_input.dart';
 import 'widgets/party_list_item.dart';
@@ -44,7 +45,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
       key: _scaffoldKey,
       drawer: const AppSideDrawer(),
       appBar: ArchitectAppBar(
-        title: context.l10n.yourPeople,
+        title: context.l10n.appTitle,
         onSettingsPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       body: ListView(
@@ -122,26 +123,9 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.l10n.yourPeople,
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          context.l10n.manageCustomersPartners,
-          style: Theme.of(context).textTheme.labelMedium,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+    return ScreenHeaderCard(
+      title: context.l10n.yourPeople,
+      subtitle: context.l10n.manageCustomersPartners,
     );
   }
 
@@ -172,13 +156,15 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
                 children: [
                   _buildStatPill(
                     context,
-                    '👥 $total ${context.l10n.peopleSaved}',
+                    Icons.people_alt_rounded,
+                    '$total ${context.l10n.peopleSaved}',
                     AppColors.surfaceContainerLow,
                     AppColors.onSurface,
                   ),
                   _buildStatPill(
                     context,
-                    '✓ $verified ${context.l10n.verified} ($percent%)',
+                    Icons.verified_rounded,
+                    '$verified ${context.l10n.verified} ($percent%)',
                     AppColors.secondary.withValues(alpha: 0.12),
                     AppColors.secondary,
                   ),
@@ -188,7 +174,8 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
                 const SizedBox(height: 8),
                 _buildStatPill(
                   context,
-                  '⏳ $pending ${context.l10n.waitingToVerify}',
+                  Icons.schedule_rounded,
+                  '$pending ${context.l10n.waitingToVerify}',
                   Colors.orange.withValues(alpha: 0.12),
                   Colors.orange.shade800,
                 ),
@@ -202,6 +189,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
 
   Widget _buildStatPill(
     BuildContext context,
+    IconData icon,
     String label,
     Color bgColor,
     Color textColor,
@@ -212,14 +200,21 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
         color: bgColor,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-          color: textColor,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: textColor),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -290,43 +285,25 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   }
 
   Widget _buildFilterChip(String label, bool selected, VoidCallback onTap) {
-    return Semantics(
-      button: true,
+    return ChoiceChip(
+      label: Text(label),
       selected: selected,
-      label: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: selected
-                    ? AppColors.primary
-                    : AppColors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : AppColors.onSurface,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          ),
-        ),
+      onSelected: (_) => onTap(),
+      selectedColor: AppColors.primary.withValues(alpha: 0.14),
+      backgroundColor: AppColors.surfaceContainerLow,
+      side: BorderSide(
+        color: selected
+            ? AppColors.primary.withValues(alpha: 0.35)
+            : AppColors.outlineVariant.withValues(alpha: 0.5),
       ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: selected ? AppColors.primary : AppColors.onSurface,
+      ),
+      showCheckmark: false,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 
@@ -346,9 +323,12 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
         ),
         child: Column(
           children: [
-            Text(
-              hasActiveSearch ? '🔍' : '👋',
-              style: const TextStyle(fontSize: 48),
+            Icon(
+              hasActiveSearch
+                  ? Icons.search_off_rounded
+                  : Icons.people_outline_rounded,
+              size: 56,
+              color: AppColors.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(

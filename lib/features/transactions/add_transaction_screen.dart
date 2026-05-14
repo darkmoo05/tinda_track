@@ -4,6 +4,8 @@ import '../../core/data/app_database.dart';
 import '../../core/app_theme.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/receipt_scan/receipt_draft.dart';
+import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import '../../shared/receipt_scan/receipt_scan_button.dart';
 import '../../shared/receipt_scan/receipt_scan_service.dart';
 import '../charges/data/charge_repository.dart';
@@ -279,22 +281,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surfaceContainerLowest,
-        elevation: 0,
+      appBar: ArchitectAppBar(
+        title: context.l10n.appTitle,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded, color: AppColors.onSurface),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          context.l10n.newEntry,
-          style: const TextStyle(
-            color: AppColors.onSurfaceVariant,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        centerTitle: false,
+        actions: const [],
       ),
       body: Stack(
         children: [
@@ -302,27 +295,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(24),
             children: [
-              Text(
-                context.l10n.recordOwnerMovement,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: AppColors.onSurface,
-                  fontWeight: FontWeight.bold,
-                ),
+              ScreenHeaderCard(
+                title: 'New Transaction',
+                subtitle:
+                    'Select wallet & service, then enter the customer account and amount.',
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _buildCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle(context.l10n.recordTransactionDetails),
-                    const SizedBox(height: 4),
-                    Text(
-                      context.l10n.phase3Description,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
+                    _buildSectionTitle('Transaction Details'),
                     const SizedBox(height: 12),
                     _buildTypeSelector(),
                     const SizedBox(height: 16),
@@ -378,7 +361,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle(context.l10n.optionalDetailsSection),
+                    _buildSectionTitle('Additional Details'),
                     const SizedBox(height: 12),
                     _buildTextField(
                       controller: _referenceController,
@@ -998,6 +981,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             runSpacing: 8,
             children: [
               ChoiceChip(
+                showCheckmark: false,
+                shape: const StadiumBorder(),
                 label: Text(context.l10n.customerPaysFeeLabel),
                 selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
                 onSelected: (_) {
@@ -1007,6 +992,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 },
               ),
               ChoiceChip(
+                showCheckmark: false,
+                shape: const StadiumBorder(),
                 label: Text(context.l10n.deductedFromSentLabel),
                 selected:
                     _chargeHandlingMode ==
@@ -1099,7 +1086,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -1128,8 +1116,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             const SizedBox(height: 8),
             _buildSelectorStepCard(
               compact: compact,
-              title: context.l10n.stepOneChooseWallet,
-              subtitle: '💳 How will you send it?',
+              title: context.l10n.walletLabel,
+              subtitle: 'GCash or Maya',
               child: Row(
                 children: [
                   Expanded(
@@ -1165,8 +1153,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             SizedBox(height: compact ? 8 : 10),
             _buildSelectorStepCard(
               compact: compact,
-              title: context.l10n.stepTwoChooseService,
-              subtitle: '📊 What type of transaction?',
+              title: context.l10n.transactionTypeLabel,
+              subtitle: 'Cash In, Cash Out, Load, Bills, or QR',
               child: Wrap(
                 spacing: compact ? 6 : 8,
                 runSpacing: compact ? 6 : 8,
@@ -1178,6 +1166,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                             ? VisualDensity.compact
                             : VisualDensity.standard,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        showCheckmark: false,
+                        shape: const StadiumBorder(),
                         avatar: Icon(
                           _serviceIcon(serviceKey),
                           size: compact ? 14 : 16,
@@ -2295,7 +2285,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return Text(
       label,
       style: const TextStyle(
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: FontWeight.w700,
         color: AppColors.onSurface,
       ),

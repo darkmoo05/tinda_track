@@ -15,6 +15,7 @@ import '../../core/data/app_database.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import 'widgets/activity_tile.dart';
 import 'widgets/date_header.dart';
 
@@ -229,62 +230,20 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryContainer],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return ScreenHeaderCard(
+      title: context.l10n.movements,
+      subtitle: context.l10n.walletHistorySubtitle,
+      trailing: OutlinedButton.icon(
+        onPressed: _openLedgerReportSheet,
+        icon: const Icon(Icons.download_rounded, size: 18, color: Colors.white),
+        label: Text(
+          context.l10n.reports,
+          style: const TextStyle(color: Colors.white),
         ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.l10n.movements,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  context.l10n.walletHistorySubtitle,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.white70,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: _openLedgerReportSheet,
-            icon: const Icon(
-              Icons.download_rounded,
-              size: 18,
-              color: Colors.white,
-            ),
-            label: Text(
-              context.l10n.reports,
-              style: const TextStyle(color: Colors.white),
-            ),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.white54),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            ),
-          ),
-        ],
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: Colors.white54),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
       ),
     );
   }

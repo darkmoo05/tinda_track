@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_theme.dart';
+import '../../core/l10n_extension.dart';
+import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import 'data/dashboard_repository.dart';
 import 'data/statement_entry.dart';
 
@@ -104,7 +107,7 @@ class _PersonalExpenseStatementScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Borrowed Funds Statement')),
+      appBar: ArchitectAppBar(title: context.l10n.appTitle, actions: const []),
       body: FutureBuilder<List<StatementEntry>>(
         future: _entriesFuture,
         builder: (context, snapshot) {
@@ -143,7 +146,7 @@ class _PersonalExpenseStatementScreenState
           final filteredPersonal = _applyRecentFilter(personalEntries);
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
             children: [
               _buildPageHeader(summary),
               const SizedBox(height: 16),
@@ -223,44 +226,10 @@ class _PersonalExpenseStatementScreenState
   }
 
   Widget _buildPageHeader(_StatementSummary summary) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0D47A1), AppColors.primaryContainer],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Your Current Balance',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _fmt(summary.totalOutstanding),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 30,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'This is the total unpaid amount from your borrowed funds.',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-        ],
-      ),
+    return ScreenHeaderCard(
+      title: 'Borrowed Funds Statement',
+      subtitle: 'Outstanding balance · ${_fmt(summary.totalOutstanding)}',
+      gradientColors: const [Color(0xFFB71C1C), Color(0xFFE53935)],
     );
   }
 
@@ -801,7 +770,7 @@ class _PersonalExpenseStatementScreenState
   Widget _buildTimelineRow(StatementEntry entry) {
     final isPayment = _isPaymentType(entry.type);
     final badgeText = isPayment ? 'Payment Made' : 'Money Taken';
-    final badgeColor = isPayment ? AppColors.secondary : AppColors.primary;
+    final badgeColor = isPayment ? AppColors.secondary : AppColors.error;
     final icon = isPayment
         ? Icons.arrow_circle_up_rounded
         : Icons.arrow_circle_down_rounded;

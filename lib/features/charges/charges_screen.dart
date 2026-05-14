@@ -5,6 +5,7 @@ import '../../core/data/app_database.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import 'data/charge_repository.dart';
 
 class ChargesScreen extends StatefulWidget {
@@ -301,24 +302,9 @@ class _ChargesScreenState extends State<ChargesScreen> {
   }
 
   Widget _buildPageHeader(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.l10n.chargesManagement,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: AppColors.onSurface,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          context.l10n.setServiceFeeBrackets,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: AppColors.onSurfaceVariant),
-        ),
-      ],
+    return ScreenHeaderCard(
+      title: context.l10n.chargesManagement,
+      subtitle: context.l10n.setServiceFeeBrackets,
     );
   }
 
