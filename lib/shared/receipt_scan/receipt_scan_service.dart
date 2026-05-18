@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image/image.dart' as img;
@@ -9,6 +11,88 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'receipt_draft.dart';
+
+// Top-level function – must be outside any class so compute() can spawn it in
+// a separate isolate. Performs all CPU-heavy image decoding, cropping, and
+// enhancement; returns JPEG byte arrays ready for ML Kit OCR.
+List<Uint8List> _processReceiptSegments(Uint8List originalBytes) {
+  final decoded = img.decodeImage(originalBytes);
+  if (decoded == null || decoded.width < 80 || decoded.height < 80) return [];
+
+  final results = <Uint8List>[];
+
+  void addSegment({
+    required double x,
+    required double y,
+    required double w,
+    required double h,
+    double scale = 3.0,
+    double contrast = 1.5,
+    bool invertIfDark = false,
+  }) {
+    final cropX = (decoded.width * x).round();
+    final cropY = (decoded.height * y).round();
+    final cropW = (decoded.width * w).round().clamp(1, decoded.width - cropX);
+    final cropH = (decoded.height * h).round().clamp(1, decoded.height - cropY);
+
+    final cropped = img.copyCrop(
+      decoded,
+      x: cropX,
+      y: cropY,
+      width: cropW,
+      height: cropH,
+    );
+    var grayscale = img.grayscale(cropped);
+
+    if (invertIfDark) {
+      int totalLum = 0;
+      final sampleY = (grayscale.height * 0.4).round();
+      final sampleH = (grayscale.height * 0.2)
+          .clamp(1.0, grayscale.height.toDouble())
+          .round();
+      for (var py = sampleY; py < sampleY + sampleH; py++) {
+        for (var px = 0; px < grayscale.width; px++) {
+          totalLum += grayscale.getPixel(px, py).r.toInt();
+        }
+      }
+      final avgLum = totalLum / (grayscale.width * sampleH);
+      if (avgLum < 128) grayscale = img.invert(grayscale);
+    }
+
+    final resized = img.copyResize(
+      grayscale,
+      width: (grayscale.width * scale).round(),
+    );
+    final enhanced = img.adjustColor(
+      resized,
+      contrast: contrast,
+      brightness: 1.06,
+      saturation: 0,
+    );
+    results.add(img.encodeJpg(enhanced, quality: 94));
+  }
+
+  addSegment(
+    x: 0.0,
+    y: 0.0,
+    w: 1.0,
+    h: 1.0,
+    scale: 2.5,
+    contrast: 1.5,
+    invertIfDark: true,
+  );
+  addSegment(
+    x: 0.0,
+    y: 0.12,
+    w: 1.0,
+    h: 0.76,
+    scale: 3.0,
+    contrast: 1.6,
+    invertIfDark: true,
+  );
+
+  return results;
+}
 
 class ReceiptScanService {
   const ReceiptScanService._();
@@ -150,91 +234,20 @@ class ReceiptScanService {
   Future<String> runCroppedOcrPass(String originalPath) async {
     try {
       final originalBytes = await File(originalPath).readAsBytes();
-      final decoded = img.decodeImage(originalBytes);
-      if (decoded == null || decoded.width < 80 || decoded.height < 80)
-        return '';
+
+      // Offload all CPU-heavy image decoding, cropping, and enhancement to a
+      // background isolate so the UI spinner keeps animating uninterrupted.
+      final segmentBytes = await compute(
+        _processReceiptSegments,
+        originalBytes,
+      );
+      if (segmentBytes.isEmpty) return '';
 
       final segmentTexts = <String>[];
-
-      Future<void> addSegment({
-        required double x,
-        required double y,
-        required double w,
-        required double h,
-        double scale = 3.0,
-        double contrast = 1.5,
-        bool invertIfDark = false,
-      }) async {
-        final cropX = (decoded.width * x).round();
-        final cropY = (decoded.height * y).round();
-        final cropW = (decoded.width * w).round().clamp(
-          1,
-          decoded.width - cropX,
-        );
-        final cropH = (decoded.height * h).round().clamp(
-          1,
-          decoded.height - cropY,
-        );
-
-        final cropped = img.copyCrop(
-          decoded,
-          x: cropX,
-          y: cropY,
-          width: cropW,
-          height: cropH,
-        );
-        var grayscale = img.grayscale(cropped);
-
-        if (invertIfDark) {
-          int totalLum = 0;
-          final sampleY = (grayscale.height * 0.4).round();
-          final sampleH = (grayscale.height * 0.2)
-              .clamp(1.0, grayscale.height.toDouble())
-              .round();
-          for (var py = sampleY; py < sampleY + sampleH; py++) {
-            for (var px = 0; px < grayscale.width; px++) {
-              totalLum += grayscale.getPixel(px, py).r.toInt();
-            }
-          }
-          final avgLum = totalLum / (grayscale.width * sampleH);
-          if (avgLum < 128) grayscale = img.invert(grayscale);
-        }
-
-        final resized = img.copyResize(
-          grayscale,
-          width: (grayscale.width * scale).round(),
-        );
-        final enhanced = img.adjustColor(
-          resized,
-          contrast: contrast,
-          brightness: 1.06,
-          saturation: 0,
-        );
-
-        final text = await _runOcrOnTempImage(enhanced, 'seg');
+      for (final jpegBytes in segmentBytes) {
+        final text = await _runOcrOnTempImageBytes(jpegBytes, 'seg');
         if (text.trim().isNotEmpty) segmentTexts.add(text.trim());
       }
-
-      // Full image enhanced pass
-      await addSegment(
-        x: 0.0,
-        y: 0.0,
-        w: 1.0,
-        h: 1.0,
-        scale: 2.5,
-        contrast: 1.5,
-        invertIfDark: true,
-      );
-      // Focused centre strip
-      await addSegment(
-        x: 0.0,
-        y: 0.12,
-        w: 1.0,
-        h: 0.76,
-        scale: 3.0,
-        contrast: 1.6,
-        invertIfDark: true,
-      );
 
       return segmentTexts.join('\n');
     } catch (error, stackTrace) {
@@ -243,14 +256,16 @@ class ReceiptScanService {
     }
   }
 
-  Future<String> _runOcrOnTempImage(img.Image image, String prefix) async {
+  Future<String> _runOcrOnTempImageBytes(
+    Uint8List jpegBytes,
+    String prefix,
+  ) async {
     final tempDir = await getTemporaryDirectory();
     final cropPath = p.join(
       tempDir.path,
       '${prefix}_${DateTime.now().microsecondsSinceEpoch}.jpg',
     );
-    final cropFile = File(cropPath);
-    await cropFile.writeAsBytes(img.encodeJpg(image, quality: 94));
+    await File(cropPath).writeAsBytes(jpegBytes);
     return runOcrOnImagePath(cropPath);
   }
 

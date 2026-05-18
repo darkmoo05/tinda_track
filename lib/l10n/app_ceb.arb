@@ -23,7 +23,7 @@
   "recordTransaction": "I-rekord ang Transaksyon",
   "transactionTypeLabel": "Klase sa Transaksyon",
   "accountNumber": "Recipient Account",
-  "searchOrEnterAccountNumber": "Ngalan o numero",
+  "searchOrEnterAccountNumber": "Numero",
   "scanningReceipt": "Gi-scan ang resibo…",
   "scanningReceiptModalMessage": "Gibasa ang hulagway ug gi-parse ang data sa resibo...",
   "scanReceiptButton": "I-scan ang Resibo (Camera/Gallery)",

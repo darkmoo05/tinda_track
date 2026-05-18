@@ -6,6 +6,7 @@ import '../../core/app_theme.dart';
 import '../../core/data/app_database.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import '../transactions/add_owner_movement_screen.dart';
 import '../dashboard/data/dashboard_repository.dart';
 import '../dashboard/widgets/analytics_card.dart';
@@ -242,41 +243,28 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: ArchitectAppBar(title: context.l10n.appTitle),
+      appBar: ArchitectAppBar(title: context.l10n.appTitle, actions: const []),
       body: CustomScrollView(
         slivers: [
           // ── Fixed top content ──────────────────────────────────
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
             sliver: SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    context.l10n.chargesEarnings,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.onSurface,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'All-time charges collected from transactions',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
-                    ),
+                  ScreenHeaderCard(
+                    title: context.l10n.chargesEarnings,
+                    subtitle: 'All-time charges collected from transactions',
                   ),
                   const SizedBox(height: 16),
                   _buildHeroBanner(),
                   const SizedBox(height: 14),
                   _buildWithdrawableCard(),
                   const SizedBox(height: 14),
-                  _buildFeeMovementLog(),
-                  const SizedBox(height: 20),
                   _buildAnalyticsSection(),
+                  const SizedBox(height: 20),
+                  _buildFeeMovementLog(),
                   const SizedBox(height: 24),
                   // Fee History header
                   Row(
@@ -328,7 +316,7 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
           // ── Day groups — lazy, only visible headers are built ──
           if (_dayGroups.isNotEmpty)
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
               sliver: SliverList.builder(
                 itemCount: _dayGroups.length,
                 itemBuilder: (_, i) => _buildDayGroup(_dayGroups[i]),

@@ -15,6 +15,7 @@ import '../../core/data/app_database.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import 'widgets/activity_tile.dart';
 import 'widgets/date_header.dart';
 
@@ -229,62 +230,20 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryContainer],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return ScreenHeaderCard(
+      title: context.l10n.movements,
+      subtitle: context.l10n.walletHistorySubtitle,
+      trailing: OutlinedButton.icon(
+        onPressed: _openLedgerReportSheet,
+        icon: const Icon(Icons.download_rounded, size: 18, color: Colors.white),
+        label: Text(
+          context.l10n.reports,
+          style: const TextStyle(color: Colors.white),
         ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.l10n.movements,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  context.l10n.walletHistorySubtitle,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.white70,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: _openLedgerReportSheet,
-            icon: const Icon(
-              Icons.download_rounded,
-              size: 18,
-              color: Colors.white,
-            ),
-            label: Text(
-              context.l10n.reports,
-              style: const TextStyle(color: Colors.white),
-            ),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.white54),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            ),
-          ),
-        ],
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: Colors.white54),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
       ),
     );
   }
@@ -590,10 +549,20 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         movementType == 'borrowed funds repayment';
   }
 
+  bool _isFeeMovementPerspectiveRow(_HistoryRow item) {
+    if (item.entryType != 'owner_movement') {
+      return false;
+    }
+
+    final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
+    return movementType == 'fee withdrawal' || movementType == 'fee transfer';
+  }
+
   bool _isTransactionLogRow(_HistoryRow item) {
     return item.entryType == 'transaction' ||
         _isCashTransferPerspectiveRow(item) ||
-        _isBorrowedFundsPerspectiveRow(item);
+        _isBorrowedFundsPerspectiveRow(item) ||
+        _isFeeMovementPerspectiveRow(item);
   }
 
   Future<void> _pickBeginDateFilter() async {
@@ -668,7 +637,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         movementType == 'initial capital' ||
         movementType == 'cash transfer (on-hand to wallet)' ||
         movementType == 'borrowed funds' ||
-        movementType == 'borrowed funds repayment';
+        movementType == 'borrowed funds repayment' ||
+        movementType == 'fee withdrawal' ||
+        movementType == 'fee transfer';
   }
 
   bool _matchesWalletPerspective(_HistoryRow item, String walletFilter) {
@@ -677,16 +648,19 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
     if (item.entryType == 'transaction') {
       if (normalizedFilter == 'on_hand') {
-        // On-hand cash card logs all inflow/outflow movements and any charge
-        // that is directed into on-hand cash (e.g. fee kept as physical cash).
-        return item.onHandDelta != 0 ||
-            (item.chargeAmount > 0 && item.chargeDestinationKey == 'on_hand');
+        // On-hand cash card logs all inflow/outflow movements AND any
+        // transaction that carries a service fee — the fee always has an
+        // on-hand cash dimension (either the fee is received as cash or it
+        // reduces the cash the customer receives).
+        return item.onHandDelta != 0 || item.chargeAmount > 0;
       }
 
       if (walletKey == normalizedFilter) {
         return true;
       }
 
+      // Also surface transactions whose fee is routed to this wallet
+      // (e.g. a cash-out where the fee stays in GCash).
       return item.chargeAmount > 0 &&
           item.chargeDestinationKey == normalizedFilter;
     }
@@ -700,15 +674,33 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       final isBorrowedFunds =
           movementType == 'borrowed funds' ||
           movementType == 'borrowed funds repayment';
-      if (!isTopUp && !isCashTransfer && !isBorrowedFunds) {
+      final isFeeMovement =
+          movementType == 'fee withdrawal' || movementType == 'fee transfer';
+      if (!isTopUp && !isCashTransfer && !isBorrowedFunds && !isFeeMovement) {
         return false;
       }
 
       if (isCashTransfer && normalizedFilter == 'on_hand') {
-        return item.onHandDelta != 0;
+        return item.onHandDelta != 0 || item.chargeAmount > 0;
       }
 
-      return walletKey == normalizedFilter;
+      // Fee withdrawals/transfers: match the source wallet (walletAccount)
+      // AND surface in on_hand if the fee itself is routed there.
+      if (isFeeMovement) {
+        if (walletKey == normalizedFilter) return true;
+        if (normalizedFilter == 'on_hand') {
+          return item.onHandDelta != 0;
+        }
+        return false;
+      }
+
+      if (walletKey == normalizedFilter) {
+        return true;
+      }
+
+      // Surface owner movements whose fee is routed to a different wallet/cash.
+      return item.chargeAmount > 0 &&
+          item.chargeDestinationKey == normalizedFilter;
     }
 
     return false;
@@ -794,9 +786,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}';
     final dateTimeText =
         '${_fullDateFormat.format(item.createdAt)} ${_timeFormat.format(item.createdAt)}';
-    final walletDelta = _walletDeltaForItem(item);
-    final walletChangeText = _signedCurrency(walletDelta);
-    final cashChangeText = _signedCurrency(item.onHandDelta);
     final entryTypeLabel = _isTransactionLogRow(item)
         ? context.l10n.historyTransactionLabel
         : context.l10n.historyOwnerActivityLabel;
@@ -809,6 +798,21 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     final hasAccountNumber = (item.accountNumber ?? '').trim().isNotEmpty;
     final hasWalletAccount = item.walletAccount.trim().isNotEmpty;
     final hasNotes = item.note.trim().isNotEmpty;
+
+    final isMaya = _normalizeWalletKey(item.walletAccount) == 'maya';
+    final double walletDelta = isMaya ? item.mayaWalletDelta : item.walletDelta;
+    final double afterWalletBalance = isMaya
+        ? item.postMayaBalance
+        : item.postGcashBalance;
+    final double beforeWalletBalance = afterWalletBalance - walletDelta;
+    final double afterOnHandBalance = item.postOnHandBalance;
+    final double beforeOnHandBalance = afterOnHandBalance - item.onHandDelta;
+    final walletLabel = hasWalletAccount
+        ? _displayWalletAccountLabel(item.walletAccount)
+        : '';
+    final categoryLine = hasWalletAccount
+        ? '${item.title} · $walletLabel'
+        : item.title;
 
     await showDialog<void>(
       context: context,
@@ -830,6 +834,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ── Gradient Header ─────────────────────────────────
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
@@ -848,7 +853,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                         children: [
                           Text(
                             detailsTitle,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
@@ -889,114 +894,115 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                         ],
                       ),
                     ),
+
+                    // ── Body ────────────────────────────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Build rows list so we can intersperse dividers
-                          Builder(
-                            builder: (context) {
-                              final rows = <Widget>[
-                                _buildDetailRow(
-                                  context.l10n.historyTypeLabel,
-                                  entryTypeLabel,
+                          // ── Info Card ──────────────────────────────
+                          Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceContainerLowest,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: AppColors.outlineVariant.withValues(
+                                  alpha: 0.5,
                                 ),
-                                _buildDetailRow(
-                                  context.l10n.historyCategoryLabel,
-                                  item.title,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildIconInfoRow(
+                                  Icons.sell_outlined,
+                                  categoryLine,
+                                  hasDivider: true,
                                 ),
-                                if (hasWalletAccount)
-                                  _buildDetailRow(
-                                    context.l10n.walletLabel,
-                                    _displayWalletAccountLabel(
-                                      item.walletAccount,
-                                    ),
-                                  ),
                                 if (hasDistinctReferenceId)
-                                  _buildDetailRow(
-                                    context.l10n.referenceNo,
-                                    item.rawReference,
+                                  _buildIconInfoRow(
+                                    Icons.tag_rounded,
+                                    '${context.l10n.referenceNo}: ${item.rawReference}',
+                                    hasDivider:
+                                        hasAccountNumber ||
+                                        item.chargeAmount > 0,
                                   ),
                                 if (hasAccountNumber)
-                                  _buildDetailRow(
-                                    context.l10n.historyAccountLabel,
-                                    item.accountNumber!,
+                                  _buildIconInfoRow(
+                                    Icons.person_outline_rounded,
+                                    '${context.l10n.historyAccountLabel}: ${item.accountNumber!}',
+                                    hasDivider: item.chargeAmount > 0,
                                   ),
                                 if (!hasDistinctReferenceId &&
-                                    !hasAccountNumber)
-                                  _buildDetailRow(
-                                    context.l10n.referenceNo,
-                                    item.rawReference,
+                                    !hasAccountNumber &&
+                                    item.rawReference.trim().isNotEmpty)
+                                  _buildIconInfoRow(
+                                    Icons.tag_rounded,
+                                    '${context.l10n.referenceNo}: ${item.rawReference}',
+                                    hasDivider: item.chargeAmount > 0,
                                   ),
-                                _buildDetailRow(
-                                  context.l10n.historyAmountShownLabel,
-                                  amountText,
-                                  valueColor: accentColor,
-                                ),
                                 if (item.chargeAmount > 0)
-                                  _buildDetailRow(
-                                    context.l10n.serviceFee,
-                                    _currencyFormat.format(item.chargeAmount),
+                                  _buildIconInfoRow(
+                                    Icons.receipt_long_outlined,
+                                    '${context.l10n.serviceFee}: ${_currencyFormat.format(item.chargeAmount)}',
+                                    valueColor: accentColor,
+                                    hasDivider: true,
                                   ),
-                                if (hasWalletAccount)
-                                  _buildDetailRow(
-                                    context.l10n.walletChangeLabel,
-                                    walletChangeText,
-                                    valueColor: walletDelta < 0
-                                        ? AppColors.error
-                                        : AppColors.secondary,
-                                  ),
-                                _buildDetailRow(
-                                  context.l10n.cashChangeLabel,
-                                  cashChangeText,
-                                  valueColor: item.onHandDelta < 0
-                                      ? AppColors.error
-                                      : AppColors.secondary,
-                                ),
-                                _buildDetailRow(
-                                  context.l10n.savedOnLabel,
+                                _buildIconInfoRow(
+                                  Icons.schedule_rounded,
                                   dateTimeText,
+                                  hasDivider: false,
                                 ),
-                              ];
-
-                              return Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainerLowest,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: AppColors.outlineVariant.withValues(
-                                      alpha: 0.5,
-                                    ),
-                                  ),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Column(
-                                    children: [
-                                      for (int i = 0; i < rows.length; i++) ...[
-                                        rows[i],
-                                        if (i < rows.length - 1)
-                                          const Divider(
-                                            height: 1,
-                                            thickness: 1,
-                                            indent: 14,
-                                            endIndent: 14,
-                                            color:
-                                                AppColors.surfaceContainerHigh,
-                                          ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
+                              ],
+                            ),
                           ),
+
+                          const SizedBox(height: 14),
+
+                          // ── Balance Monitor ─────────────────────────
+                          const Text(
+                            'BALANCE MONITOR',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.onSurfaceVariant,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (hasWalletAccount) ...[
+                                Expanded(
+                                  child: _buildBalanceCard(
+                                    label: walletLabel,
+                                    icon: Icons.account_balance_wallet_outlined,
+                                    beforeBalance: beforeWalletBalance,
+                                    afterBalance: afterWalletBalance,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                              ],
+                              Expanded(
+                                child: _buildBalanceCard(
+                                  label: context.l10n.onHand,
+                                  icon: Icons.payments_outlined,
+                                  beforeBalance: beforeOnHandBalance,
+                                  afterBalance: afterOnHandBalance,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // ── Notes ───────────────────────────────────
                           if (hasNotes) _buildNotesSection(item.note),
                         ],
                       ),
                     ),
+
+                    // ── Close Button ─────────────────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                       child: SizedBox(
@@ -1024,34 +1030,135 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      child: Row(
+  Widget _buildIconInfoRow(
+    IconData icon,
+    String text, {
+    Color? valueColor,
+    bool hasDivider = true,
+  }) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(icon, size: 15, color: AppColors.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: valueColor ?? AppColors.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (hasDivider)
+          const Divider(
+            height: 1,
+            thickness: 1,
+            indent: 14,
+            endIndent: 14,
+            color: AppColors.surfaceContainerHigh,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBalanceCard({
+    required String label,
+    required IconData icon,
+    required double beforeBalance,
+    required double afterBalance,
+  }) {
+    final beforeText = _currencyFormat.format(beforeBalance);
+    final afterText = _currencyFormat.format(afterBalance);
+    final diff = afterBalance - beforeBalance;
+    final isIncreased = diff > 0;
+    final isUnchanged = diff == 0;
+    final trendIcon = isUnchanged
+        ? Icons.trending_flat_rounded
+        : isIncreased
+        ? Icons.trending_up_rounded
+        : Icons.trending_down_rounded;
+    final trendColor = isUnchanged
+        ? AppColors.onSurfaceVariant
+        : isIncreased
+        ? AppColors.secondary
+        : AppColors.error;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 4,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
+          Row(
+            children: [
+              Icon(icon, size: 13, color: AppColors.primary),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Before',
+            style: TextStyle(
+              fontSize: 10,
+              color: AppColors.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 5,
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: TextStyle(
-                fontSize: 13,
-                color: valueColor ?? AppColors.onSurface,
-                fontWeight: FontWeight.w700,
+          const SizedBox(height: 2),
+          Text(
+            beforeText,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text(
+                'After',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: AppColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
+              const SizedBox(width: 4),
+              Icon(trendIcon, size: 12, color: trendColor),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            afterText,
+            style: TextStyle(
+              fontSize: 13,
+              color: trendColor,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -1109,57 +1216,77 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
   Future<void> _loadHistory() async {
     final db = await _database.database;
+    // Load ASC so we can compute accurate running (post) balances.
     final rows = await db.query(
       AppDatabase.ledgerTable,
-      orderBy: 'created_at DESC, id DESC',
+      orderBy: 'created_at ASC, id ASC',
     );
 
-    final allRows = rows
-        .map((row) {
-          final entryType = row['entry_type'] as String;
-          final reference = row['reference'] as String;
-          final walletAccount = (row['wallet_account'] as String?) ?? '';
-          final note = (row['note'] as String?) ?? '';
-          final rawIconKey = row['icon_key'] as String;
-          final iconKey = walletAccount == 'Maya Wallet'
-              ? (rawIconKey == 'cash_in'
-                    ? 'maya_cash_in'
-                    : rawIconKey == 'cash_out'
-                    ? 'maya_cash_out'
-                    : rawIconKey == 'wallet'
-                    ? 'maya_wallet'
-                    : rawIconKey)
-              : rawIconKey;
-          final displayReference = entryType == 'transaction'
-              ? _resolveTransactionAccountNumber(reference, note)
-              : reference;
+    double runningGcash = 0;
+    double runningMaya = 0;
+    double runningOnHand = 0;
 
-          return _HistoryRow(
-            entryType: entryType,
-            title: row['title'] as String,
-            reference: displayReference,
-            rawReference: reference,
-            accountNumber: entryType == 'transaction' ? displayReference : null,
-            walletAccount: walletAccount,
-            note: note,
-            amount: (row['amount'] as num).toDouble(),
-            tag: row['tag'] as String,
-            iconKey: iconKey,
-            createdAt: DateTime.parse(row['created_at'] as String),
-            ownerMovementType: row['owner_movement_type'] as String?,
-            onHandDelta: (row['on_hand_delta'] as num?)?.toDouble() ?? 0,
-            walletDelta: (row['wallet_delta'] as num?)?.toDouble() ?? 0,
-            mayaWalletDelta:
-                (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0,
-            chargeAmount: _extractChargeAmountFromNote(note),
-            chargeDestinationKey: _extractChargeDestinationKeyFromNote(note),
-          );
-        })
-        .toList(growable: false);
+    final allRows = <_HistoryRow>[];
+    for (final row in rows) {
+      final entryType = row['entry_type'] as String;
+      final reference = row['reference'] as String;
+      final walletAccount = (row['wallet_account'] as String?) ?? '';
+      final note = (row['note'] as String?) ?? '';
+      final rawIconKey = row['icon_key'] as String;
+      final iconKey = walletAccount == 'Maya Wallet'
+          ? (rawIconKey == 'cash_in'
+                ? 'maya_cash_in'
+                : rawIconKey == 'cash_out'
+                ? 'maya_cash_out'
+                : rawIconKey == 'wallet'
+                ? 'maya_wallet'
+                : rawIconKey)
+          : rawIconKey;
+      final displayReference = entryType == 'transaction'
+          ? _resolveTransactionAccountNumber(reference, note)
+          : reference;
+
+      final walletDelta = (row['wallet_delta'] as num?)?.toDouble() ?? 0;
+      final mayaWalletDelta =
+          (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0;
+      final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
+
+      runningGcash += walletDelta;
+      runningMaya += mayaWalletDelta;
+      runningOnHand += onHandDelta;
+
+      allRows.add(
+        _HistoryRow(
+          entryType: entryType,
+          title: row['title'] as String,
+          reference: displayReference,
+          rawReference: reference,
+          accountNumber: entryType == 'transaction' ? displayReference : null,
+          walletAccount: walletAccount,
+          note: note,
+          amount: (row['amount'] as num).toDouble(),
+          tag: row['tag'] as String,
+          iconKey: iconKey,
+          createdAt: DateTime.parse(row['created_at'] as String),
+          ownerMovementType: row['owner_movement_type'] as String?,
+          onHandDelta: onHandDelta,
+          walletDelta: walletDelta,
+          mayaWalletDelta: mayaWalletDelta,
+          chargeAmount: _extractChargeAmountFromNote(note),
+          chargeDestinationKey: _extractChargeDestinationKeyFromNote(note),
+          postGcashBalance: runningGcash,
+          postMayaBalance: runningMaya,
+          postOnHandBalance: runningOnHand,
+        ),
+      );
+    }
+
+    // Reverse for DESC display order.
+    final allRowsDesc = allRows.reversed.toList(growable: false);
 
     if (!mounted) return;
-    final txRows = allRows.where(_isTransactionPerspectiveRow).toList();
-    final movRows = allRows
+    final txRows = allRowsDesc.where(_isTransactionPerspectiveRow).toList();
+    final movRows = allRowsDesc
         .where((row) => row.entryType == 'owner_movement')
         .toList();
     setState(() {
@@ -2105,20 +2232,31 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
   String? _buildTileSupportingText(_HistoryRow item) {
     if (item.entryType == 'transaction' && item.chargeAmount > 0) {
-      return context.l10n.includesFee(
-        _currencyFormat.format(item.chargeAmount),
-      );
+      final feeText = _currencyFormat.format(item.chargeAmount);
+      final destLabel = _walletLabelFromKey(item.chargeDestinationKey);
+      final base = context.l10n.includesFee(feeText);
+      return destLabel != null ? '$base → $destLabel' : base;
     }
 
     if (_isCashTransferPerspectiveRow(item)) {
-      return 'On-hand cash moved into ${_displayWalletAccountLabel(item.walletAccount)}';
+      final base =
+          'On-hand cash moved into ${_displayWalletAccountLabel(item.walletAccount)}';
+      return _appendFeeToText(item, base);
     }
 
     final friendlyOwnerMovementType = _friendlyOwnerMovementType(
       item.ownerMovementType,
     );
     if (friendlyOwnerMovementType != null) {
-      return friendlyOwnerMovementType;
+      return _appendFeeToText(item, friendlyOwnerMovementType);
+    }
+
+    // Any other owner movement that carries a fee.
+    if (item.chargeAmount > 0) {
+      final feeText = _currencyFormat.format(item.chargeAmount);
+      final destLabel = _walletLabelFromKey(item.chargeDestinationKey);
+      final base = context.l10n.includesFee(feeText);
+      return destLabel != null ? '$base → $destLabel' : base;
     }
 
     final tag = item.tag.trim();
@@ -2127,6 +2265,17 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     }
 
     return tag;
+  }
+
+  /// Appends "• Fee: ₱X → Destination" to [base] if [item] has a charge.
+  String _appendFeeToText(_HistoryRow item, String base) {
+    if (item.chargeAmount <= 0) return base;
+    final feeText = _currencyFormat.format(item.chargeAmount);
+    final destLabel = _walletLabelFromKey(item.chargeDestinationKey);
+    final feePart = destLabel != null
+        ? 'Fee: $feeText → $destLabel'
+        : 'Fee: $feeText';
+    return '$base • $feePart';
   }
 
   String? _friendlyOwnerMovementType(String? movementType) {
@@ -2141,6 +2290,12 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         normalized == 'personal expense payment') {
       return 'Borrowed Funds Repayment';
     }
+    if (normalized == 'fee withdrawal') {
+      return 'Fee Withdrawal';
+    }
+    if (normalized == 'fee transfer') {
+      return 'Fee Transfer';
+    }
     return null;
   }
 
@@ -2154,6 +2309,19 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         return context.l10n.onHand;
       default:
         return walletAccount.trim();
+    }
+  }
+
+  String? _walletLabelFromKey(String? key) {
+    switch (key) {
+      case 'gcash':
+        return context.l10n.gcash;
+      case 'maya':
+        return context.l10n.maya;
+      case 'on_hand':
+        return context.l10n.onHand;
+      default:
+        return null;
     }
   }
 
@@ -2297,6 +2465,9 @@ class _HistoryRow {
     required this.mayaWalletDelta,
     required this.chargeAmount,
     required this.chargeDestinationKey,
+    required this.postGcashBalance,
+    required this.postMayaBalance,
+    required this.postOnHandBalance,
     this.accountNumber,
     this.ownerMovementType,
   });
@@ -2318,6 +2489,9 @@ class _HistoryRow {
   final double mayaWalletDelta;
   final double chargeAmount;
   final String? chargeDestinationKey;
+  final double postGcashBalance;
+  final double postMayaBalance;
+  final double postOnHandBalance;
 }
 
 enum _ReportFileType { pdf, excel }

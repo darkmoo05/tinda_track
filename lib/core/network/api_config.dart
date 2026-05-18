@@ -6,7 +6,7 @@ class ApiConfig {
   ApiConfig._();
 
   static const int _port = 8080;
-  static const String _lanHost = 'http://192.168.1.24';
+  static const String _lanHost = 'http://192.168.1.26';
 
   static String get _host {
     if (kIsWeb) {

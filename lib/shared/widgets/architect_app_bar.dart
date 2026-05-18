@@ -6,11 +6,16 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
   final VoidCallback? onSettingsPressed;
 
+  /// Optional custom leading widget. When provided it replaces the default
+  /// back-arrow so callers can supply a close button on modal screens.
+  final Widget? leading;
+
   const ArchitectAppBar({
     super.key,
     required this.title,
     this.actions,
     this.onSettingsPressed,
+    this.leading,
   });
 
   @override
@@ -19,6 +24,7 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: AppColors.background,
       elevation: 0,
       centerTitle: false,
+      leading: leading,
       title: Row(
         children: [
           Container(

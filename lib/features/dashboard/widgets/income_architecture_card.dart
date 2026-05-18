@@ -4,6 +4,13 @@ import '../../../core/app_theme.dart';
 
 enum _TimePeriod { week, month, year }
 
+// Neon palette for crypto-vibe glassmorphism card
+const _kGcashNeon = Color(0xFF3D9BFF); // electric blue
+const _kMayaNeon = Color(0xFF39FF95); // neon green
+const _kCashNeon = Color(0xFFFFD060); // gold
+const _kCardDark = Color(0xFF0A1628); // deep navy
+const _kCardDeep = Color(0xFF1C0E38); // deep indigo
+
 class IncomeArchitectureCard extends StatefulWidget {
   const IncomeArchitectureCard({
     super.key,
@@ -62,6 +69,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     'Today',
   ];
 
+  bool _isDarkMode = false;
   late _TimePeriod _selectedPeriod;
   final ScrollController _scrollController = ScrollController();
 
@@ -164,53 +172,75 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     return (weeklyWallet, weeklyMaya, weeklyCash, weeklyLabels);
   }
 
-  Widget _buildTimePeriodFilter() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+  Widget _buildPeriodFilter() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _buildPeriodButton('Week', _TimePeriod.week),
-        _buildPeriodButton('Month', _TimePeriod.month),
-        _buildPeriodButton('Year', _TimePeriod.year),
+        _buildPeriodPill('7D', _TimePeriod.week),
+        const SizedBox(width: 8),
+        _buildPeriodPill('1M', _TimePeriod.month),
+        const SizedBox(width: 8),
+        _buildPeriodPill('1Y', _TimePeriod.year),
       ],
     );
   }
 
-  Widget _buildPeriodButton(String label, _TimePeriod period) {
+  Widget _buildPeriodPill(String label, _TimePeriod period) {
     final isSelected = _selectedPeriod == period;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (selected) {
-        if (selected) {
-          setState(() {
-            _selectedPeriod = period;
-            // Auto-scroll to start when period changes
-            Future.delayed(const Duration(milliseconds: 100), () {
-              if (_scrollController.hasClients) {
-                _scrollController.animateTo(
-                  0,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                );
-              }
-            });
+
+    final bgColor = _isDarkMode
+        ? (isSelected
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.transparent)
+        : (isSelected
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : AppColors.surfaceContainerLow);
+
+    final borderColor = _isDarkMode
+        ? (isSelected
+              ? Colors.white.withValues(alpha: 0.35)
+              : Colors.white.withValues(alpha: 0.10))
+        : (isSelected
+              ? AppColors.primary.withValues(alpha: 0.35)
+              : AppColors.outlineVariant.withValues(alpha: 0.5));
+
+    final textColor = _isDarkMode
+        ? (isSelected ? Colors.white : Colors.white.withValues(alpha: 0.35))
+        : (isSelected ? AppColors.primary : AppColors.onSurfaceVariant);
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedPeriod = period;
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (_scrollController.hasClients) {
+              _scrollController.animateTo(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            }
           });
-        }
+        });
       },
-      backgroundColor: AppColors.surfaceContainerLowest,
-      selectedColor: AppColors.primary.withValues(alpha: 0.12),
-      side: BorderSide(
-        color: isSelected ? AppColors.primary : AppColors.surfaceContainerHigh,
-        width: isSelected ? 1.5 : 1,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: borderColor),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: textColor,
+            letterSpacing: 0.5,
+          ),
+        ),
       ),
-      showCheckmark: false,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      labelStyle: TextStyle(
-        color: isSelected ? AppColors.primary : AppColors.onSurfaceVariant,
-        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     );
   }
 
@@ -245,63 +275,6 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     );
   }
 
-  Widget _buildChartPanel(
-    BuildContext context,
-    List<FlSpot> walletSpots,
-    List<FlSpot> mayaSpots,
-    List<FlSpot> cashSpots,
-    List<String> xLabels,
-  ) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.surfaceContainerHigh),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.onSurface.withValues(alpha: 0.035),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.multiline_chart_rounded,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Balance movement over time',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: AppColors.onSurface,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _buildScrollableChart(walletSpots, mayaSpots, cashSpots, xLabels),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final walletSpots = widget.walletSpots ?? _gcashSpots;
@@ -322,116 +295,274 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
       xLabels,
     );
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.surfaceContainerHigh),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.surfaceContainerLowest,
-            AppColors.surfaceContainerLow,
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.onSurface.withValues(alpha: 0.03),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+      decoration: _isDarkMode
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [_kCardDark, _kCardDeep],
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              boxShadow: [
+                BoxShadow(
+                  color: _kGcashNeon.withValues(alpha: 0.07),
+                  blurRadius: 28,
+                  offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: _kMayaNeon.withValues(alpha: 0.04),
+                  blurRadius: 40,
+                  offset: const Offset(0, 14),
+                ),
+              ],
+            )
+          : BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.surfaceContainerLowest,
+                  AppColors.surfaceContainerLow,
+                ],
+              ),
+              border: Border.all(
+                color: AppColors.outlineVariant.withValues(alpha: 0.4),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.onSurface.withValues(alpha: 0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(context),
-          const SizedBox(height: 14),
-          _buildTimePeriodFilter(),
           const SizedBox(height: 16),
-          _buildLegend(),
-          const SizedBox(height: 18),
-          _buildChartPanel(
-            context,
+          _buildDeltaChips(
+            filteredWalletSpots,
+            filteredMayaSpots,
+            filteredCashSpots,
+          ),
+          const SizedBox(height: 16),
+          Divider(
+            color: _isDarkMode
+                ? Colors.white.withValues(alpha: 0.07)
+                : AppColors.outlineVariant.withValues(alpha: 0.25),
+            height: 1,
+          ),
+          const SizedBox(height: 14),
+          _buildScrollableChart(
             filteredWalletSpots,
             filteredMayaSpots,
             filteredCashSpots,
             filteredXLabels,
           ),
+          const SizedBox(height: 18),
+          _buildPeriodFilter(),
         ],
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final iconBg = _isDarkMode
+        ? _kGcashNeon.withValues(alpha: 0.14)
+        : AppColors.primary.withValues(alpha: 0.10);
+    final iconBorderColor = _isDarkMode
+        ? _kGcashNeon.withValues(alpha: 0.28)
+        : AppColors.primary.withValues(alpha: 0.20);
+    final iconColor = _isDarkMode ? _kGcashNeon : AppColors.primary;
+    final titleColor = _isDarkMode ? Colors.white : AppColors.onSurface;
+    final subtitleColor = _isDarkMode
+        ? Colors.white.withValues(alpha: 0.42)
+        : AppColors.onSurfaceVariant;
+    final toggleAccent = _isDarkMode ? _kMayaNeon : AppColors.primary;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          'Wallet and Cash Balance Trend',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: AppColors.onSurface,
-            fontWeight: FontWeight.w800,
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: iconBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: iconBorderColor),
+          ),
+          child: Icon(
+            Icons.candlestick_chart_rounded,
+            color: iconColor,
+            size: 18,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Daily closing balances for GCash, Maya, and on-hand cash',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceVariant),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Balance Trend',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: titleColor,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Touch graph to see balance at any point',
+                style: TextStyle(fontSize: 11, color: subtitleColor),
+              ),
+            ],
+          ),
+        ),
+        // Theme toggle button replacing the static LIVE badge
+        GestureDetector(
+          onTap: () => setState(() => _isDarkMode = !_isDarkMode),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(
+              color: toggleAccent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: toggleAccent.withValues(alpha: 0.30)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isDarkMode
+                      ? Icons.dark_mode_rounded
+                      : Icons.light_mode_rounded,
+                  size: 11,
+                  color: toggleAccent,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _isDarkMode ? 'DARK' : 'LIGHT',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: toggleAccent,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildLegend() {
+  String _computeDelta(List<FlSpot> spots) {
+    if (spots.length < 2) return '–';
+    final first = spots.first.y;
+    final last = spots.last.y;
+    if (first == 0) return '–';
+    final delta = (last - first) / first * 100;
+    final sign = delta >= 0 ? '▲' : '▼';
+    return '$sign ${delta.abs().toStringAsFixed(1)}%';
+  }
+
+  bool _isDeltaPositive(List<FlSpot> spots) {
+    if (spots.length < 2) return true;
+    return spots.last.y >= spots.first.y;
+  }
+
+  Widget _buildDeltaChips(
+    List<FlSpot> walletSpots,
+    List<FlSpot> mayaSpots,
+    List<FlSpot> cashSpots,
+  ) {
+    final gcashColor = _isDarkMode ? _kGcashNeon : AppColors.primary;
+    final mayaColor = _isDarkMode ? _kMayaNeon : AppColors.secondary;
+    final cashColor = _isDarkMode ? _kCashNeon : const Color(0xFF8E6C00);
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       clipBehavior: Clip.hardEdge,
       child: Row(
         children: [
-          _legendChip(AppColors.primary, 'GCash'),
-          const SizedBox(width: 10),
-          _legendChip(AppColors.secondary, 'Maya'),
-          const SizedBox(width: 10),
-          _legendChip(const Color(0xFF8E6C00), 'On-hand Cash'),
+          _buildDeltaChip(gcashColor, 'GCash', walletSpots),
+          const SizedBox(width: 8),
+          _buildDeltaChip(mayaColor, 'Maya', mayaSpots),
+          const SizedBox(width: 8),
+          _buildDeltaChip(cashColor, 'On-hand', cashSpots),
         ],
       ),
     );
   }
 
-  Widget _legendChip(Color color, String label) {
+  Widget _buildDeltaChip(Color accentColor, String label, List<FlSpot> spots) {
+    final deltaText = _computeDelta(spots);
+    final isPositive = _isDeltaPositive(spots);
+
+    final deltaColor = deltaText == '–'
+        ? (_isDarkMode
+              ? Colors.white.withValues(alpha: 0.30)
+              : AppColors.onSurfaceVariant)
+        : isPositive
+        ? (_isDarkMode ? const Color(0xFF39FF95) : AppColors.secondary)
+        : (_isDarkMode ? const Color(0xFFFF6B6B) : const Color(0xFFBA1A1A));
+
+    final labelTextColor = _isDarkMode
+        ? Colors.white.withValues(alpha: 0.88)
+        : AppColors.onSurface;
+
+    final dotDecoration = BoxDecoration(
+      color: accentColor,
+      shape: BoxShape.circle,
+      boxShadow: _isDarkMode
+          ? [
+              BoxShadow(
+                color: accentColor.withValues(alpha: 0.65),
+                blurRadius: 6,
+                spreadRadius: 1,
+              ),
+            ]
+          : null,
+    );
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
+        color: accentColor.withValues(alpha: _isDarkMode ? 0.08 : 0.10),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.20)),
+        border: Border.all(
+          color: accentColor.withValues(alpha: _isDarkMode ? 0.25 : 0.20),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 6),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
+          Container(width: 8, height: 8, decoration: dotDecoration),
+          const SizedBox(width: 7),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: color,
+              color: labelTextColor,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            deltaText,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: deltaColor,
             ),
           ),
         ],
@@ -445,6 +576,17 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     List<FlSpot> cashSpots,
     List<String> xLabels,
   ) {
+    // Theme-aware color palette
+    final gcashColor = _isDarkMode ? _kGcashNeon : AppColors.primary;
+    final mayaColor = _isDarkMode ? _kMayaNeon : AppColors.secondary;
+    final cashColor = _isDarkMode ? _kCashNeon : const Color(0xFF8E6C00);
+    final gridColor = _isDarkMode
+        ? Colors.white.withValues(alpha: 0.06)
+        : AppColors.outlineVariant.withValues(alpha: 0.24);
+    final labelColor = _isDarkMode
+        ? Colors.white.withValues(alpha: 0.38)
+        : AppColors.onSurfaceVariant;
+
     final maxX = xLabels.isEmpty ? 0.0 : (xLabels.length - 1).toDouble();
     final maxYValue = [
       ...walletSpots.map((spot) => spot.y),
@@ -453,6 +595,38 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
       1.0,
     ].reduce((value, element) => value > element ? value : element);
 
+    LineChartBarData buildLine(Color color, List<FlSpot> spots) {
+      return LineChartBarData(
+        spots: spots,
+        isCurved: true,
+        preventCurveOverShooting: true,
+        preventCurveOvershootingThreshold: 8,
+        color: color,
+        barWidth: 2.5,
+        isStrokeCapRound: true,
+        dotData: FlDotData(
+          show: true,
+          getDotPainter: (spot, pct, barData, idx) => FlDotCirclePainter(
+            radius: 3,
+            color: color,
+            strokeWidth: _isDarkMode ? 0 : 1.5,
+            strokeColor: _isDarkMode ? Colors.transparent : Colors.white,
+          ),
+        ),
+        belowBarData: BarAreaData(
+          show: true,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              color.withValues(alpha: _isDarkMode ? 0.20 : 0.13),
+              color.withValues(alpha: 0.0),
+            ],
+          ),
+        ),
+      );
+    }
+
     return LineChartData(
       clipData: FlClipData.all(),
       backgroundColor: Colors.transparent,
@@ -460,10 +634,8 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         show: true,
         drawVerticalLine: false,
         horizontalInterval: 5,
-        getDrawingHorizontalLine: (_) => FlLine(
-          color: AppColors.outlineVariant.withValues(alpha: 0.24),
-          strokeWidth: 1,
-        ),
+        getDrawingHorizontalLine: (_) =>
+            FlLine(color: gridColor, strokeWidth: 1),
       ),
       titlesData: FlTitlesData(
         leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -485,9 +657,9 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
                   xLabels[idx],
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 9,
-                    color: AppColors.onSurfaceVariant,
+                    color: labelColor,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -502,126 +674,36 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
       minY: 0,
       maxY: maxYValue + 1,
       lineBarsData: [
-        // GCash line — primary blue
-        LineChartBarData(
-          spots: walletSpots,
-          isCurved: true,
-          preventCurveOverShooting: true,
-          preventCurveOvershootingThreshold: 8,
-          color: AppColors.primary,
-          barWidth: 2.5,
-          isStrokeCapRound: true,
-          dotData: FlDotData(
-            show: true,
-            getDotPainter: (spot, touchedSpotIndex, barData, spotIndex) =>
-                FlDotCirclePainter(
-                  radius: 3,
-                  color: AppColors.primary,
-                  strokeWidth: 1.5,
-                  strokeColor: Colors.white,
-                ),
-          ),
-          belowBarData: BarAreaData(
-            show: true,
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.primary.withValues(alpha: 0.15),
-                AppColors.primary.withValues(alpha: 0.0),
-              ],
-            ),
-          ),
-        ),
-        // Maya line — secondary green
-        LineChartBarData(
-          spots: mayaSpots,
-          isCurved: true,
-          preventCurveOverShooting: true,
-          preventCurveOvershootingThreshold: 8,
-          color: AppColors.secondary,
-          barWidth: 2.5,
-          isStrokeCapRound: true,
-          dotData: FlDotData(
-            show: true,
-            getDotPainter: (spot, touchedSpotIndex, barData, spotIndex) =>
-                FlDotCirclePainter(
-                  radius: 3,
-                  color: AppColors.secondary,
-                  strokeWidth: 1.5,
-                  strokeColor: Colors.white,
-                ),
-          ),
-          belowBarData: BarAreaData(
-            show: true,
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.secondary.withValues(alpha: 0.12),
-                AppColors.secondary.withValues(alpha: 0.0),
-              ],
-            ),
-          ),
-        ),
-        // Cash line — amber
-        LineChartBarData(
-          spots: cashSpots,
-          isCurved: true,
-          preventCurveOverShooting: true,
-          preventCurveOvershootingThreshold: 8,
-          color: const Color(0xFF8E6C00),
-          barWidth: 2.5,
-          isStrokeCapRound: true,
-          dotData: FlDotData(
-            show: true,
-            getDotPainter: (spot, touchedSpotIndex, barData, spotIndex) =>
-                FlDotCirclePainter(
-                  radius: 3,
-                  color: const Color(0xFF8E6C00),
-                  strokeWidth: 1.5,
-                  strokeColor: Colors.white,
-                ),
-          ),
-          belowBarData: BarAreaData(
-            show: true,
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                const Color(0xFF8E6C00).withValues(alpha: 0.12),
-                const Color(0xFF8E6C00).withValues(alpha: 0.0),
-              ],
-            ),
-          ),
-        ),
+        buildLine(gcashColor, walletSpots),
+        buildLine(mayaColor, mayaSpots),
+        buildLine(cashColor, cashSpots),
       ],
       lineTouchData: LineTouchData(
         enabled: true,
         handleBuiltInTouches: true,
         touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (_) => const Color(0xFF102A43),
-          tooltipRoundedRadius: 14,
+          getTooltipColor: (_) => const Color(0xFF0D1F35),
+          tooltipRoundedRadius: 12,
           tooltipPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 8,
+            horizontal: 14,
+            vertical: 10,
           ),
           fitInsideHorizontally: true,
           fitInsideVertically: true,
           showOnTopOfTheChartBoxArea: true,
           getTooltipItems: (touchedSpots) {
             return touchedSpots.map((spot) {
-              final tooltipColor = switch (spot.barIndex) {
-                0 => const Color(0xFF8CC8FF),
-                1 => const Color(0xFFA8F0B3),
-                _ => const Color(0xFFF4D47A),
+              final (walletName, lineColor) = switch (spot.barIndex) {
+                0 => ('GCash', gcashColor),
+                1 => ('Maya', mayaColor),
+                _ => ('Cash', cashColor),
               };
               return LineTooltipItem(
-                '₱ ${(spot.y * 1000).toStringAsFixed(0)}',
+                '$walletName  ₱ ${(spot.y * 1000).toStringAsFixed(0)}',
                 TextStyle(
-                  color: tooltipColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  color: lineColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
                 ),
               );
             }).toList();

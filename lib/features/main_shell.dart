@@ -283,7 +283,7 @@ class _MainShellState extends State<MainShell>
             ? const SizedBox.shrink(key: ValueKey('mainShellFabHidden'))
             : FloatingActionButton(
                 key: const ValueKey('mainShellFabVisible'),
-                heroTag: 'mainShellFab',
+                heroTag: null,
                 onPressed: _toggleFab,
                 backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(

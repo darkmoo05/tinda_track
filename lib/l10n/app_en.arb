@@ -23,7 +23,7 @@
   "recordTransaction": "Record Transaction",
   "transactionTypeLabel": "Transaction Type",
   "accountNumber": "Recipient Account",
-  "searchOrEnterAccountNumber": "Name or number",
+  "searchOrEnterAccountNumber": "Number",
   "scanningReceipt": "Scanning receipt…",
   "scanningReceiptModalMessage": "Reading image and parsing receipt data...",
   "scanReceiptButton": "Scan Receipt (Camera/Gallery)",

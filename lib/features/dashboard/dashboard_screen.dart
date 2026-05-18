@@ -4,6 +4,7 @@ import '../../core/app_theme.dart';
 import '../../core/l10n_extension.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/app_side_drawer.dart';
+import '../../shared/widgets/screen_header_card.dart';
 import '../activity/activity_history_screen.dart';
 import '../charges/charges_earnings_screen.dart';
 import '../transactions/add_owner_movement_screen.dart';
@@ -99,6 +100,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [
+              ScreenHeaderCard(
+                title: context.l10n.walletOverview,
+                subtitle: context.l10n.walletCashBalanceTrend,
+              ),
+              const SizedBox(height: 16),
               if (dashboard.showAlertCard)
                 ArchitectAlertCard(
                   title: dashboard.alertTitle,
@@ -215,14 +221,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          context.l10n.walletOverview,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
-          ),
-        ),
-        const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
             const spacing = 12.0;

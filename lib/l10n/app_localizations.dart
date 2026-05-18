@@ -223,7 +223,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchOrEnterAccountNumber.
   ///
   /// In en, this message translates to:
-  /// **'Name or number'**
+  /// **'Number'**
   String get searchOrEnterAccountNumber;
 
   /// No description provided for @scanningReceipt.

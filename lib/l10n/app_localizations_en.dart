@@ -70,7 +70,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountNumber => 'Recipient Account';
 
   @override
-  String get searchOrEnterAccountNumber => 'Name or number';
+  String get searchOrEnterAccountNumber => 'Number';
 
   @override
   String get scanningReceipt => 'Scanning receipt…';
