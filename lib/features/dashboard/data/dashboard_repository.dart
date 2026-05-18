@@ -191,7 +191,18 @@ class DashboardRepository {
     final db = await _database.database;
     final rows = await db.query(
       AppDatabase.ledgerTable,
+      where: 'COALESCE(is_deleted, 0) = 0',
       orderBy: 'created_at ASC, id ASC',
+    );
+    final feeRows = await db.query(
+      AppDatabase.feeTransactionsTable,
+      columns: [
+        'related_transaction_id',
+        'fee_amount',
+        'charge_destination',
+        'created_at',
+      ],
+      where: 'COALESCE(is_deleted, 0) = 0',
     );
 
     double walletBalance = 0;
@@ -207,9 +218,6 @@ class DashboardRepository {
     double chargesToOnHand = 0;
     double chargesToGcash = 0;
     double chargesToMaya = 0;
-    double feeWithdrawnOnHand = 0;
-    double feeWithdrawnGcash = 0;
-    double feeWithdrawnMaya = 0;
     double businessFundingTotal = 0;
     double personalExpenseTotal = 0;
     double personalExpenseAmount = 0;
@@ -228,6 +236,17 @@ class DashboardRepository {
     final walletClosingByDay = <DateTime, double>{};
     final mayaWalletClosingByDay = <DateTime, double>{};
     final cashClosingByDay = <DateTime, double>{};
+    final transactionById = <int, Map<String, Object?>>{};
+    final feeIncomeEventsBySource = <String, List<_FeeLedgerEvent>>{
+      'on_hand': <_FeeLedgerEvent>[],
+      'gcash': <_FeeLedgerEvent>[],
+      'maya': <_FeeLedgerEvent>[],
+    };
+    final feeWithdrawalEventsBySource = <String, List<_FeeLedgerEvent>>{
+      'on_hand': <_FeeLedgerEvent>[],
+      'gcash': <_FeeLedgerEvent>[],
+      'maya': <_FeeLedgerEvent>[],
+    };
 
     for (final row in rows) {
       final walletDelta = (row['wallet_delta'] as num).toDouble();
@@ -298,50 +317,199 @@ class DashboardRepository {
         if (movementType == 'fee withdrawal' ||
             movementType == 'fee transfer') {
           final withdrawalSource = _resolveFeeMovementSource(row, movementType);
-          if (withdrawalSource.contains('maya')) {
-            feeWithdrawnMaya += amount;
-          } else if (withdrawalSource.contains('gcash')) {
-            feeWithdrawnGcash += amount;
-          } else {
-            feeWithdrawnOnHand += amount;
+          final sourceKey = _normalizeWalletKey(withdrawalSource);
+          if (sourceKey == 'on_hand' ||
+              sourceKey == 'gcash' ||
+              sourceKey == 'maya') {
+            feeWithdrawalEventsBySource[sourceKey]!.add(
+              _FeeLedgerEvent(
+                timestampMs: createdAt.millisecondsSinceEpoch,
+                amount: amount,
+              ),
+            );
           }
         } else if (movementType == 'cash transfer (on-hand to wallet)') {
           final transferredFeeAmount = _extractChargeAmount(row);
           if (transferredFeeAmount > 0) {
-            feeWithdrawnOnHand += transferredFeeAmount;
+            feeWithdrawalEventsBySource['on_hand']!.add(
+              _FeeLedgerEvent(
+                timestampMs: createdAt.millisecondsSinceEpoch,
+                amount: transferredFeeAmount,
+              ),
+            );
           }
         }
       }
 
       if (entryType == 'transaction') {
-        final chargeRouting = _deriveChargeRouting(row);
-        final chargeAmount = chargeRouting.amount;
-        final chargeDestination = chargeRouting.destination.toLowerCase();
-        chargesCollected += chargeAmount;
-        if (chargeAmount > 0) {
-          if (chargeDestination.contains('maya')) {
-            chargesToMaya += chargeAmount;
-          } else if (chargeDestination.contains('gcash')) {
-            chargesToGcash += chargeAmount;
-          } else {
-            chargesToOnHand += chargeAmount;
-          }
-          chargeTransactions.add(
-            ChargeTransaction(
-              title: (row['title'] as String?) ?? 'Transaction',
-              createdAt: createdAt,
-              chargeAmount: chargeAmount,
-              chargeDestination: chargeDestination,
-            ),
-          );
+        final transactionId = (row['id'] as num?)?.toInt();
+        if (transactionId != null) {
+          transactionById[transactionId] = row;
         }
         transactionCount++;
-        chargesByDay.update(
-          dayKey,
-          (current) => current + chargeAmount,
-          ifAbsent: () => chargeAmount,
+      }
+    }
+
+    final linkedTransactionIds = <int>{};
+    var feeRowsProcessed = 0;
+    var feeRowsInferredDestination = 0;
+    var feeRowsUnknownDestination = 0;
+    var qrFeeRows = 0;
+    var qrFeeAmount = 0.0;
+    for (final feeRow in feeRows) {
+      final feeAmount = (feeRow['fee_amount'] as num?)?.toDouble() ?? 0.0;
+      if (feeAmount <= 0) {
+        continue;
+      }
+      feeRowsProcessed++;
+
+      final relatedTransactionId = (feeRow['related_transaction_id'] as num?)
+          ?.toInt();
+      if (relatedTransactionId != null) {
+        linkedTransactionIds.add(relatedTransactionId);
+      }
+
+      final destinationRaw = ((feeRow['charge_destination'] as String?) ?? '')
+          .trim();
+      var destinationKey = _normalizeWalletKey(destinationRaw);
+      if (destinationKey.isEmpty && relatedTransactionId != null) {
+        final relatedTx = transactionById[relatedTransactionId];
+        if (relatedTx != null) {
+          destinationKey = _inferFeeDestinationFromTransaction(relatedTx);
+          if (destinationKey.isNotEmpty) {
+            feeRowsInferredDestination++;
+          }
+        }
+      }
+      if (destinationKey.isEmpty) {
+        feeRowsUnknownDestination++;
+      }
+
+      final relatedTx = relatedTransactionId == null
+          ? null
+          : transactionById[relatedTransactionId];
+      final createdAtRaw = (feeRow['created_at'] as String?)?.trim();
+      final createdAt =
+          (createdAtRaw == null || createdAtRaw.isEmpty
+              ? null
+              : DateTime.tryParse(createdAtRaw)) ??
+          DateTime.tryParse((relatedTx?['created_at'] as String?) ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+
+      chargesCollected += feeAmount;
+      if (destinationKey == 'maya') {
+        chargesToMaya += feeAmount;
+        feeIncomeEventsBySource['maya']!.add(
+          _FeeLedgerEvent(
+            timestampMs: createdAt.millisecondsSinceEpoch,
+            amount: feeAmount,
+          ),
+        );
+      } else if (destinationKey == 'gcash') {
+        chargesToGcash += feeAmount;
+        feeIncomeEventsBySource['gcash']!.add(
+          _FeeLedgerEvent(
+            timestampMs: createdAt.millisecondsSinceEpoch,
+            amount: feeAmount,
+          ),
+        );
+      } else {
+        chargesToOnHand += feeAmount;
+        feeIncomeEventsBySource['on_hand']!.add(
+          _FeeLedgerEvent(
+            timestampMs: createdAt.millisecondsSinceEpoch,
+            amount: feeAmount,
+          ),
         );
       }
+
+      final relatedIconKey = ((relatedTx?['icon_key'] as String?) ?? '')
+          .toLowerCase();
+      final relatedTitle = ((relatedTx?['title'] as String?) ?? '')
+          .toLowerCase();
+      if (relatedIconKey.contains('out') || relatedTitle.contains('qr')) {
+        qrFeeRows++;
+        qrFeeAmount += feeAmount;
+      }
+      final dayKey = DateTime(createdAt.year, createdAt.month, createdAt.day);
+      chargesByDay.update(
+        dayKey,
+        (current) => current + feeAmount,
+        ifAbsent: () => feeAmount,
+      );
+
+      final destinationLabel = destinationRaw.isNotEmpty
+          ? destinationRaw
+          : _displayWalletLabel(destinationKey);
+      chargeTransactions.add(
+        ChargeTransaction(
+          title: (relatedTx?['title'] as String?) ?? 'Transaction',
+          createdAt: createdAt,
+          chargeAmount: feeAmount,
+          chargeDestination: destinationLabel,
+        ),
+      );
+    }
+
+    // Conservative legacy fallback: include only rows with explicit
+    // "Charge ..." markers when no fee_transactions row is linked.
+    for (final entry in transactionById.entries) {
+      if (linkedTransactionIds.contains(entry.key)) {
+        continue;
+      }
+
+      final row = entry.value;
+      final chargeAmount = _extractChargeAmount(row);
+      if (chargeAmount <= 0) {
+        continue;
+      }
+
+      final destinationRaw = _extractChargeDestination(row);
+      final destinationKey = _normalizeWalletKey(destinationRaw);
+      final createdAt = DateTime.parse(row['created_at'] as String);
+
+      chargesCollected += chargeAmount;
+      if (destinationKey == 'maya') {
+        chargesToMaya += chargeAmount;
+        feeIncomeEventsBySource['maya']!.add(
+          _FeeLedgerEvent(
+            timestampMs: createdAt.millisecondsSinceEpoch,
+            amount: chargeAmount,
+          ),
+        );
+      } else if (destinationKey == 'gcash') {
+        chargesToGcash += chargeAmount;
+        feeIncomeEventsBySource['gcash']!.add(
+          _FeeLedgerEvent(
+            timestampMs: createdAt.millisecondsSinceEpoch,
+            amount: chargeAmount,
+          ),
+        );
+      } else {
+        chargesToOnHand += chargeAmount;
+        feeIncomeEventsBySource['on_hand']!.add(
+          _FeeLedgerEvent(
+            timestampMs: createdAt.millisecondsSinceEpoch,
+            amount: chargeAmount,
+          ),
+        );
+      }
+
+      final dayKey = DateTime(createdAt.year, createdAt.month, createdAt.day);
+      chargesByDay.update(
+        dayKey,
+        (current) => current + chargeAmount,
+        ifAbsent: () => chargeAmount,
+      );
+
+      chargeTransactions.add(
+        ChargeTransaction(
+          title: (row['title'] as String?) ?? 'Transaction',
+          createdAt: createdAt,
+          chargeAmount: chargeAmount,
+          chargeDestination: destinationRaw,
+        ),
+      );
     }
 
     if (walletClosingByDay.isNotEmpty ||
@@ -410,15 +578,18 @@ class DashboardRepository {
 
     final ownerCreditAdjustment =
         personalExpensePaymentAmount - personalExpenseAmount;
-    final remainingWithdrawableOnHand = (chargesToOnHand - feeWithdrawnOnHand)
-        .clamp(0.0, double.infinity)
-        .toDouble();
-    final remainingWithdrawableGcash = (chargesToGcash - feeWithdrawnGcash)
-        .clamp(0.0, double.infinity)
-        .toDouble();
-    final remainingWithdrawableMaya = (chargesToMaya - feeWithdrawnMaya)
-        .clamp(0.0, double.infinity)
-        .toDouble();
+    final remainingWithdrawableOnHand = _reconcileRemainingFeeBalance(
+      incomeEvents: feeIncomeEventsBySource['on_hand']!,
+      withdrawalEvents: feeWithdrawalEventsBySource['on_hand']!,
+    );
+    final remainingWithdrawableGcash = _reconcileRemainingFeeBalance(
+      incomeEvents: feeIncomeEventsBySource['gcash']!,
+      withdrawalEvents: feeWithdrawalEventsBySource['gcash']!,
+    );
+    final remainingWithdrawableMaya = _reconcileRemainingFeeBalance(
+      incomeEvents: feeIncomeEventsBySource['maya']!,
+      withdrawalEvents: feeWithdrawalEventsBySource['maya']!,
+    );
     final remainingWithdrawableTotal =
         remainingWithdrawableOnHand +
         remainingWithdrawableGcash +
@@ -438,6 +609,24 @@ class DashboardRepository {
         'chargeTxSum=${computedChargeTxSum.toStringAsFixed(2)} '
         'remainingWithdrawable=${remainingWithdrawableTotal.toStringAsFixed(2)} '
         'alreadyWithdrawn=${alreadyWithdrawn.toStringAsFixed(2)}',
+      );
+      debugPrint(
+        '[DashboardSnapshot fee rows] '
+        'rows=${feeRows.length} '
+        'processed=$feeRowsProcessed '
+        'inferredDestination=$feeRowsInferredDestination '
+        'unknownDestination=$feeRowsUnknownDestination '
+        'qrRows=$qrFeeRows '
+        'qrAmount=${qrFeeAmount.toStringAsFixed(2)} '
+        'incomeEventsOnHand=${feeIncomeEventsBySource['on_hand']!.length} '
+        'incomeEventsGcash=${feeIncomeEventsBySource['gcash']!.length} '
+        'incomeEventsMaya=${feeIncomeEventsBySource['maya']!.length} '
+        'withdrawEventsOnHand=${feeWithdrawalEventsBySource['on_hand']!.length} '
+        'withdrawEventsGcash=${feeWithdrawalEventsBySource['gcash']!.length} '
+        'withdrawEventsMaya=${feeWithdrawalEventsBySource['maya']!.length} '
+        'bucketOnHand=${chargesToOnHand.toStringAsFixed(2)} '
+        'bucketGcash=${chargesToGcash.toStringAsFixed(2)} '
+        'bucketMaya=${chargesToMaya.toStringAsFixed(2)}',
       );
       return true;
     }());
@@ -575,6 +764,99 @@ class DashboardRepository {
       return 'on-hand cash';
     }
     return (match.group(1) ?? '').trim().toLowerCase();
+  }
+
+  String _normalizeWalletKey(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return '';
+    }
+
+    final compact = normalized.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (compact.contains('gcash')) {
+      return 'gcash';
+    }
+    if (compact.contains('maya')) {
+      return 'maya';
+    }
+    if (compact.contains('onhand') ||
+        compact.contains('cashonhand') ||
+        compact.contains('drawer') ||
+        compact.contains('cashdrawer') ||
+        compact.contains('cash') ||
+        compact.contains('cashsakamot') ||
+        compact.contains('cashsakamay') ||
+        compact.contains('kamot') ||
+        compact.contains('kamay')) {
+      return 'on_hand';
+    }
+
+    return normalized;
+  }
+
+  String _displayWalletLabel(String destinationKey) {
+    switch (destinationKey) {
+      case 'gcash':
+        return 'GCash';
+      case 'maya':
+        return 'Maya Wallet';
+      default:
+        return 'On-hand Cash';
+    }
+  }
+
+  String _inferFeeDestinationFromTransaction(Map<String, Object?> row) {
+    final iconKey = ((row['icon_key'] as String?) ?? '').toLowerCase();
+    if (iconKey.contains('out')) {
+      final walletAccount = ((row['wallet_account'] as String?) ?? '').trim();
+      return _normalizeWalletKey(walletAccount);
+    }
+    return 'on_hand';
+  }
+
+  double _reconcileRemainingFeeBalance({
+    required List<_FeeLedgerEvent> incomeEvents,
+    required List<_FeeLedgerEvent> withdrawalEvents,
+  }) {
+    if (incomeEvents.isEmpty) {
+      return 0.0;
+    }
+
+    final events = <(int timestampMs, bool isIncome, double amount)>[];
+    for (final event in incomeEvents) {
+      if (event.amount > 0) {
+        events.add((event.timestampMs, true, event.amount));
+      }
+    }
+    for (final event in withdrawalEvents) {
+      if (event.amount > 0) {
+        events.add((event.timestampMs, false, event.amount));
+      }
+    }
+
+    events.sort((a, b) {
+      final tsCompare = a.$1.compareTo(b.$1);
+      if (tsCompare != 0) {
+        return tsCompare;
+      }
+      // Apply income before withdrawal when timestamps are equal.
+      if (a.$2 == b.$2) {
+        return 0;
+      }
+      return a.$2 ? -1 : 1;
+    });
+
+    var available = 0.0;
+    for (final event in events) {
+      if (event.$2) {
+        available += event.$3;
+      } else {
+        final applied = event.$3 > available ? available : event.$3;
+        available -= applied;
+      }
+    }
+
+    return available.clamp(0.0, double.infinity).toDouble();
   }
 
   _DashboardAlertContent _buildAlertContent({
@@ -843,4 +1125,11 @@ class _ChargeRouting {
 
   final double amount;
   final String destination;
+}
+
+class _FeeLedgerEvent {
+  const _FeeLedgerEvent({required this.timestampMs, required this.amount});
+
+  final int timestampMs;
+  final double amount;
 }

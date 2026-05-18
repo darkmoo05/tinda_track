@@ -9,6 +9,7 @@ import '../../shared/receipt_scan/receipt_scan_service.dart';
 import '../../shared/widgets/architect_app_bar.dart';
 import '../../shared/widgets/screen_header_card.dart';
 import '../../core/l10n_extension.dart';
+import 'owner_movement_fee_logic.dart';
 
 class AddOwnerMovementScreen extends StatefulWidget {
   const AddOwnerMovementScreen({
@@ -54,6 +55,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   bool _isLoadingCategories = true;
   bool _isLoadingFeeIncome = false;
   bool _showRequiredIndicators = false;
+  double _onHandFeeIncomeTotal = 0.0;
+  double _onHandFeeWithdrawnTotal = 0.0;
+  double _onHandFeeAdjustment = 0.0;
 
   bool get _isPersonalExpense => _movementType == 'Borrowed Funds';
 
@@ -271,31 +275,48 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
     final destinationAtRequest = _destination;
 
-    if (_isFeeWithdrawal) {
-      final availableFee = await _loadAvailableFeeIncomeForSelectedSource();
-      if (!mounted) return;
-      if (!_isFeeWithdrawal || destinationAtRequest != _destination) return;
-      setState(() {
-        _availableFeeIncome = availableFee;
-        _isLoadingFeeIncome = false;
-      });
-      return;
-    }
+    try {
+      if (_isFeeWithdrawal) {
+        final availableFee = await _loadAvailableFeeIncomeForSelectedSource();
+        if (!mounted) return;
+        if (!_isFeeWithdrawal || destinationAtRequest != _destination) return;
+        setState(() {
+          _availableFeeIncome = availableFee;
+        });
+        return;
+      }
 
-    if (_isCashTransferToWallet) {
-      final availableOnHand = await _loadAvailableFeeIncomeForSource(
-        'On-hand Cash',
-      );
+      if (_isCashTransferToWallet) {
+        final availableOnHand = await _loadAvailableFeeIncomeForSource(
+          'On-hand Cash',
+        );
+        if (!mounted) return;
+        if (!_isCashTransferToWallet) return;
+        setState(() {
+          _availableFeeIncomeOnHand = availableOnHand;
+          if ((_availableFeeIncomeOnHand ?? 0) <= 0) {
+            _includeFeeIncomeInTransfer = false;
+          }
+        });
+        return;
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Failed to refresh available fee income: $error\n$stackTrace');
       if (!mounted) return;
-      if (!_isCashTransferToWallet) return;
       setState(() {
-        _availableFeeIncomeOnHand = availableOnHand;
-        if ((_availableFeeIncomeOnHand ?? 0) <= 0) {
+        if (_isCashTransferToWallet) {
+          _availableFeeIncomeOnHand = 0.0;
           _includeFeeIncomeInTransfer = false;
         }
-        _isLoadingFeeIncome = false;
+        if (_isFeeWithdrawal) {
+          _availableFeeIncome = 0.0;
+        }
       });
-      return;
+    } finally {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isLoadingFeeIncome = false);
     }
   }
 
@@ -398,25 +419,56 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                   if (_isLoadingFeeIncome)
                     const LinearProgressIndicator(minHeight: 2)
                   else
-                    Row(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            'Available fee earnings in On-Hand Cash: ₱ ${(_availableFeeIncomeOnHand ?? 0).toStringAsFixed(2)}',
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Available fee earnings in On-Hand Cash: ₱ ${(_availableFeeIncomeOnHand ?? 0).toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            Switch(
+                              value: _includeFeeIncomeInTransfer,
+                              onChanged: (_availableFeeIncomeOnHand ?? 0) <= 0
+                                  ? null
+                                  : (v) => setState(
+                                      () => _includeFeeIncomeInTransfer = v,
+                                    ),
+                            ),
+                          ],
+                        ),
+                        if (_onHandFeeIncomeTotal > 0 ||
+                            _onHandFeeWithdrawnTotal > 0)
+                          Text(
+                            'Earned: ₱ ${_onHandFeeIncomeTotal.toStringAsFixed(2)} • Withdrawn/Moved: ₱ ${_onHandFeeWithdrawnTotal.toStringAsFixed(2)}',
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: AppColors.onSurfaceVariant,
                             ),
                           ),
-                        ),
-                        Switch(
-                          value: _includeFeeIncomeInTransfer,
-                          onChanged: (_availableFeeIncomeOnHand ?? 0) <= 0
-                              ? null
-                              : (v) => setState(
-                                  () => _includeFeeIncomeInTransfer = v,
-                                ),
-                        ),
+                        if (_onHandFeeAdjustment > 0)
+                          Text(
+                            'Historical over-withdrawal adjusted: ₱ ${_onHandFeeAdjustment.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        if ((_availableFeeIncomeOnHand ?? 0) <= 0 &&
+                            _onHandFeeIncomeTotal > 0)
+                          const Text(
+                            'No On-Hand fee is currently available because previous withdrawals/transfers already consumed it.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
                       ],
                     ),
                   const SizedBox(height: 16),
@@ -971,6 +1023,8 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
     var feeTransferAmountForSave = 0.0;
     var requestedFeeTransferAmount = 0.0;
+    var feeConsumedWithinTransferForSave = 0.0;
+    var totalFeeMovedForSave = 0.0;
     _RepaymentSavePlan? repaymentSavePlan;
 
     if (!_showRequiredIndicators) {
@@ -1026,6 +1080,15 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       if (!mounted) {
         return;
       }
+      final availableFeeOnHand = await _loadAvailableFeeIncomeForSource(
+        'On-hand Cash',
+      );
+      if (!mounted) {
+        return;
+      }
+
+      _availableFeeIncomeOnHand = availableFeeOnHand;
+
       if (amount > onHandBalance) {
         _showSnackBar(
           messenger,
@@ -1037,7 +1100,6 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
       // Block if fee switch is OFF but amount would consume the fee-income portion of On-Hand Cash.
       if (!_includeFeeIncomeInTransfer) {
-        final availableFeeOnHand = _availableFeeIncomeOnHand ?? 0;
         final nonFeePortion = (onHandBalance - availableFeeOnHand).clamp(
           0.0,
           double.infinity,
@@ -1054,27 +1116,19 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         }
       }
 
-      // Block if user tries to move all On-hand with fee switch enabled and available fee income
-      if (_includeFeeIncomeInTransfer &&
-          (_availableFeeIncomeOnHand ?? 0) > 0 &&
-          (amount - onHandBalance).abs() < 0.0001) {
-        _showSnackBar(
-          messenger,
-          'You must leave enough On-hand Cash for the fee move, or turn off the fee transfer option.',
-          isError: true,
+      if (_includeFeeIncomeInTransfer) {
+        final feeComputation = computeCashTransferFeeComputation(
+          onHandBalance: onHandBalance,
+          availableFeeOnHand: availableFeeOnHand,
+          transferAmount: amount,
         );
-        return;
-      }
 
-      requestedFeeTransferAmount = _cashTransferFeeMoveAmount;
-      final remainingOnHandAfterTransfer = (onHandBalance - amount)
-          .clamp(0.0, double.infinity)
-          .toDouble();
-      feeTransferAmountForSave = requestedFeeTransferAmount > 0
-          ? (requestedFeeTransferAmount > remainingOnHandAfterTransfer
-                ? remainingOnHandAfterTransfer
-                : requestedFeeTransferAmount)
-          : 0.0;
+        feeConsumedWithinTransferForSave =
+            feeComputation.feeConsumedWithinTransfer;
+        requestedFeeTransferAmount = feeComputation.requestedExtraFeeTransfer;
+        feeTransferAmountForSave = feeComputation.extraFeeTransfer;
+        totalFeeMovedForSave = feeComputation.totalFeeMoved;
+      }
     }
 
     if (_isFeeWithdrawal) {
@@ -1144,12 +1198,21 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       }
     }
 
+    if (!mounted) return;
+    final confirmed = await _showMovementConfirmationDialog(
+      amount: amount,
+      feeTransferAmount: feeTransferAmountForSave,
+      repaymentPlan: repaymentSavePlan,
+    );
+    if (!mounted || !confirmed) return;
+
     setState(() => _isSaving = true);
     final saved = _isPersonalExpensePayment
         ? await _saveRepaymentPlan(repaymentSavePlan!)
         : await _saveMovementRecord(
             amount,
             feeTransferAmountOverride: feeTransferAmountForSave,
+            feeMovedForAccounting: totalFeeMovedForSave,
           );
 
     if (!mounted) {
@@ -1179,10 +1242,21 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     }
 
     if (_isCashTransferToWallet && _includeFeeIncomeInTransfer) {
-      if (requestedFeeTransferAmount <= 0) {
+      if (totalFeeMovedForSave <= 0) {
         _showSnackBar(
           messenger,
           'Transfer saved. No available fee earnings to move.',
+        );
+      } else if (feeConsumedWithinTransferForSave > 0 &&
+          feeTransferAmountForSave > 0) {
+        _showSnackBar(
+          messenger,
+          'Transfer saved. Fee moved: ₱ ${totalFeeMovedForSave.toStringAsFixed(2)} (₱ ${feeConsumedWithinTransferForSave.toStringAsFixed(2)} within transfer + ₱ ${feeTransferAmountForSave.toStringAsFixed(2)} extra).',
+        );
+      } else if (feeConsumedWithinTransferForSave > 0) {
+        _showSnackBar(
+          messenger,
+          'Transfer saved. Fee moved via transfer amount: ₱ ${feeConsumedWithinTransferForSave.toStringAsFixed(2)}.',
         );
       } else if (feeTransferAmountForSave <= 0) {
         _showSnackBar(
@@ -1209,6 +1283,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   Future<bool> _saveMovementRecord(
     double amount, {
     double feeTransferAmountOverride = 0.0,
+    double feeMovedForAccounting = 0.0,
   }) async {
     final now = DateTime.now();
     final referenceInput = _referenceController.text.trim();
@@ -1218,6 +1293,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         : _buildAutoReference(now);
     final feeTransferAmount = _isCashTransferToWallet
         ? feeTransferAmountOverride.clamp(0.0, double.infinity)
+        : 0.0;
+    final feeMovedAmount = _isCashTransferToWallet
+        ? feeMovedForAccounting.clamp(0.0, double.infinity)
         : 0.0;
     final combinedTransferAmount = _isCashTransferToWallet
         ? amount + feeTransferAmount
@@ -1239,9 +1317,8 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               : (_destination == 'On-hand Cash'
                     ? (_isInflow ? amount : -amount)
                     : 0.0));
-    final cashTransferBreakdown =
-        _isCashTransferToWallet && feeTransferAmount > 0
-        ? 'Transfer ₱${amount.toStringAsFixed(2)} • Charge ₱${feeTransferAmount.toStringAsFixed(2)} • Charge routed to $_destinationLabel'
+    final cashTransferBreakdown = _isCashTransferToWallet && feeMovedAmount > 0
+        ? 'Transfer ₱${amount.toStringAsFixed(2)} • Charge ₱${feeMovedAmount.toStringAsFixed(2)} • Charge routed to $_destinationLabel'
         : null;
     final persistedNote = [
       notes.isNotEmpty ? notes : _defaultNote,
@@ -1374,6 +1451,246 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     } on Exception {
       return false;
     }
+  }
+
+  Future<bool> _showMovementConfirmationDialog({
+    required double amount,
+    required double feeTransferAmount,
+    required _RepaymentSavePlan? repaymentPlan,
+  }) async {
+    final displayAmount = _isCashTransferToWallet
+        ? amount + feeTransferAmount
+        : (repaymentPlan != null ? amount : amount);
+
+    // Compute deltas for display
+    final double walletDeltaDisplay;
+    final double mayaDeltaDisplay;
+    final double onHandDeltaDisplay;
+
+    if (repaymentPlan != null) {
+      // Repayment plan: show net effect
+      final isGcash = _usesGcash;
+      final isMaya = _usesMayaWallet;
+      final repay = repaymentPlan.repaymentAmount;
+      final topUp = repaymentPlan.topUpAmount;
+      walletDeltaDisplay = isGcash ? repay + topUp : 0.0;
+      mayaDeltaDisplay = isMaya ? repay + topUp : 0.0;
+      onHandDeltaDisplay = (!isGcash && !isMaya) ? repay + topUp : 0.0;
+    } else if (_isCashTransferToWallet) {
+      final total = amount + feeTransferAmount;
+      walletDeltaDisplay = _usesGcash ? total : 0.0;
+      mayaDeltaDisplay = _usesMayaWallet ? total : 0.0;
+      onHandDeltaDisplay = -total;
+    } else if (_isFeeWithdrawal) {
+      walletDeltaDisplay = _usesGcash ? -amount : 0.0;
+      mayaDeltaDisplay = _usesMayaWallet ? -amount : 0.0;
+      onHandDeltaDisplay = _destination == 'On-hand Cash' ? -amount : 0.0;
+    } else {
+      walletDeltaDisplay = _usesGcash ? (_isInflow ? amount : -amount) : 0.0;
+      mayaDeltaDisplay = _usesMayaWallet ? (_isInflow ? amount : -amount) : 0.0;
+      onHandDeltaDisplay = _destination == 'On-hand Cash'
+          ? (_isInflow ? amount : -amount)
+          : 0.0;
+    }
+
+    String signedAmount(double v) {
+      if (v == 0) return '₱ 0.00';
+      final sign = v > 0 ? '+' : '-';
+      return '$sign ₱ ${v.abs().toStringAsFixed(2)}';
+    }
+
+    Color deltaColor(double v) {
+      if (v > 0) return const Color(0xFF2E7D32);
+      if (v < 0) return AppColors.error;
+      return AppColors.onSurfaceVariant;
+    }
+
+    Widget deltaRow(String label, double delta) {
+      if (delta == 0) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            Text(
+              signedAmount(delta),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: deltaColor(delta),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final movementLabel = repaymentPlan != null
+        ? _movementType ?? 'Borrowed Funds Repayment'
+        : _movementType ?? '';
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerLowest,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+          contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          title: Row(
+            children: [
+              Icon(
+                Icons.receipt_long_rounded,
+                color: _isInflow ? AppColors.secondary : AppColors.error,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Confirm Movement',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.outlineVariant.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        movementLabel,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$_destinationLabel  •  ₱ ${displayAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Balance Changes',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                deltaRow('GCash Wallet', walletDeltaDisplay),
+                deltaRow('Maya Wallet', mayaDeltaDisplay),
+                deltaRow('On-Hand Cash', onHandDeltaDisplay),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(
+                    color: AppColors.outlineVariant,
+                    thickness: 0.5,
+                  ),
+                ),
+                Text(
+                  _movementDescription,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                if (repaymentPlan != null && repaymentPlan.topUpAmount > 0) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      repaymentPlan.repaymentAmount > 0
+                          ? '₱ ${repaymentPlan.repaymentAmount.toStringAsFixed(2)} as repayment  +  ₱ ${repaymentPlan.topUpAmount.toStringAsFixed(2)} as Top-up'
+                          : 'Full ₱ ${repaymentPlan.topUpAmount.toStringAsFixed(2)} saved as Top-up',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
+                if (_isCashTransferToWallet && feeTransferAmount > 0) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Includes ₱ ${feeTransferAmount.toStringAsFixed(2)} of fee earnings moved to $_destinationLabel',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 4),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: _isInflow
+                    ? AppColors.secondary
+                    : AppColors.error,
+              ),
+              child: const Text('Confirm & Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return result ?? false;
   }
 
   Future<bool> _showRepaymentTopUpDialog({
@@ -1634,21 +1951,110 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   Future<double> _loadAvailableFeeIncomeForSource(String source) async {
     final db = await _database.database;
     await _database.ensureWalletSchema(db);
-    final normalizedSource = source.trim().toLowerCase();
+    final normalizedSource = _normalizeWalletKey(source);
 
-    final feeIncomeRows = await db.rawQuery(
-      '''
-      SELECT COALESCE(SUM(fee_amount), 0) AS total_fee_income
-      FROM ${AppDatabase.feeTransactionsTable}
-      WHERE is_deleted = 0
-        AND LOWER(charge_destination) = LOWER(?)
-    ''',
-      [source],
+    // Source of truth: fee_transactions.fee_amount.
+    // This avoids mixing principal amount into withdrawable fee earnings.
+    final feeRows = await db.query(
+      AppDatabase.feeTransactionsTable,
+      columns: [
+        'related_transaction_id',
+        'fee_amount',
+        'charge_destination',
+        'created_at',
+      ],
+      where: 'COALESCE(is_deleted, 0) = 0',
     );
 
-    final totalFeeIncome = feeIncomeRows.isEmpty
-        ? 0.0
-        : (feeIncomeRows.first['total_fee_income'] as num?)?.toDouble() ?? 0.0;
+    final transactionRows = await db.query(
+      AppDatabase.ledgerTable,
+      columns: ['id', 'note', 'created_at', 'wallet_account', 'icon_key'],
+      where: 'COALESCE(is_deleted, 0) = 0 AND entry_type = ?',
+      whereArgs: ['transaction'],
+    );
+    final transactionById = <int, Map<String, Object?>>{};
+    for (final row in transactionRows) {
+      final id = (row['id'] as num?)?.toInt();
+      if (id == null) {
+        continue;
+      }
+      transactionById[id] = row;
+    }
+
+    var totalFeeIncome = 0.0;
+    final feeEvents = <_FeeBalanceEvent>[];
+    final linkedTransactionIds = <int>{};
+
+    for (final row in feeRows) {
+      final feeAmount = (row['fee_amount'] as num?)?.toDouble() ?? 0.0;
+      if (feeAmount <= 0) {
+        continue;
+      }
+
+      final relatedTransactionId = (row['related_transaction_id'] as num?)
+          ?.toInt();
+      if (relatedTransactionId != null) {
+        linkedTransactionIds.add(relatedTransactionId);
+      }
+
+      final destination = ((row['charge_destination'] as String?) ?? '').trim();
+      var destinationKey = _normalizeWalletKey(destination);
+
+      if (destinationKey.isEmpty && relatedTransactionId != null) {
+        final tx = transactionById[relatedTransactionId];
+        if (tx != null) {
+          final iconKey = ((tx['icon_key'] as String?) ?? '').toLowerCase();
+          final walletAccount = ((tx['wallet_account'] as String?) ?? '')
+              .trim();
+          destinationKey = iconKey.contains('out')
+              ? _normalizeWalletKey(walletAccount)
+              : 'on_hand';
+        }
+      }
+      if (destinationKey != normalizedSource) {
+        continue;
+      }
+
+      totalFeeIncome += feeAmount;
+      feeEvents.add(
+        _FeeBalanceEvent(
+          timestampMs: _eventTimestampMs(row['created_at']),
+          amount: feeAmount,
+          isIncome: true,
+        ),
+      );
+    }
+
+    // Conservative legacy fallback: only parse explicit "Charge ..." markers
+    // from transaction notes when there is no fee_transactions row.
+    for (final row in transactionRows) {
+      final transactionId = (row['id'] as num?)?.toInt();
+      if (transactionId == null ||
+          linkedTransactionIds.contains(transactionId)) {
+        continue;
+      }
+
+      final note = (row['note'] as String?) ?? '';
+      final chargeAmount = _extractChargeAmountFromNote(note);
+      if (chargeAmount <= 0) {
+        continue;
+      }
+
+      final destination = _extractChargeDestinationFromNote(note);
+      final destinationKey = _normalizeWalletKey(destination);
+      if (destinationKey != normalizedSource) {
+        continue;
+      }
+
+      totalFeeIncome += chargeAmount;
+      feeEvents.add(
+        _FeeBalanceEvent(
+          timestampMs: _eventTimestampMs(row['created_at']),
+          amount: chargeAmount,
+          isIncome: true,
+        ),
+      );
+    }
 
     final withdrawnRows = await db.query(
       AppDatabase.ledgerTable,
@@ -1658,46 +2064,105 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         'owner_party_account',
         'amount',
         'note',
+        'created_at',
       ],
-      where: 'is_deleted = 0 AND entry_type = ?',
+      where: 'COALESCE(is_deleted, 0) = 0 AND entry_type = ?',
       whereArgs: ['owner_movement'],
     );
 
     var totalWithdrawn = 0.0;
+    var withdrawnViaFeeWithdrawal = 0.0;
+    var withdrawnViaFeeTransfer = 0.0;
+    var withdrawnViaCashTransferCharge = 0.0;
     for (final row in withdrawnRows) {
       final movementType = ((row['owner_movement_type'] as String?) ?? '')
           .trim()
           .toLowerCase();
-      final walletAccount = ((row['wallet_account'] as String?) ?? '')
-          .trim()
-          .toLowerCase();
-      final ownerPartyAccount = ((row['owner_party_account'] as String?) ?? '')
-          .trim()
-          .toLowerCase();
+      final walletAccount = _normalizeWalletKey(
+        ((row['wallet_account'] as String?) ?? '').trim(),
+      );
+      final ownerPartyAccount = _normalizeWalletKey(
+        ((row['owner_party_account'] as String?) ?? '').trim(),
+      );
       final amount = (row['amount'] as num?)?.toDouble() ?? 0.0;
       final note = (row['note'] as String?) ?? '';
 
       if (movementType == 'fee withdrawal' &&
           walletAccount == normalizedSource) {
         totalWithdrawn += amount;
+        withdrawnViaFeeWithdrawal += amount;
+        feeEvents.add(
+          _FeeBalanceEvent(
+            timestampMs: _eventTimestampMs(row['created_at']),
+            amount: amount,
+            isIncome: false,
+          ),
+        );
         continue;
       }
 
       if (movementType == 'fee transfer' &&
           ownerPartyAccount == normalizedSource) {
         totalWithdrawn += amount;
+        withdrawnViaFeeTransfer += amount;
+        feeEvents.add(
+          _FeeBalanceEvent(
+            timestampMs: _eventTimestampMs(row['created_at']),
+            amount: amount,
+            isIncome: false,
+          ),
+        );
         continue;
       }
 
       if (movementType == 'cash transfer (on-hand to wallet)' &&
-          normalizedSource == 'on-hand cash') {
-        totalWithdrawn += _extractChargeAmountFromNote(note);
+          normalizedSource == 'on_hand') {
+        final charge = _extractChargeAmountFromNote(note);
+        totalWithdrawn += charge;
+        withdrawnViaCashTransferCharge += charge;
+        if (charge > 0) {
+          feeEvents.add(
+            _FeeBalanceEvent(
+              timestampMs: _eventTimestampMs(row['created_at']),
+              amount: charge,
+              isIncome: false,
+            ),
+          );
+        }
       }
     }
 
-    return (totalFeeIncome - totalWithdrawn)
+    feeEvents.sort((a, b) => a.timestampMs.compareTo(b.timestampMs));
+
+    var reconciledAvailable = 0.0;
+    var reconciledWithdrawn = 0.0;
+    for (final event in feeEvents) {
+      if (event.isIncome) {
+        reconciledAvailable += event.amount;
+        continue;
+      }
+
+      final applied = event.amount > reconciledAvailable
+          ? reconciledAvailable
+          : event.amount;
+      reconciledAvailable -= applied;
+      reconciledWithdrawn += applied;
+    }
+
+    final available = reconciledAvailable
         .clamp(0.0, double.infinity)
         .toDouble();
+    final adjustedOverWithdraw = (totalWithdrawn - reconciledWithdrawn)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+
+    if (normalizedSource == 'on_hand') {
+      _onHandFeeIncomeTotal = totalFeeIncome;
+      _onHandFeeWithdrawnTotal = reconciledWithdrawn;
+      _onHandFeeAdjustment = adjustedOverWithdraw;
+    }
+
+    return available;
   }
 
   double _extractChargeAmountFromNote(String note) {
@@ -1711,6 +2176,56 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
     final rawAmount = (match.group(1) ?? '').replaceAll(',', '');
     return double.tryParse(rawAmount) ?? 0.0;
+  }
+
+  String _extractChargeDestinationFromNote(String note) {
+    final match = RegExp(
+      r'Charge\s+routed\s+to\s*([^•]+)',
+      caseSensitive: false,
+    ).firstMatch(note);
+    if (match == null || match.groupCount < 1) {
+      return '';
+    }
+
+    return (match.group(1) ?? '').trim();
+  }
+
+  int _eventTimestampMs(Object? raw) {
+    final value = (raw as String?)?.trim();
+    if (value == null || value.isEmpty) {
+      return 0;
+    }
+
+    final parsed = DateTime.tryParse(value);
+    return parsed?.millisecondsSinceEpoch ?? 0;
+  }
+
+  String _normalizeWalletKey(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return '';
+    }
+
+    final compact = normalized.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (compact.contains('gcash')) {
+      return 'gcash';
+    }
+    if (compact.contains('maya')) {
+      return 'maya';
+    }
+    if (compact.contains('onhand') ||
+        compact.contains('cashonhand') ||
+        compact.contains('drawer') ||
+        compact.contains('cashdrawer') ||
+        compact.contains('cash') ||
+        compact.contains('cashsakamot') ||
+        compact.contains('cashsakamay') ||
+        compact.contains('kamot') ||
+        compact.contains('kamay')) {
+      return 'on_hand';
+    }
+
+    return normalized;
   }
 
   String get _defaultNote {
@@ -1934,6 +2449,18 @@ class _RepaymentSavePlan {
 
   final double repaymentAmount;
   final double topUpAmount;
+}
+
+class _FeeBalanceEvent {
+  const _FeeBalanceEvent({
+    required this.timestampMs,
+    required this.amount,
+    required this.isIncome,
+  });
+
+  final int timestampMs;
+  final double amount;
+  final bool isIncome;
 }
 
 class _ManageCategoriesSheet extends StatefulWidget {

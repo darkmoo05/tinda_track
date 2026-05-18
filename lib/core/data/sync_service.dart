@@ -112,6 +112,21 @@ class SyncService {
       pullDeviceId: pullDeviceId,
     );
 
+    pushed += await _syncFeeTransactions(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: true,
+      pullDeviceId: pullDeviceId,
+    );
+    pulled += await _syncFeeTransactions(
+      db,
+      deviceId,
+      effectiveSinceMs,
+      isPush: false,
+      pullDeviceId: pullDeviceId,
+    );
+
     await _database.setSyncState(
       'last_sync_ms',
       DateTime.now().millisecondsSinceEpoch.toString(),
@@ -469,6 +484,95 @@ class SyncService {
       await _upsertBySyncId(
         db,
         AppDatabase.ownerMovementCategoriesTable,
+        local,
+        values,
+      );
+    }
+    return data.length;
+  }
+
+  Future<int> _syncFeeTransactions(
+    Database db,
+    String deviceId,
+    int sinceMs, {
+    required bool isPush,
+    String? pullDeviceId,
+  }) async {
+    if (isPush) {
+      final rows = await db.query(
+        AppDatabase.feeTransactionsTable,
+        where: '${AppDatabase.isDirtyColumn} = 1',
+      );
+      if (rows.isEmpty) return 0;
+
+      // Resolve the related ledger entry's syncId from its local integer id.
+      final payload = await Future.wait(
+        rows.map((row) async {
+          String? relatedSyncId;
+          final relatedId = row['related_transaction_id'];
+          if (relatedId != null) {
+            final parentRows = await db.query(
+              AppDatabase.ledgerTable,
+              columns: [AppDatabase.syncIdColumn],
+              where: 'id = ?',
+              whereArgs: [relatedId],
+              limit: 1,
+            );
+            if (parentRows.isNotEmpty) {
+              relatedSyncId =
+                  parentRows.first[AppDatabase.syncIdColumn] as String?;
+            }
+          }
+          return <String, Object?>{
+            'syncId': row[AppDatabase.syncIdColumn],
+            'deviceId': row[AppDatabase.deviceIdColumn],
+            'relatedTransactionSyncId': relatedSyncId,
+            'feeAmount': _asDouble(row['fee_amount']),
+            'feeType': row['fee_type'],
+            'chargeDestination': row['charge_destination'],
+            'isDeleted': _toBool(row[AppDatabase.isDeletedColumn]),
+          };
+        }),
+      );
+
+      await _post('/fee-transactions/push', payload);
+      await _markRowsClean(db, AppDatabase.feeTransactionsTable, rows);
+      return rows.length;
+    }
+
+    final data = await _pull('/fee-transactions/pull', sinceMs, pullDeviceId);
+    if (data.isEmpty) return 0;
+
+    for (final item in data) {
+      final syncId = _asString(item['syncId']);
+      if (syncId.isEmpty) continue;
+      final remoteUpdated = _remoteUpdatedMs(item);
+      final local = await _findBySyncId(
+        db,
+        AppDatabase.feeTransactionsTable,
+        syncId,
+      );
+      if (_shouldKeepLocal(local, remoteUpdated)) {
+        continue;
+      }
+      final values = {
+
+        'fee_amount': _asDouble(item['feeAmount']),
+        'fee_type': _asString(item['feeType']),
+        'charge_destination': _asString(item['chargeDestination']),
+        'created_at': _asString(
+          item['createdAt'],
+          fallback: DateTime.now().toIso8601String(),
+        ),
+        AppDatabase.syncIdColumn: syncId,
+        AppDatabase.deviceIdColumn: _asString(item['deviceId']),
+        AppDatabase.updatedAtMsColumn: remoteUpdated,
+        AppDatabase.isDeletedColumn: _toBool(item['isDeleted']) ? 1 : 0,
+        AppDatabase.isDirtyColumn: 0,
+      };
+      await _upsertBySyncId(
+        db,
+        AppDatabase.feeTransactionsTable,
         local,
         values,
       );

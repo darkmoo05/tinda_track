@@ -52,20 +52,44 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _isSaving = false;
   TransactionPreviewResponse? _lastPreview;
   String? _previewErrorMessage;
-  _ChargeHandlingMode _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+  _ChargeHandlingMode? _chargeHandlingMode;
   bool _showSummaryDetails = false;
 
-  String _selectedTypeKey = 'gcash_cashin';
+  _WalletSelection _selectedWalletSelection = _WalletSelection.gcash;
+  String? _selectedServiceKey;
   PartyRecord? _matchedParty;
 
   _WalletSelection get _selectedWallet {
-    return FixedTransactionType.forKey(_selectedTypeKey).wallet == 'Maya Wallet'
-        ? _WalletSelection.maya
-        : _WalletSelection.gcash;
+    return _selectedWalletSelection;
+  }
+
+  String? get _selectedTypeKey {
+    final serviceKey = _selectedServiceKey;
+    if (serviceKey == null) {
+      return null;
+    }
+
+    final walletPrefix = _selectedWalletSelection == _WalletSelection.maya
+        ? 'maya'
+        : 'gcash';
+    return '${walletPrefix}_$serviceKey';
+  }
+
+  String get _effectiveTypeKey {
+    final serviceKey = _selectedServiceKey ?? 'cashin';
+    final walletPrefix = _selectedWalletSelection == _WalletSelection.maya
+        ? 'maya'
+        : 'gcash';
+    return '${walletPrefix}_$serviceKey';
   }
 
   _FlowDirection get _selectedFlowDirection {
-    return FixedTransactionType.forKey(_selectedTypeKey).isOutflow
+    final typeKey = _selectedTypeKey;
+    if (typeKey == null) {
+      return _FlowDirection.inflow;
+    }
+
+    return FixedTransactionType.forKey(typeKey).isOutflow
         ? _FlowDirection.outflow
         : _FlowDirection.inflow;
   }
@@ -76,8 +100,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return null;
     }
 
+    final typeKey = _selectedTypeKey;
+    if (typeKey == null) {
+      return null;
+    }
+
     for (final bracket in _chargeRepository.brackets.value) {
-      if (bracket.transactionTypeKey != _selectedTypeKey) continue;
+      if (bracket.transactionTypeKey != typeKey) continue;
       if (principal >= bracket.lowerBound && principal <= bracket.upperBound) {
         return bracket;
       }
@@ -115,21 +144,31 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   String get _selectedService {
-    return _selectedTypeKey.replaceFirst(
-      _selectedTypeKey.startsWith('maya_') ? 'maya_' : 'gcash_',
-      '',
-    );
+    return _selectedServiceKey ?? '';
   }
 
   bool get _canCustomizeFeeHandling {
-    return _selectedService == 'cashin' || _selectedService == 'cashout';
+    return _selectedServiceKey == 'cashin' || _selectedServiceKey == 'cashout';
   }
+
+  // QR Payment is a top-up style service: customer pays digitally,
+  // store wallet receives the full amount + fee, no cash changes hands.
+  bool get _isQrPayment => _selectedServiceKey == 'qrpayment';
 
   _ChargeHandlingMode get _effectiveChargeHandlingMode {
     if (_canCustomizeFeeHandling) {
-      return _chargeHandlingMode;
+      return _chargeHandlingMode ?? _ChargeHandlingMode.addOnTop;
     }
     return _ChargeHandlingMode.addOnTop;
+  }
+
+  String get _chargeHandlingDisplayLabel {
+    if (_chargeHandlingMode == null) {
+      return 'Select fee handling';
+    }
+    return _chargeHandlingMode == _ChargeHandlingMode.addOnTop
+        ? context.l10n.customerPaysFeeLabel
+        : context.l10n.deductedFromSentLabel;
   }
 
   double get _walletDeltaPreview {
@@ -148,6 +187,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   double get _cashDeltaPreview {
+    // QR Payment: customer pays everything digitally — no cash changes hands.
+    if (_isQrPayment) return 0;
     final amount = _enteredAmount;
     final fee = _chargeFee;
     if (!_isOutflowSelection) {
@@ -186,15 +227,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   double get _netCashToDrawer {
+    // QR Payment: no physical cash is exchanged.
+    if (_isQrPayment) return 0;
     return _isOutflowSelection ? _amountToSend : _totalCollected;
   }
 
   String get _chargeDestinationAccount {
     // Inflow: fee always goes to on-hand (store receives cash)
     // Outflow: fee always goes to wallet (customer's wallet is charged)
-    return _isOutflowSelection
-        ? _selectedWalletAccount
-        : context.l10n.onHandCashLabel;
+    return _isOutflowSelection ? _selectedWalletAccount : 'On-hand Cash';
   }
 
   bool get _hasTypedAccount => _accountController.text.trim().isNotEmpty;
@@ -202,7 +243,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool get _isRegisteredAccount => _matchedParty != null;
 
   bool get _isAccountNumberMissing =>
-      _showRequiredIndicators && _accountController.text.trim().isEmpty;
+      _showRequiredIndicators &&
+      _accountController.text.trim().isEmpty &&
+      !_isQrPayment;
 
   bool get _isPrincipalMissing =>
       _showRequiredIndicators && _parseAmount(_principalController.text) <= 0;
@@ -543,9 +586,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               children: [
                 _buildPreviewRow(
                   context.l10n.whoPaysServiceFee,
-                  _effectiveChargeHandlingMode == _ChargeHandlingMode.addOnTop
-                      ? context.l10n.customerPaysFeeLabel
-                      : context.l10n.deductedFromSentLabel,
+                  _chargeHandlingMode == null
+                      ? 'Select fee handling'
+                      : _chargeHandlingDisplayLabel,
                 ),
                 const SizedBox(height: 4),
                 _buildPreviewRow(
@@ -962,6 +1005,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Widget _buildChargeHandlingSelector() {
+    final showChargeHandlingError =
+        _showRequiredIndicators &&
+        _canCustomizeFeeHandling &&
+        _chargeHandlingMode == null;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -974,39 +1022,112 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _fieldLabel(context.l10n.whoPaysServiceFee),
+          _fieldLabel(
+            context.l10n.whoPaysServiceFee,
+            isRequired: true,
+            showErrorIndicator: showChargeHandlingError,
+          ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ChoiceChip(
-                showCheckmark: false,
-                shape: const StadiumBorder(),
-                label: Text(context.l10n.customerPaysFeeLabel),
-                selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
-                onSelected: (_) {
-                  setState(() {
-                    _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
-                  });
-                },
+          DropdownButtonFormField<_ChargeHandlingMode>(
+            value: _chargeHandlingMode,
+            isExpanded: true,
+            icon: const Icon(Icons.keyboard_arrow_down_rounded),
+            decoration: InputDecoration(
+              hintText: 'Select fee handling',
+              filled: true,
+              fillColor: AppColors.surfaceContainerLowest,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
               ),
-              ChoiceChip(
-                showCheckmark: false,
-                shape: const StadiumBorder(),
-                label: Text(context.l10n.deductedFromSentLabel),
-                selected:
-                    _chargeHandlingMode ==
-                    _ChargeHandlingMode.deductFromEnteredAmount,
-                onSelected: (_) {
-                  setState(() {
-                    _chargeHandlingMode =
-                        _ChargeHandlingMode.deductFromEnteredAmount;
-                  });
-                },
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.55),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: showChargeHandlingError
+                      ? AppColors.error
+                      : AppColors.outlineVariant.withValues(alpha: 0.55),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 1.2,
+                ),
+              ),
+            ),
+            items: [
+              DropdownMenuItem(
+                value: _ChargeHandlingMode.addOnTop,
+                child: Text(context.l10n.customerPaysFeeLabel),
+              ),
+              DropdownMenuItem(
+                value: _ChargeHandlingMode.deductFromEnteredAmount,
+                child: Text(context.l10n.deductedFromSentLabel),
               ),
             ],
+            onChanged: (value) {
+              setState(() {
+                _chargeHandlingMode = value;
+              });
+            },
+            hint: Text(
+              'Select fee handling',
+              style: TextStyle(
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
           ),
+          if (_chargeHandlingMode == null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: showChargeHandlingError
+                    ? AppColors.error.withValues(alpha: 0.08)
+                    : AppColors.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: showChargeHandlingError
+                      ? AppColors.error.withValues(alpha: 0.25)
+                      : AppColors.outlineVariant.withValues(alpha: 0.55),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_box_outline_blank_rounded,
+                    size: 16,
+                    color: showChargeHandlingError
+                        ? AppColors.error
+                        : AppColors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Please choose a fee handling option.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: showChargeHandlingError
+                            ? AppColors.error
+                            : AppColors.onSurfaceVariant.withValues(
+                                alpha: 0.88,
+                              ),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
             'Applicable fee: $_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
@@ -1101,10 +1222,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Widget _buildTypeSelector() {
-    final walletPrefix = _selectedWallet == _WalletSelection.maya
-        ? 'maya'
-        : 'gcash';
-    final selectedServiceLabel = _serviceLabel(_selectedService);
+    final selectedServiceLabel = _selectedServiceKey == null
+        ? 'Choose transaction type'
+        : _serviceLabel(_selectedServiceKey!);
+    final showTypeError =
+        _showRequiredIndicators && _selectedServiceKey == null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1112,7 +1234,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _fieldLabel(context.l10n.walletAndService, isRequired: true),
+            _fieldLabel(
+              context.l10n.walletAndService,
+              isRequired: true,
+              showErrorIndicator: showTypeError,
+            ),
             const SizedBox(height: 8),
             _buildSelectorStepCard(
               compact: compact,
@@ -1128,7 +1254,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       selected: _selectedWallet == _WalletSelection.gcash,
                       onTap: () {
                         setState(() {
-                          _selectedTypeKey = 'gcash_$_selectedService';
+                          _selectedWalletSelection = _WalletSelection.gcash;
                         });
                       },
                     ),
@@ -1142,7 +1268,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       selected: _selectedWallet == _WalletSelection.maya,
                       onTap: () {
                         setState(() {
-                          _selectedTypeKey = 'maya_$_selectedService';
+                          _selectedWalletSelection = _WalletSelection.maya;
                         });
                       },
                     ),
@@ -1155,47 +1281,145 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               compact: compact,
               title: context.l10n.transactionTypeLabel,
               subtitle: 'Cash In, Cash Out, Load, Bills, or QR',
-              child: Wrap(
-                spacing: compact ? 6 : 8,
-                runSpacing: compact ? 6 : 8,
-                children: _serviceOptions
+              child: DropdownButtonFormField<String>(
+                value: _selectedServiceKey,
+                isExpanded: true,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                decoration: InputDecoration(
+                  hintText: 'Choose transaction type',
+                  filled: true,
+                  fillColor: AppColors.surfaceContainerLowest,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: showTypeError
+                          ? AppColors.error
+                          : AppColors.outlineVariant.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: showTypeError
+                          ? AppColors.error
+                          : AppColors.outlineVariant.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: AppColors.primary,
+                      width: 1.2,
+                    ),
+                  ),
+                ),
+                items: _serviceOptions
                     .map((serviceKey) {
-                      final selected = _selectedService == serviceKey;
-                      return ChoiceChip(
-                        visualDensity: compact
-                            ? VisualDensity.compact
-                            : VisualDensity.standard,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        showCheckmark: false,
-                        shape: const StadiumBorder(),
-                        avatar: Icon(
-                          _serviceIcon(serviceKey),
-                          size: compact ? 14 : 16,
-                          color: selected
-                              ? AppColors.primary
-                              : AppColors.onSurfaceVariant,
+                      final selected = _selectedServiceKey == serviceKey;
+                      return DropdownMenuItem<String>(
+                        value: serviceKey,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 18,
+                              height: 18,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: selected
+                                      ? AppColors.primary
+                                      : AppColors.outlineVariant,
+                                  width: 1.4,
+                                ),
+                                color: selected
+                                    ? AppColors.primary.withValues(alpha: 0.12)
+                                    : Colors.transparent,
+                              ),
+                              child: selected
+                                  ? const Icon(
+                                      Icons.check_rounded,
+                                      size: 13,
+                                      color: AppColors.primary,
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _serviceLabel(serviceKey),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
-                        label: Text(_serviceLabel(serviceKey)),
-                        labelStyle: TextStyle(fontSize: compact ? 11.5 : 12),
-                        selected: selected,
-                        selectedColor: AppColors.primary.withValues(
-                          alpha: 0.12,
-                        ),
-                        side: BorderSide(
-                          color: selected
-                              ? AppColors.primary.withValues(alpha: 0.35)
-                              : AppColors.outlineVariant,
-                        ),
-                        onSelected: (_) {
-                          setState(() {
-                            _selectedTypeKey = '${walletPrefix}_$serviceKey';
-                          });
-                        },
                       );
                     })
                     .toList(growable: false),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedServiceKey = value;
+                  });
+                },
+                hint: Text(
+                  'Choose transaction type',
+                  style: TextStyle(
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                ),
               ),
             ),
+            if (_selectedServiceKey == null) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: showTypeError
+                      ? AppColors.error.withValues(alpha: 0.08)
+                      : AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: showTypeError
+                        ? AppColors.error.withValues(alpha: 0.25)
+                        : AppColors.outlineVariant.withValues(alpha: 0.55),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_box_outline_blank_rounded,
+                      size: 16,
+                      color: showTypeError
+                          ? AppColors.error
+                          : AppColors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Please choose a transaction type.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: showTypeError
+                              ? AppColors.error
+                              : AppColors.onSurfaceVariant.withValues(
+                                  alpha: 0.88,
+                                ),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             SizedBox(height: compact ? 8 : 10),
             Container(
               width: double.infinity,
@@ -1463,7 +1687,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       null => (_selectedWallet == _WalletSelection.maya ? 'maya' : 'gcash'),
     };
 
-    var serviceKey = _selectedService;
+    var serviceKey = _selectedServiceKey ?? 'cashin';
     if (draft.flowDirection == ReceiptFlowDirection.outflow) {
       serviceKey = 'cashout';
     } else if (draft.flowDirection == ReceiptFlowDirection.inflow &&
@@ -1477,9 +1701,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   Future<void> _applyReceiptDraft(ReceiptDraft draft) async {
     final service = ReceiptScanService.instance;
     final nextType = _pickBestTypeKey(draft);
+    final nextWallet = nextType.startsWith('maya_')
+        ? _WalletSelection.maya
+        : _WalletSelection.gcash;
+    final nextService = nextType.split('_').last;
 
     setState(() {
-      _selectedTypeKey = nextType;
+      _selectedWalletSelection = nextWallet;
+      _selectedServiceKey = nextService;
 
       if (draft.amount != null && draft.amount! > 0) {
         _principalController.text = service.formatAmountForInput(draft.amount!);
@@ -1656,7 +1885,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       MaterialPageRoute(
         builder: (_) => ChargesScreen(
           launchedFromTransaction: true,
-          initialTypeKey: _selectedTypeKey,
+          initialTypeKey: _effectiveTypeKey,
         ),
       ),
     );
@@ -1690,13 +1919,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final accountNumber = _accountController.text.trim();
     final principal = _parseAmount(_principalController.text);
 
-    if (accountNumber.isEmpty) {
+    if (accountNumber.isEmpty && !_isQrPayment) {
       _showMessage(l10n.accountNumberRequiredBeforeSaving, isError: true);
       return;
     }
 
     if (principal <= 0) {
       _showMessage(l10n.transactionAmountRequiredBeforeSaving, isError: true);
+      return;
+    }
+
+    if (_selectedServiceKey == null) {
+      _showMessage(l10n.transactionTypeLabel, isError: true);
+      return;
+    }
+
+    if (_canCustomizeFeeHandling && _chargeHandlingMode == null) {
+      _showMessage(l10n.whoPaysServiceFee, isError: true);
       return;
     }
 
@@ -1722,57 +1961,63 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final selectedWalletBalance = _selectedWallet == _WalletSelection.maya
         ? mayaWalletBalance
         : gcashBalance;
-    final sourceLabel = isOutflow
-        ? l10n.onHandCashLabel
-        : selectedWalletAccount;
-    final requiredSourceAmount =
-        _effectiveChargeHandlingMode ==
-            _ChargeHandlingMode.deductFromEnteredAmount
-        ? _enteredAmount - _chargeFee
-        : _enteredAmount;
-    final available = isOutflow ? onHandBalance : selectedWalletBalance;
-    if (requiredSourceAmount > available) {
-      _showMessage(
-        l10n.insufficientBalance(sourceLabel, available.toStringAsFixed(2)),
-        isError: true,
-      );
-      return;
+    // QR Payment: store receives money — no source balance check needed.
+    if (!_isQrPayment) {
+      final sourceLabel = isOutflow
+          ? l10n.onHandCashLabel
+          : selectedWalletAccount;
+      final requiredSourceAmount =
+          _effectiveChargeHandlingMode ==
+              _ChargeHandlingMode.deductFromEnteredAmount
+          ? _enteredAmount - _chargeFee
+          : _enteredAmount;
+      final available = isOutflow ? onHandBalance : selectedWalletBalance;
+      if (requiredSourceAmount > available) {
+        _showMessage(
+          l10n.insufficientBalance(sourceLabel, available.toStringAsFixed(2)),
+          isError: true,
+        );
+        return;
+      }
     }
 
     // Capture messenger before any async gap to avoid 'attached' assertion.
     final messenger = ScaffoldMessenger.maybeOf(context);
 
-    await _resolvePartyFromAccount(accountNumber);
+    // QR Payment: no customer account or party registration needed.
+    if (!_isQrPayment) {
+      await _resolvePartyFromAccount(accountNumber);
 
-    if (!_isRegisteredAccount) {
-      _showMessage(
-        l10n.partyNotRegisteredYet,
-        isError: true,
-        messenger: messenger,
-      );
-      final registered = await _openPartyRegistrationPopup(
-        prefilledAccountNumber: accountNumber,
-        prefilledAccountName: _lastScannedAccountName,
-      );
-      if (!registered) {
-        return;
-      }
-
-      if (!mounted) return;
-
-      await _resolvePartyFromAccount(_accountController.text);
-
-      if (!mounted) return;
-
-      if (_isRegisteredAccount) {
-        _showMessage(l10n.partyRegisteredSaving, messenger: messenger);
-      } else {
+      if (!_isRegisteredAccount) {
         _showMessage(
-          l10n.unableToVerifyRegistration,
+          l10n.partyNotRegisteredYet,
           isError: true,
           messenger: messenger,
         );
-        return;
+        final registered = await _openPartyRegistrationPopup(
+          prefilledAccountNumber: accountNumber,
+          prefilledAccountName: _lastScannedAccountName,
+        );
+        if (!registered) {
+          return;
+        }
+
+        if (!mounted) return;
+
+        await _resolvePartyFromAccount(_accountController.text);
+
+        if (!mounted) return;
+
+        if (_isRegisteredAccount) {
+          _showMessage(l10n.partyRegisteredSaving, messenger: messenger);
+        } else {
+          _showMessage(
+            l10n.unableToVerifyRegistration,
+            isError: true,
+            messenger: messenger,
+          );
+          return;
+        }
       }
     }
 
@@ -1805,15 +2050,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     if (!mounted) return;
 
-    // Sync transaction to backend.
-    final synced = await _syncTransactionToBackendAwaited();
-    if (!mounted) return;
-
-    final partyName = _matchedParty!.name;
+    final partyName = _matchedParty?.name;
     _showMessage(
-      synced
+      partyName != null
           ? l10n.transactionSaved(partyName)
-          : l10n.transactionSavedSyncRetry(partyName),
+          : 'QR Payment saved successfully.',
       messenger: messenger,
     );
     Navigator.of(context).pop(true);
@@ -1827,11 +2068,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final referenceText = _referenceController.text.trim();
     final notes = _notesController.text.trim();
 
-    if (principal <= 0 || _matchedParty == null) {
+    // QR Payment does not require a registered party.
+    if (principal <= 0 || (!_isQrPayment && _matchedParty == null)) {
       return false;
     }
 
-    final selectedType = FixedTransactionType.forKey(_selectedTypeKey).label;
+    final selectedType = FixedTransactionType.forKey(_effectiveTypeKey).label;
     final isOutflow = _isOutflowSelection;
     final walletAccount = _selectedWalletAccount;
     final usesMayaWallet = _selectedWallet == _WalletSelection.maya;
@@ -1849,9 +2091,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     //   wallet increases, on-hand decreases (all e-money goes to wallet).
     //   addOnTop:          walletDelta = +(amount + fee), onHandDelta = -amount
     //   deductFromAmount:  walletDelta = +amount,         onHandDelta = -(amount - fee)
+    //
+    // QR Payment (Top-up): customer pays amount + fee digitally via QR.
+    //   wallet increases, on-hand unchanged (no cash exchange).
+    //   walletDelta = +(amount + fee), onHandDelta = 0
     final double selectedWalletDelta;
     final double onHandDelta;
-    if (!isOutflow) {
+    if (_isQrPayment) {
+      selectedWalletDelta = amount + chargeFee;
+      onHandDelta = 0;
+    } else if (!isOutflow) {
       selectedWalletDelta = isDeductFromAmount
           ? -(amount - chargeFee)
           : -amount;
@@ -1863,13 +2112,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     final walletDelta = usesMayaWallet ? 0.0 : selectedWalletDelta;
     final mayaWalletDelta = usesMayaWallet ? selectedWalletDelta : 0.0;
+    final chargeDestination = _chargeDestinationAccount;
     final now = DateTime.now();
-    final reference = referenceText.isNotEmpty ? referenceText : accountNumber;
+    final reference = referenceText.isNotEmpty
+        ? referenceText
+        : accountNumber.isNotEmpty
+        ? accountNumber
+        : 'QR-${DateTime.now().millisecondsSinceEpoch}';
     final iconKey = isOutflow ? 'cash_out' : 'cash_in';
     final title = selectedType;
-    final noteBase = notes.isEmpty
+    final noteBase = notes.isNotEmpty
+        ? notes
+        : _matchedParty != null
         ? 'Account $accountNumber \u2022 ${_matchedParty!.name}'
-        : notes;
+        : 'QR Payment received';
     // Transaction note shows only wallet flow (no fee breakdown)
     final persistedNote =
         '$noteBase \u2022 $_selectedFlowLabel \u2022 Wallet ${selectedWalletDelta >= 0 ? 'increased' : 'decreased'} by \u20b1${selectedWalletDelta.abs().toStringAsFixed(2)} \u2022 On-hand ${onHandDelta >= 0 ? 'increased' : 'decreased'} by \u20b1${onHandDelta.abs().toStringAsFixed(2)}';
@@ -1879,6 +2135,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       await _database.ensureWalletSchema(db);
       final deviceId = await _database.getOrCreateDeviceId();
       final nowMs = now.millisecondsSinceEpoch;
+
       final transactionId = await db.insert(AppDatabase.ledgerTable, {
         'entry_type': 'transaction',
         'title': title,
@@ -1906,7 +2163,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           'related_transaction_id': transactionId,
           'fee_amount': chargeFee,
           'fee_type': title,
-          'charge_destination': _chargeDestinationAccount,
+          'charge_destination': chargeDestination,
           AppDatabase.syncIdColumn: AppDatabase.generateSyncId('fee'),
           AppDatabase.deviceIdColumn: deviceId,
           AppDatabase.updatedAtMsColumn: nowMs,
@@ -1919,77 +2176,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return true;
     } on Exception catch (error, stackTrace) {
       debugPrint('Failed to save transaction record: $error\n$stackTrace');
-      return false;
-    }
-  }
-
-  /// Submit transaction to backend after local save (awaited version with error handling).
-  /// Returns true if sync succeeds, false if it fails.
-  Future<bool> _syncTransactionToBackendAwaited() async {
-    try {
-      final db = await _database.database;
-      final rows = await db.query(
-        AppDatabase.ledgerTable,
-        orderBy: 'id DESC',
-        limit: 1,
-        columns: [AppDatabase.syncIdColumn, AppDatabase.deviceIdColumn],
-      );
-
-      if (rows.isEmpty) {
-        debugPrint('⚠ No transaction found to sync');
-        return false;
-      }
-
-      final syncId = rows.first[AppDatabase.syncIdColumn] as String;
-      final deviceId = rows.first[AppDatabase.deviceIdColumn] as String;
-      final isOutflow = _isOutflowSelection;
-      final walletProvider = _selectedWallet == _WalletSelection.maya
-          ? 'MAYA'
-          : 'GCASH';
-      final direction = isOutflow ? 'CASH_OUT' : 'CASH_IN';
-      final amount = _enteredAmount;
-      final isDeductFromAmount =
-          _effectiveChargeHandlingMode ==
-          _ChargeHandlingMode.deductFromEnteredAmount;
-
-      await _transactionRepository.createTransaction(
-        walletProvider: walletProvider,
-        direction: direction,
-        amount: amount,
-        chargeHandling: isDeductFromAmount ? 'deductFromAmount' : 'addOnTop',
-        syncId: syncId,
-        deviceId: deviceId,
-        transactionTypeKey: _selectedTypeKey,
-        reference: _referenceController.text.trim(),
-        note: _notesController.text.trim(),
-        entryDate: DateTime.now().toIso8601String(),
-      );
-
-      // Consume /transactions list endpoint to verify server visibility
-      // of the latest saved item without blocking the user flow.
-      try {
-        final latest = await _transactionRepository.listTransactions(limit: 1);
-        if (latest.isNotEmpty) {
-          debugPrint('✓ Latest transaction from server: ${latest.first.id}');
-        }
-      } catch (_) {
-        // Non-blocking verification step.
-      }
-
-      debugPrint('✓ Transaction synced to backend: $syncId');
-      return true;
-    } on TransactionApiException catch (e) {
-      debugPrint('✗ Failed to sync transaction to backend: ${e.message}');
-      if (e.statusCode == 409) {
-        debugPrint('  Error: Duplicate transaction (syncId already exists)');
-      } else if (e.statusCode == 400) {
-        debugPrint(
-          '  Error: Invalid transaction (may be insufficient balance)',
-        );
-      }
-      return false;
-    } on Exception catch (e) {
-      debugPrint('✗ Failed to sync transaction to backend: $e');
       return false;
     }
   }
@@ -2022,7 +2208,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 _ChargeHandlingMode.deductFromEnteredAmount
             ? 'deductFromAmount'
             : 'addOnTop',
-        transactionTypeKey: _selectedTypeKey,
+        transactionTypeKey: _effectiveTypeKey,
       );
 
       setState(() {

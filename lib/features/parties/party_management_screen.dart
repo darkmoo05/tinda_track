@@ -22,7 +22,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   final PartyRepository _partyRepository = PartyRepository.instance;
   Timer? _searchDebounce;
   String _searchQuery = '';
-  String _currentFilter = 'all'; // 'all', 'verified', 'pending'
+  String _currentFilter = 'all'; // 'all', 'verified'
   String _currentSort = 'newest'; // 'newest', 'oldest', 'name'
 
   @override
@@ -104,13 +104,13 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
       ),
       floatingActionButton: isVeryCompact
           ? FloatingActionButton(
-              heroTag: 'partyManagementFab',
+              heroTag: null,
               onPressed: _onAddParty,
               tooltip: context.l10n.addNewPerson,
               child: const Icon(Icons.add_rounded),
             )
           : FloatingActionButton.extended(
-              heroTag: 'partyManagementFab',
+              heroTag: null,
               onPressed: _onAddParty,
               label: Text(
                 context.l10n.addNewPerson,
@@ -237,12 +237,6 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
                 '✓ ${context.l10n.verified}',
                 _currentFilter == 'verified',
                 () => setState(() => _currentFilter = 'verified'),
-              ),
-              const SizedBox(width: 8),
-              _buildFilterChip(
-                '⏳ ${context.l10n.pending}',
-                _currentFilter == 'pending',
-                () => setState(() => _currentFilter = 'pending'),
               ),
             ],
           ),
@@ -405,8 +399,6 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
 
     if (_currentFilter == 'verified') {
       filtered = filtered.where((p) => p.isVerified).toList();
-    } else if (_currentFilter == 'pending') {
-      filtered = filtered.where((p) => !p.isVerified).toList();
     }
 
     // Apply search
@@ -634,122 +626,141 @@ class _EditPartyDialogState extends State<_EditPartyDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return Dialog(
       backgroundColor: AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      titlePadding: EdgeInsets.zero,
-      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      title: Container(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.06),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Row(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // ── Header ────────────────────────────────────────────
             Container(
-              width: 40,
-              height: 40,
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.edit_rounded,
-                color: AppColors.primary,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Edit Party',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
-              ),
-            ),
-          ],
-        ),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 12),
-          const Text(
-            'Update the party details below.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
-          ),
-          const SizedBox(height: 16),
-          _dialogField(
-            controller: _fullNameController,
-            label: 'Full Name / Entity',
-            hint: 'Enter party full name',
-          ),
-          const SizedBox(height: 12),
-          _dialogField(
-            controller: _accountController,
-            label: 'Account Number',
-            hint: 'Enter account number',
-            keyboardType: TextInputType.number,
-          ),
-          if (_errorText != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              _errorText!,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.error,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: AppColors.outlineVariant),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                color: AppColors.primary.withValues(alpha: 0.06),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
                 ),
-                onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-                child: Text(context.l10n.cancel),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.edit_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Edit Party',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            // ── Form ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Update the party details below.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
                   ),
-                ),
-                onPressed: _isSaving ? null : _onSave,
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+                  const SizedBox(height: 16),
+                  _dialogField(
+                    controller: _fullNameController,
+                    label: 'Full Name / Entity',
+                    hint: 'Enter party full name',
+                  ),
+                  const SizedBox(height: 12),
+                  _dialogField(
+                    controller: _accountController,
+                    label: 'Account Number',
+                    hint: 'Enter account number',
+                    keyboardType: TextInputType.number,
+                  ),
+                  if (_errorText != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _errorText!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // ── Actions ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: AppColors.outlineVariant),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      )
-                    : const Icon(Icons.save_outlined, size: 16),
-                label: Text(_isSaving ? 'Saving…' : 'Save Changes'),
+                      ),
+                      onPressed: _isSaving
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      child: Text(context.l10n.cancel),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: _isSaving ? null : _onSave,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.save_outlined, size: 16),
+                      label: Text(_isSaving ? 'Saving…' : 'Save Changes'),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 
@@ -779,12 +790,23 @@ class _EditPartyDialogState extends State<_EditPartyDialog> {
             filled: true,
             fillColor: AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: AppColors.primary,
+                width: 1.5,
+              ),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
-              vertical: 10,
+              vertical: 12,
             ),
           ),
         ),
@@ -869,129 +891,148 @@ class _AddPartyDialogState extends State<_AddPartyDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return Dialog(
       backgroundColor: AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      titlePadding: EdgeInsets.zero,
-      contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      title: Container(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-        decoration: BoxDecoration(
-          color: AppColors.secondary.withValues(alpha: 0.06),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Row(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // ── Header ────────────────────────────────────────────
             Container(
-              width: 40,
-              height: 40,
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
               decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.person_add_alt_1_rounded,
-                color: AppColors.secondary,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Add Party',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
-              ),
-            ),
-          ],
-        ),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 12),
-          const Text(
-            'Create a new party record for Active Entities.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
-          ),
-          const SizedBox(height: 16),
-          _dialogField(
-            controller: _fullNameController,
-            label: 'Full Name / Entity',
-            hint: 'Enter party full name',
-          ),
-          const SizedBox(height: 12),
-          _dialogField(
-            controller: _accountController,
-            label: 'Account Number',
-            hint: 'Enter account number',
-            keyboardType: TextInputType.number,
-          ),
-          if (_errorText != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              _errorText!,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.error,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: AppColors.outlineVariant),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                color: AppColors.secondary.withValues(alpha: 0.06),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
                 ),
-                onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-                child: Text(context.l10n.cancel),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.person_add_alt_1_rounded,
+                      color: AppColors.secondary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Add Party',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.secondary,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            // ── Form ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Create a new party record for Active Entities.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
                   ),
-                ),
-                onPressed: _isSaving ? null : _onAdd,
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.person_add_alt_1_rounded,
-                        size: 16,
-                        color: Colors.white,
+                  const SizedBox(height: 16),
+                  _dialogField(
+                    controller: _fullNameController,
+                    label: 'Full Name / Entity',
+                    hint: 'Enter party full name',
+                  ),
+                  const SizedBox(height: 12),
+                  _dialogField(
+                    controller: _accountController,
+                    label: 'Account Number',
+                    hint: 'Enter account number',
+                    keyboardType: TextInputType.number,
+                  ),
+                  if (_errorText != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _errorText!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w600,
                       ),
-                label: Text(
-                  _isSaving ? context.l10n.saving : context.l10n.addParty,
-                ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // ── Actions ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: AppColors.outlineVariant),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: _isSaving
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      child: Text(context.l10n.cancel),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.secondary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: _isSaving ? null : _onAdd,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.person_add_alt_1_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                      label: Text(
+                        _isSaving ? context.l10n.saving : context.l10n.addParty,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 
@@ -1021,12 +1062,23 @@ class _AddPartyDialogState extends State<_AddPartyDialog> {
             filled: true,
             fillColor: AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: AppColors.primary,
+                width: 1.5,
+              ),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
-              vertical: 10,
+              vertical: 12,
             ),
           ),
         ),

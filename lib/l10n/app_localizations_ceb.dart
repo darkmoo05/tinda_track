@@ -71,7 +71,7 @@ class AppLocalizationsCeb extends AppLocalizations {
   String get accountNumber => 'Recipient Account';
 
   @override
-  String get searchOrEnterAccountNumber => 'Ngalan o numero';
+  String get searchOrEnterAccountNumber => 'Numero';
 
   @override
   String get scanningReceipt => 'Gi-scan ang resibo…';

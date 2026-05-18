@@ -70,7 +70,7 @@ class AppLocalizationsFil extends AppLocalizations {
   String get accountNumber => 'Recipient Account';
 
   @override
-  String get searchOrEnterAccountNumber => 'Pangalan o numero';
+  String get searchOrEnterAccountNumber => 'Numero';
 
   @override
   String get scanningReceipt => 'Nini-scan ang resibo…';
