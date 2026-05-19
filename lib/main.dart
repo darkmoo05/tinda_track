@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
-import 'core/data/app_database.dart';
-import 'core/data/sync_service.dart';
-import 'core/l10n_extension.dart';
-import 'core/locale_provider.dart';
-import 'features/main_shell.dart';
+import 'core/database/app_database.dart';
+import 'core/sync/sync_service.dart';
+import 'core/l10n/l10n_extension.dart';
+import 'core/l10n/locale_provider.dart';
+import 'pocket_ledger/app/main_shell.dart';
+import 'tinda_tracker/app/tinda_tracker_shell.dart';
+
+enum AppMode { pocketLedger, tindaTracker }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -119,9 +122,34 @@ class _StartupSyncGateState extends State<StartupSyncGate> {
           return const _StartupLoadingScreen();
         }
 
-        return const MainShell();
+        return const AppModeHost();
       },
     );
+  }
+}
+
+class AppModeHost extends StatefulWidget {
+  const AppModeHost({super.key});
+
+  @override
+  State<AppModeHost> createState() => _AppModeHostState();
+}
+
+class _AppModeHostState extends State<AppModeHost> {
+  AppMode _mode = AppMode.pocketLedger;
+
+  void _switchTo(AppMode mode) => setState(() => _mode = mode);
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (_mode) {
+      AppMode.pocketLedger => MainShell(
+        onSwitchApp: () => _switchTo(AppMode.tindaTracker),
+      ),
+      AppMode.tindaTracker => TindaTrackerShell(
+        onSwitchApp: () => _switchTo(AppMode.pocketLedger),
+      ),
+    };
   }
 }
 

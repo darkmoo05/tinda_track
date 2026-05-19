@@ -1,98 +1,63 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
-import '../../core/l10n_extension.dart';
-import '../../core/locale_provider.dart';
-import '../../features/more/about_app_screen.dart';
-import '../../features/more/backup_data_screen.dart';
-import '../../features/more/profile_screen.dart';
+import '../../core/l10n/l10n_extension.dart';
+import '../../core/l10n/locale_provider.dart';
+
+class DrawerItem {
+  const DrawerItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+}
+
+class AppSwitcherConfig {
+  const AppSwitcherConfig({
+    required this.otherAppIcon,
+    required this.otherAppColor,
+    required this.otherAppLabel,
+    required this.onSwitch,
+  });
+
+  final IconData otherAppIcon;
+  final Color otherAppColor;
+  final String otherAppLabel;
+  final VoidCallback onSwitch;
+}
+
+class AppDrawerConfig {
+  const AppDrawerConfig({
+    required this.appIcon,
+    required this.appColor,
+    required this.appTitle,
+    required this.appSubtitle,
+    this.navItems = const [],
+    this.settingsItems = const [],
+    this.switcherConfig,
+  });
+
+  final IconData appIcon;
+  final Color appColor;
+  final String appTitle;
+  final String appSubtitle;
+  final List<DrawerItem> navItems;
+  final List<DrawerItem> settingsItems;
+  final AppSwitcherConfig? switcherConfig;
+}
 
 class AppSideDrawer extends StatelessWidget {
-  const AppSideDrawer({super.key});
+  const AppSideDrawer({super.key, required this.config});
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_rounded,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.appTitle,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.quickNavigation,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            _DrawerItem(
-              icon: Icons.backup_rounded,
-              label: l10n.backupData,
-              onTap: () => _openScreen(context, const BackupDataScreen()),
-            ),
-            _DrawerItem(
-              icon: Icons.person_outline_rounded,
-              label: l10n.profile,
-              onTap: () => _openScreen(context, const ProfileScreen()),
-            ),
-            _DrawerItem(
-              icon: Icons.info_outline_rounded,
-              label: l10n.aboutApp,
-              onTap: () => _openScreen(context, const AboutAppScreen()),
-            ),
-            _DrawerItem(
-              icon: Icons.language_rounded,
-              label: l10n.changeLanguage,
-              onTap: () => _showLanguagePicker(context),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  final AppDrawerConfig config;
 
-  void _openScreen(BuildContext context, Widget screen) {
+  void _executeItem(BuildContext context, VoidCallback onTap) {
     Navigator.of(context).pop();
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    onTap();
   }
 
   void _showLanguagePicker(BuildContext context) {
@@ -105,6 +70,137 @@ class AppSideDrawer extends StatelessWidget {
       ),
       builder: (_) => const _LanguagePickerSheet(),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Header ──
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: config.appColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(config.appIcon, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        config.appTitle,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        config.appSubtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // ── Quick Navigation ──
+            if (config.navItems.isNotEmpty) ...[
+              for (final item in config.navItems)
+                _DrawerItem(
+                  icon: item.icon,
+                  label: item.label,
+                  onTap: () => _executeItem(context, item.onTap),
+                ),
+              const Divider(indent: 16, endIndent: 16, height: 24),
+            ],
+            // ── Settings ──
+            for (final item in config.settingsItems)
+              _DrawerItem(
+                icon: item.icon,
+                label: item.label,
+                onTap: () => _executeItem(context, item.onTap),
+              ),
+            // ── App Switcher ──
+            if (config.switcherConfig != null)
+              ..._buildSwitcherStrip(context, config.switcherConfig!),
+            // ── Language (always present) ──
+            _DrawerItem(
+              icon: Icons.language_rounded,
+              label: l10n.changeLanguage,
+              onTap: () => _showLanguagePicker(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildSwitcherStrip(BuildContext context, AppSwitcherConfig sw) {
+    return [
+      const Divider(indent: 16, endIndent: 16, height: 8),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+        child: Text(
+          'Switch App',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.onSurfaceVariant,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: _AppChip(
+                icon: config.appIcon,
+                label: config.appTitle,
+                color: config.appColor,
+                isActive: true,
+                onTap: null,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _AppChip(
+                icon: sw.otherAppIcon,
+                label: sw.otherAppLabel,
+                color: sw.otherAppColor,
+                isActive: false,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  sw.onSwitch();
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
   }
 }
 
@@ -294,6 +390,74 @@ class _DrawerItem extends StatelessWidget {
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
+    );
+  }
+}
+
+class _AppChip extends StatelessWidget {
+  const _AppChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool isActive;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? color : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isActive ? color : AppColors.outlineVariant,
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+              ),
+            ),
+            if (isActive) ...[
+              const SizedBox(height: 2),
+              Container(
+                width: 16,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
