@@ -1,6 +1,10 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
 import 'core/database/app_database.dart';
@@ -16,7 +20,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppDatabase.instance.init();
   await LocaleProvider.instance.load();
-  runApp(const TindaTrackApp());
+  runApp(const ProviderScope(child: TindaTrackApp()));
 }
 
 class TindaTrackApp extends StatelessWidget {
@@ -97,34 +101,19 @@ class StartupSyncGate extends StatefulWidget {
 }
 
 class _StartupSyncGateState extends State<StartupSyncGate> {
-  late final Future<SyncRunResult> _startupSync;
-
   @override
   void initState() {
     super.initState();
-    _startupSync = _runStartupSync();
-  }
-
-  Future<SyncRunResult> _runStartupSync() async {
-    try {
-      return await SyncService.instance.syncAll();
-    } catch (_) {
-      return const SyncRunResult(pushed: 0, pulled: 0);
-    }
+    // Sync runs in the background — never block the UI on it.
+    // The app reads from local SQLite and is fully usable offline.
+    // Any data pulled from the server will refresh providers via
+    // the periodic sync timer in AppModeHost.
+    SyncService.instance.syncAll().ignore();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<SyncRunResult>(
-      future: _startupSync,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const _StartupLoadingScreen();
-        }
-
-        return const AppModeHost();
-      },
-    );
+    return const AppModeHost();
   }
 }
 
@@ -138,6 +127,44 @@ class AppModeHost extends StatefulWidget {
 class _AppModeHostState extends State<AppModeHost> {
   AppMode _mode = AppMode.pocketLedger;
 
+  late final StreamSubscription<List<ConnectivityResult>> _connectivitySub;
+  Timer? _syncDebounce;
+  Timer? _periodicSync;
+  // Track previous state so we only sync on offline → online transitions.
+  bool _wasOffline = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _connectivitySub = Connectivity().onConnectivityChanged.listen(
+      _onConnectivityChanged,
+    );
+    // Sync every 60 s while the app is open and online.
+    _periodicSync = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!_wasOffline) SyncService.instance.syncAll();
+    });
+  }
+
+  void _onConnectivityChanged(List<ConnectivityResult> results) {
+    final isOffline = results.every((r) => r == ConnectivityResult.none);
+    if (_wasOffline && !isOffline) {
+      // Came back online — debounce 3 s then sync.
+      _syncDebounce?.cancel();
+      _syncDebounce = Timer(const Duration(seconds: 3), () {
+        SyncService.instance.syncAll();
+      });
+    }
+    _wasOffline = isOffline;
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub.cancel();
+    _syncDebounce?.cancel();
+    _periodicSync?.cancel();
+    super.dispose();
+  }
+
   void _switchTo(AppMode mode) => setState(() => _mode = mode);
 
   @override
@@ -150,69 +177,5 @@ class _AppModeHostState extends State<AppModeHost> {
         onSwitchApp: () => _switchTo(AppMode.pocketLedger),
       ),
     };
-  }
-}
-
-class _StartupLoadingScreen extends StatelessWidget {
-  const _StartupLoadingScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.primary, AppColors.primaryContainer],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Icon centered in expanded space
-              Expanded(
-                child: Center(
-                  child: Image.asset(
-                    'tinda_tract_icon.png',
-                    width: 140,
-                    height: 140,
-                  ),
-                ),
-              ),
-              // Spinner + label pinned to bottom
-              Padding(
-                padding: const EdgeInsets.only(bottom: 48),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.onPrimary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      context.l10n.syncingData,
-                      style: TextStyle(
-                        color: AppColors.onPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

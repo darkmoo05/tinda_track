@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
 import '../database/app_database.dart';
 import 'sync_config.dart';
 
@@ -23,112 +24,183 @@ class SyncService {
   final AppDatabase _database = AppDatabase.instance;
   static const Duration _requestTimeout = Duration(seconds: 12);
 
+  bool _isSyncing = false;
+
   Future<SyncRunResult> syncAll() async {
+    // Guard against concurrent calls (e.g. startup fire-and-forget overlapping
+    // with the 60-second periodic timer).
+    if (_isSyncing) return const SyncRunResult(pushed: 0, pulled: 0);
+    _isSyncing = true;
+    try {
+      return await _doSyncAll();
+    } finally {
+      _isSyncing = false;
+    }
+  }
+
+  Future<SyncRunResult> _doSyncAll() async {
     final db = await _database.database;
     await _database.ensureSyncSchema(db);
 
+    // Fast reachability check — avoids burning through individual 12-second
+    // timeouts for every operation when the server is simply offline.
+    final baseUrl = await SyncConfig.getBaseApiUrl();
+    final reachable = await _isServerReachable(baseUrl);
+    if (!reachable) {
+      log('[Sync] Server unreachable, skipping sync', name: 'SyncService');
+      return const SyncRunResult(pushed: 0, pulled: 0);
+    }
+
     final deviceId = await _database.getOrCreateDeviceId();
-    final sinceRaw = await _database.getSyncState('last_sync_ms');
-    final sinceMs = int.tryParse(sinceRaw ?? '') ?? 0;
+    // Use a per-scope timestamp for PocketLedger so a failed PL sync never
+    // advances the cursor and causes permanently missed records on the next run.
+    // Falls back to the legacy 'last_sync_ms' key for existing installs.
+    final plSinceRaw =
+        await _database.getSyncState('pl_last_sync_ms') ??
+        await _database.getSyncState('last_sync_ms');
+    final plSinceMs = int.tryParse(plSinceRaw ?? '') ?? 0;
     final hasLocalData = await _hasAnyLocalData(db);
-    final effectiveSinceMs = hasLocalData ? sinceMs : 0;
+    final effectiveSinceMs = (hasLocalData && plSinceMs > 0) ? plSinceMs : 0;
     final pullDeviceId = hasLocalData ? deviceId : null;
 
     var pushed = 0;
     var pulled = 0;
+    var plSyncOk = false;
 
-    pushed += await _syncParties(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: true,
-      pullDeviceId: pullDeviceId,
-    );
-    pulled += await _syncParties(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: false,
-      pullDeviceId: pullDeviceId,
-    );
+    // PocketLedger sync — isolated so a server error here never prevents
+    // TindaTracker data from syncing.
+    try {
+      pushed += await _syncParties(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: true,
+        pullDeviceId: pullDeviceId,
+      );
+      pulled += await _syncParties(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: false,
+        pullDeviceId: pullDeviceId,
+      );
 
-    pushed += await _syncEntries(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: true,
-      pullDeviceId: pullDeviceId,
-    );
-    pulled += await _syncEntries(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: false,
-      pullDeviceId: pullDeviceId,
-    );
+      pushed += await _syncEntries(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: true,
+        pullDeviceId: pullDeviceId,
+      );
+      pulled += await _syncEntries(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: false,
+        pullDeviceId: pullDeviceId,
+      );
 
-    pushed += await _syncCharges(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: true,
-      pullDeviceId: pullDeviceId,
-    );
-    pulled += await _syncCharges(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: false,
-      pullDeviceId: pullDeviceId,
-    );
+      pushed += await _syncCharges(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: true,
+        pullDeviceId: pullDeviceId,
+      );
+      pulled += await _syncCharges(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: false,
+        pullDeviceId: pullDeviceId,
+      );
 
-    pushed += await _syncTransactionTypes(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: true,
-      pullDeviceId: pullDeviceId,
-    );
-    pulled += await _syncTransactionTypes(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: false,
-      pullDeviceId: pullDeviceId,
-    );
+      pushed += await _syncTransactionTypes(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: true,
+        pullDeviceId: pullDeviceId,
+      );
+      pulled += await _syncTransactionTypes(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: false,
+        pullDeviceId: pullDeviceId,
+      );
 
-    pushed += await _syncMovementCategories(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: true,
-      pullDeviceId: pullDeviceId,
-    );
-    pulled += await _syncMovementCategories(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: false,
-      pullDeviceId: pullDeviceId,
-    );
+      pushed += await _syncMovementCategories(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: true,
+        pullDeviceId: pullDeviceId,
+      );
+      pulled += await _syncMovementCategories(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: false,
+        pullDeviceId: pullDeviceId,
+      );
 
-    pushed += await _syncFeeTransactions(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: true,
-      pullDeviceId: pullDeviceId,
-    );
-    pulled += await _syncFeeTransactions(
-      db,
-      deviceId,
-      effectiveSinceMs,
-      isPush: false,
-      pullDeviceId: pullDeviceId,
-    );
+      pushed += await _syncFeeTransactions(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: true,
+        pullDeviceId: pullDeviceId,
+      );
+      pulled += await _syncFeeTransactions(
+        db,
+        deviceId,
+        effectiveSinceMs,
+        isPush: false,
+        pullDeviceId: pullDeviceId,
+      );
+      plSyncOk = true;
+    } catch (e) {
+      log(
+        '[Sync] PocketLedger sync error (TindaTracker sync will still run): $e',
+        name: 'SyncService',
+      );
+    }
 
+    // Save PL timestamp only when every entity synced successfully.
+    // If any entity threw, the cursor stays at its previous value so the
+    // next run retries a full pull instead of skipping unsynced records.
+    if (plSyncOk) {
+      await _database.setSyncState(
+        'pl_last_sync_ms',
+        DateTime.now().millisecondsSinceEpoch.toString(),
+      );
+    }
+
+    // TindaTracker local-cache sync
+    // Sync lookup tables first so the server has FK targets before products
+    pushed += await _syncTtProductCategories(db, deviceId, isPush: true);
+    pulled += await _syncTtProductCategories(db, deviceId, isPush: false);
+    pushed += await _syncTtShelfLocations(db, deviceId, isPush: true);
+    // Image upload MUST run between the row push and the row pull. The pull
+    // path overwrites local `image_url` from the server's `updatedAt` feed,
+    // and the upload filter requires `image_url IS NULL` to detect pending
+    // photos. Running it after the pull would re-stamp the row with the old
+    // remote URL and the new picture would never reach the server.
+    pushed += await _pushShelfLocationImages(db);
+    pulled += await _syncTtShelfLocations(db, deviceId, isPush: false);
+    // Shelf-location records now have server_ids — flush any pending
+    // offline-captured photos before products start referencing them.
+    pushed += await _syncTtProducts(db, deviceId, isPush: true);
+    pulled += await _syncTtProducts(db, deviceId, isPush: false);
+    pushed += await _syncTtCustomers(db, deviceId, isPush: true);
+    pulled += await _syncTtCustomers(db, deviceId, isPush: false);
+    pushed += await _syncTtSales(db, deviceId, isPush: true);
+    pulled += await _syncTtSales(db, deviceId, isPush: false);
+
+    // TindaTracker keeps its own timestamp (separate scope from PocketLedger).
     await _database.setSyncState(
-      'last_sync_ms',
+      'tt_last_sync_ms',
       DateTime.now().millisecondsSinceEpoch.toString(),
     );
 
@@ -555,7 +627,23 @@ class SyncService {
       if (_shouldKeepLocal(local, remoteUpdated)) {
         continue;
       }
+      // Resolve the server's relatedTransactionSyncId back to a local integer id.
+      int? relatedTransactionId;
+      final relatedSyncId = _asString(item['relatedTransactionSyncId']);
+      if (relatedSyncId.isNotEmpty) {
+        final parentRows = await db.query(
+          AppDatabase.ledgerTable,
+          columns: ['id'],
+          where: '${AppDatabase.syncIdColumn} = ?',
+          whereArgs: [relatedSyncId],
+          limit: 1,
+        );
+        if (parentRows.isNotEmpty) {
+          relatedTransactionId = parentRows.first['id'] as int?;
+        }
+      }
       final values = {
+        'related_transaction_id': relatedTransactionId,
         'fee_amount': _asDouble(item['feeAmount']),
         'fee_type': _asString(item['feeType']),
         'charge_destination': _asString(item['chargeDestination']),
@@ -770,6 +858,20 @@ class SyncService {
     return false;
   }
 
+  /// Returns true if the server responds to a lightweight health probe within
+  /// 3 seconds. Used to short-circuit sync when the device is offline or the
+  /// server is down, avoiding individual 12-second timeouts per operation.
+  Future<bool> _isServerReachable(String baseUrl) async {
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/health'))
+          .timeout(const Duration(seconds: 3));
+      return res.statusCode < 500;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> _hasAnyLocalData(Database db) async {
     final tables = [
       AppDatabase.partiesTable,
@@ -789,5 +891,919 @@ class SyncService {
     }
 
     return false;
+  }
+
+  // ─── TindaTracker sync helpers ────────────────────────────────────────────
+
+  Future<int> _syncTtLookupTable(
+    Database db, {
+    required String localTable,
+    required String pushEndpoint,
+    required String pullEndpoint,
+    required bool isPush,
+    Map<String, Object?> Function(Map<String, Object?> row)? extraPushFields,
+    FutureOr<Map<String, Object?>> Function(Map<String, dynamic> serverItem)?
+    extraPullFields,
+  }) async {
+    final baseUrl = await SyncConfig.getBaseApiUrl();
+    if (isPush) {
+      final rows = await db.query(localTable, where: 'is_dirty = 1');
+      if (rows.isEmpty) return 0;
+      final payload = rows.map((r) {
+        final base = <String, Object?>{
+          'syncId': r['sync_id'],
+          'name': r['name'],
+          'isDeleted': (r['is_deleted'] as int) == 1,
+        };
+        if (extraPushFields != null) base.addAll(extraPushFields(r));
+        return base;
+      }).toList();
+      try {
+        final res = await http
+            .post(
+              Uri.parse('$baseUrl/$pushEndpoint'),
+              headers: const {'Content-Type': 'application/json'},
+              body: jsonEncode(payload),
+            )
+            .timeout(_requestTimeout);
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final body = jsonDecode(res.body);
+          final rawData = body is Map ? body['data'] : null;
+          final serverItems =
+              (rawData as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+          for (final item in serverItems) {
+            await db.update(
+              localTable,
+              {'server_id': item['id'], 'is_dirty': 0},
+              where: 'sync_id = ?',
+              whereArgs: [item['syncId']],
+            );
+          }
+          // If server returned no items (e.g. older API), still mark rows clean
+          if (serverItems.isEmpty) {
+            for (final row in rows) {
+              await db.update(
+                localTable,
+                {'is_dirty': 0},
+                where: 'sync_id = ?',
+                whereArgs: [row['sync_id']],
+              );
+            }
+          }
+        } else if (res.statusCode == 400) {
+          // Surface the server's structured error (e.g. quick-access cap).
+          log(
+            '[Sync] $pushEndpoint rejected (400): ${res.body}',
+            name: 'SyncService',
+          );
+        }
+      } catch (e) {
+        log('[Sync] $pushEndpoint push error: $e', name: 'SyncService');
+      }
+      return rows.length;
+    }
+
+    // pull
+    try {
+      final sinceRaw = await _database.getSyncState('tt_last_sync_ms');
+      final sinceMs = sinceRaw != null ? int.tryParse(sinceRaw) ?? 0 : 0;
+      final res = await http
+          .get(Uri.parse('$baseUrl/$pullEndpoint?since=$sinceMs'))
+          .timeout(_requestTimeout);
+      if (res.statusCode < 200 || res.statusCode >= 300) return 0;
+      final list = (jsonDecode(res.body)['data'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+      var count = 0;
+      for (final item in list) {
+        final syncId = item['syncId'] as String?;
+        final serverId = item['id'] as String;
+        final now = DateTime.now().toIso8601String();
+        final values = <String, Object?>{
+          'sync_id': syncId ?? serverId,
+          'server_id': serverId,
+          'name': item['name'] as String? ?? '',
+          'is_deleted': (item['isDeleted'] as bool? ?? false) ? 1 : 0,
+          'is_dirty': 0,
+          'created_at': item['createdAt'] ?? now,
+          'updated_at': item['updatedAt'] ?? now,
+        };
+        if (extraPullFields != null) {
+          values.addAll(await extraPullFields(item));
+        }
+        final existing = await db.query(
+          localTable,
+          where: 'sync_id = ? OR server_id = ?',
+          whereArgs: [values['sync_id'], serverId],
+          limit: 1,
+        );
+        if (existing.isEmpty) {
+          await db.insert(
+            localTable,
+            values,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        } else if ((existing.first['is_dirty'] as int) == 0) {
+          await db.update(
+            localTable,
+            values,
+            where: 'id = ?',
+            whereArgs: [existing.first['id']],
+          );
+        }
+        count++;
+      }
+      return count;
+    } catch (e) {
+      log('[Sync] $pullEndpoint pull error: $e', name: 'SyncService');
+      return 0;
+    }
+  }
+
+  Future<int> _syncTtProductCategories(
+    Database db,
+    String deviceId, {
+    required bool isPush,
+  }) async {
+    return _syncTtLookupTable(
+      db,
+      localTable: AppDatabase.ttProductCategoriesTable,
+      pushEndpoint: 'inventory/categories/push',
+      pullEndpoint: 'inventory/categories/pull',
+      isPush: isPush,
+      extraPushFields: (r) => {
+        'description': r['description'] ?? '',
+        'examples': r['examples'] ?? '',
+        'isQuickAccess': (r['is_quick_access'] as int? ?? 0) == 1,
+      },
+      extraPullFields: (m) => {
+        'description': (m['description'] as String?) ?? '',
+        'examples': (m['examples'] as String?) ?? '',
+        'is_quick_access': (m['isQuickAccess'] as bool? ?? false) ? 1 : 0,
+      },
+    );
+  }
+
+  Future<int> _syncTtShelfLocations(
+    Database db,
+    String deviceId, {
+    required bool isPush,
+  }) async {
+    return _syncTtLookupTable(
+      db,
+      localTable: AppDatabase.ttShelfLocationsTable,
+      pushEndpoint: 'inventory/shelf-locations/push',
+      pullEndpoint: 'inventory/shelf-locations/pull',
+      isPush: isPush,
+      extraPushFields: (r) => {
+        'description': r['description'] ?? '',
+        'examples': r['examples'] ?? '',
+      },
+      extraPullFields: (m) async {
+        // Server is authoritative for image_url; rebuilt as an absolute URL
+        // so [Image.network] can render it directly.
+        final baseUrl = await SyncConfig.getBaseApiUrl();
+        return {
+          'description': (m['description'] as String?) ?? '',
+          'examples': (m['examples'] as String?) ?? '',
+          'image_url': _absoluteImageUrl(m['imageUrl'] as String?, baseUrl),
+        };
+      },
+    );
+  }
+
+  Future<int> _syncTtProducts(
+    Database db,
+    String deviceId, {
+    required bool isPush,
+  }) async {
+    final table = AppDatabase.ttProductsTable;
+    if (isPush) {
+      final rows = await db.query(table, where: 'is_dirty = 1');
+      if (rows.isEmpty) return 0;
+      final baseUrl = await SyncConfig.getBaseApiUrl();
+      var count = 0;
+      for (final row in rows) {
+        try {
+          final syncId = row['sync_id'] as String;
+          final serverId = row['server_id'] as String?;
+          final isDeleted = (row['is_deleted'] as int) == 1;
+
+          // Bug fix: never push a deleted record that was never on server
+          if (isDeleted && serverId == null) {
+            await db.update(
+              table,
+              {'is_dirty': 0},
+              where: 'sync_id = ?',
+              whereArgs: [syncId],
+            );
+            count++;
+            continue;
+          }
+
+          http.Response res;
+          if (isDeleted && serverId != null) {
+            res = await http
+                .delete(Uri.parse('$baseUrl/inventory/products/$serverId'))
+                .timeout(_requestTimeout);
+          } else if (serverId == null) {
+            res = await http
+                .post(
+                  Uri.parse('$baseUrl/inventory/products'),
+                  headers: const {'Content-Type': 'application/json'},
+                  body: jsonEncode({
+                    'syncId': syncId,
+                    'deviceId': row['device_id'],
+                    'name': row['name'],
+                    'sku': row['sku'],
+                    'description': row['description'],
+                    'category': row['category'],
+                    'unit': row['unit'],
+                    'costPrice': row['cost_price'],
+                    'sellingPrice': row['selling_price'],
+                    'stockQuantity': row['stock_quantity'],
+                    'reorderPoint': row['reorder_point'],
+                    'isActive': (row['is_active'] as int) == 1,
+                    'shelfLocation': row['shelf_location'] ?? 'Counter',
+                    'expirationDate': row['expiration_date'],
+                  }),
+                )
+                .timeout(_requestTimeout);
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              final data = jsonDecode(res.body)['data'] as Map<String, dynamic>;
+              final newServerId = data['id'] as String;
+              await db.update(
+                table,
+                {'server_id': newServerId, 'is_dirty': 0},
+                where: 'sync_id = ?',
+                whereArgs: [syncId],
+              );
+              // If the product has a local image that hasn't been uploaded yet,
+              // push it immediately after the product record is confirmed on the server.
+              final imagePath = row['image_path'] as String?;
+              final imageUrl = row['image_url'] as String?;
+              if (imagePath != null && imageUrl == null) {
+                unawaited(
+                  _pushProductImage(
+                    db: db,
+                    table: table,
+                    syncId: syncId,
+                    serverId: newServerId,
+                    imagePath: imagePath,
+                    baseUrl: baseUrl,
+                  ),
+                );
+              }
+            } else {
+              log(
+                '[Sync] product POST failed ${res.statusCode}: ${res.body}',
+                name: 'SyncService',
+              );
+            }
+            count++;
+            continue;
+          } else {
+            res = await http
+                .patch(
+                  Uri.parse('$baseUrl/inventory/products/$serverId'),
+                  headers: const {'Content-Type': 'application/json'},
+                  body: jsonEncode({
+                    'name': row['name'],
+                    'sku': row['sku'],
+                    'description': row['description'],
+                    'category': row['category'],
+                    'unit': row['unit'],
+                    'costPrice': row['cost_price'],
+                    'sellingPrice': row['selling_price'],
+                    'stockQuantity': row['stock_quantity'],
+                    'reorderPoint': row['reorder_point'],
+                    'isActive': (row['is_active'] as int) == 1,
+                    'shelfLocation': row['shelf_location'] ?? 'Counter',
+                    'expirationDate': row['expiration_date'],
+                  }),
+                )
+                .timeout(_requestTimeout);
+          }
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            await db.update(
+              table,
+              {'is_dirty': 0},
+              where: 'sync_id = ?',
+              whereArgs: [row['sync_id']],
+            );
+            // Also upload the image if it has never reached the server.
+            final patchImagePath = row['image_path'] as String?;
+            final patchImageUrl = row['image_url'] as String?;
+            if (patchImagePath != null && patchImageUrl == null) {
+              unawaited(
+                _pushProductImage(
+                  db: db,
+                  table: table,
+                  syncId: syncId,
+                  serverId: serverId!,
+                  imagePath: patchImagePath,
+                  baseUrl: baseUrl,
+                ),
+              );
+            }
+          }
+          count++;
+        } catch (e, st) {
+          log('[Sync] product push error: $e\n$st', name: 'SyncService');
+        }
+      }
+      return count;
+    }
+
+    // pull
+    try {
+      final baseUrl = await SyncConfig.getBaseApiUrl();
+      final res = await http
+          .get(
+            Uri.parse(
+              '$baseUrl/inventory/products?includeDeleted=true&limit=1000',
+            ),
+          )
+          .timeout(_requestTimeout);
+      if (res.statusCode < 200 || res.statusCode >= 300) return 0;
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final list = body['data'] as List<dynamic>;
+      var count = 0;
+      for (final item in list) {
+        final m = item as Map<String, dynamic>;
+        final serverSyncId = m['syncId'] as String?;
+        final serverId = m['id'] as String;
+
+        // find local row by syncId first, then by server_id
+        List<Map<String, Object?>> localRows = [];
+        if (serverSyncId != null) {
+          localRows = await db.query(
+            table,
+            where: 'sync_id = ?',
+            whereArgs: [serverSyncId],
+            limit: 1,
+          );
+        }
+        if (localRows.isEmpty) {
+          localRows = await db.query(
+            table,
+            where: 'server_id = ?',
+            whereArgs: [serverId],
+            limit: 1,
+          );
+        }
+        final local = localRows.isEmpty ? null : localRows.first;
+        // Don't overwrite dirty local rows
+        if (local != null && (local['is_dirty'] as int) == 1) continue;
+
+        final values = {
+          'sync_id': serverSyncId ?? serverId,
+          'server_id': serverId,
+          'device_id': m['deviceId'] ?? deviceId,
+          'name': m['name'] ?? '',
+          'sku': m['sku'] ?? '',
+          'description': m['description'] ?? '',
+          'category': m['category'] ?? 'General',
+          'unit': m['unit'] ?? 'pcs',
+          'cost_price': (m['costPrice'] as num?)?.toDouble() ?? 0,
+          'selling_price': (m['sellingPrice'] as num?)?.toDouble() ?? 0,
+          'stock_quantity': (m['stockQuantity'] as num?)?.toInt() ?? 0,
+          'reorder_point': (m['reorderPoint'] as num?)?.toInt() ?? 0,
+          'is_active': (m['isActive'] as bool? ?? true) ? 1 : 0,
+          'is_deleted': (m['isDeleted'] as bool? ?? false) ? 1 : 0,
+          'is_dirty': 0,
+          'shelf_location': (m['shelfLocation'] as String?) ?? 'Counter',
+          'expiration_date': m['expirationDate'] as String?,
+          'image_url': _absoluteImageUrl(m['imageUrl'] as String?, baseUrl),
+          'created_at': m['createdAt'] ?? DateTime.now().toIso8601String(),
+          'updated_at': m['updatedAt'] ?? DateTime.now().toIso8601String(),
+        };
+        if (local == null) {
+          await db.insert(
+            table,
+            values,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        } else {
+          await db.update(
+            table,
+            values,
+            where: 'id = ?',
+            whereArgs: [local['id']],
+          );
+        }
+        count++;
+      }
+      return count;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Uploads a product image to the server using multipart POST.
+  /// Updates [table].image_url in SQLite on success.
+  Future<void> _pushProductImage({
+    required Database db,
+    required String table,
+    required String syncId,
+    required String serverId,
+    required String imagePath,
+    required String baseUrl,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/inventory/products/$serverId/image');
+      final request = http.MultipartRequest('PATCH', uri);
+      // Explicitly declare the MIME type so the server's fileFilter accepts it
+      // regardless of OS-level MIME detection fallbacks (which may return
+      // application/octet-stream for .webp on some Android builds).
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          imagePath,
+          contentType: MediaType('image', 'webp'),
+        ),
+      );
+      final streamed = await request.send().timeout(_requestTimeout);
+      final responseBody = await streamed.stream.bytesToString();
+      if (streamed.statusCode >= 200 && streamed.statusCode < 300) {
+        final data = jsonDecode(responseBody)['data'] as Map<String, dynamic>?;
+        final remoteUrl = _absoluteImageUrl(
+          data?['imageUrl'] as String?,
+          baseUrl,
+        );
+        await db.update(
+          table,
+          {'image_url': remoteUrl},
+          where: 'sync_id = ?',
+          whereArgs: [syncId],
+        );
+      } else {
+        log(
+          '[Sync] image upload failed ${streamed.statusCode} for $syncId: $responseBody',
+          name: 'SyncService',
+        );
+      }
+    } catch (e) {
+      log('[Sync] image upload error for $syncId: $e', name: 'SyncService');
+    }
+  }
+
+  /// Walks every shelf location that has a local `image_path` but no
+  /// `image_url` (i.e. picture captured offline, never uploaded) and pushes
+  /// it via multipart PATCH. Called from [_doSyncAll] after the shelf
+  /// locations themselves have been pushed, guaranteeing each row has a
+  /// `server_id` to address.
+  Future<int> _pushShelfLocationImages(Database db) async {
+    final rows = await db.query(
+      AppDatabase.ttShelfLocationsTable,
+      where:
+          'image_path IS NOT NULL AND (image_url IS NULL OR image_url = "") '
+          'AND server_id IS NOT NULL AND is_deleted = 0',
+    );
+    if (rows.isEmpty) return 0;
+    final baseUrl = await SyncConfig.getBaseApiUrl();
+    var pushed = 0;
+    for (final row in rows) {
+      final syncId = row['sync_id'] as String;
+      final serverId = row['server_id'] as String;
+      final imagePath = row['image_path'] as String;
+      try {
+        final uri = Uri.parse(
+          '$baseUrl/inventory/shelf-locations/$serverId/image',
+        );
+        final request = http.MultipartRequest('PATCH', uri);
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'file',
+            imagePath,
+            contentType: MediaType('image', 'webp'),
+          ),
+        );
+        final streamed = await request.send().timeout(_requestTimeout);
+        final responseBody = await streamed.stream.bytesToString();
+        if (streamed.statusCode >= 200 && streamed.statusCode < 300) {
+          final data =
+              jsonDecode(responseBody)['data'] as Map<String, dynamic>?;
+          final remoteUrl = _absoluteImageUrl(
+            data?['imageUrl'] as String?,
+            baseUrl,
+          );
+          await db.update(
+            AppDatabase.ttShelfLocationsTable,
+            {'image_url': remoteUrl},
+            where: 'sync_id = ?',
+            whereArgs: [syncId],
+          );
+          pushed++;
+        } else {
+          log(
+            '[Sync] shelf-location image upload failed '
+            '${streamed.statusCode} for $syncId: $responseBody',
+            name: 'SyncService',
+          );
+        }
+      } catch (e) {
+        log(
+          '[Sync] shelf-location image upload error for $syncId: $e',
+          name: 'SyncService',
+        );
+      }
+    }
+    return pushed;
+  }
+
+  /// Converts a server-returned image URL to an absolute URL.
+  /// The server stores paths like `/uploads/products/foo.webp` (relative).
+  /// We need `http://host:port/uploads/products/foo.webp` for [Image.network].
+  String? _absoluteImageUrl(String? url, String baseUrl) {
+    if (url == null) return null;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) {
+      final origin = Uri.parse(baseUrl).origin;
+      return '$origin$url';
+    }
+    return url;
+  }
+
+  Future<int> _syncTtCustomers(
+    Database db,
+    String deviceId, {
+    required bool isPush,
+  }) async {
+    final table = AppDatabase.ttCustomersTable;
+    if (isPush) {
+      final rows = await db.query(table, where: 'is_dirty = 1');
+      if (rows.isEmpty) return 0;
+      final baseUrl = await SyncConfig.getBaseApiUrl();
+      var count = 0;
+      for (final row in rows) {
+        try {
+          final serverId = row['server_id'] as String?;
+          final isDeleted = (row['is_deleted'] as int) == 1;
+          final syncId = row['sync_id'] as String;
+
+          // Bug fix: never push a deleted record that was never on server
+          if (isDeleted && serverId == null) {
+            await db.update(
+              table,
+              {'is_dirty': 0},
+              where: 'sync_id = ?',
+              whereArgs: [syncId],
+            );
+            count++;
+            continue;
+          }
+
+          if (isDeleted && serverId != null) {
+            await http
+                .delete(Uri.parse('$baseUrl/customers/$serverId'))
+                .timeout(_requestTimeout);
+          } else if (serverId == null) {
+            final res = await http
+                .post(
+                  Uri.parse('$baseUrl/customers'),
+                  headers: const {'Content-Type': 'application/json'},
+                  body: jsonEncode({
+                    'name': row['name'],
+                    if ((row['phone'] as String).isNotEmpty)
+                      'phone': row['phone'],
+                    if ((row['address'] as String).isNotEmpty)
+                      'address': row['address'],
+                    if ((row['notes'] as String).isNotEmpty)
+                      'notes': row['notes'],
+                  }),
+                )
+                .timeout(_requestTimeout);
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              final data = jsonDecode(res.body)['data'] as Map<String, dynamic>;
+              final newServerId = data['id'] as String;
+              await db.update(
+                table,
+                {'server_id': newServerId, 'is_dirty': 0},
+                where: 'sync_id = ?',
+                whereArgs: [syncId],
+              );
+              // Push dirty utang records for this customer
+              await _pushPendingUtang(db, syncId, newServerId, baseUrl);
+            }
+            count++;
+            continue;
+          } else {
+            // Bug fix: customer with server_id updated offline — PATCH it
+            await http
+                .patch(
+                  Uri.parse('$baseUrl/customers/$serverId'),
+                  headers: const {'Content-Type': 'application/json'},
+                  body: jsonEncode({
+                    'name': row['name'],
+                    if ((row['phone'] as String).isNotEmpty)
+                      'phone': row['phone'],
+                    if ((row['address'] as String).isNotEmpty)
+                      'address': row['address'],
+                    if ((row['notes'] as String).isNotEmpty)
+                      'notes': row['notes'],
+                  }),
+                )
+                .timeout(_requestTimeout);
+          }
+          await db.update(
+            table,
+            {'is_dirty': 0},
+            where: 'sync_id = ?',
+            whereArgs: [syncId],
+          );
+          count++;
+        } catch (e, st) {
+          log('[Sync] customer push error: $e\n$st', name: 'SyncService');
+        }
+      }
+
+      // Bug fix: push orphaned dirty utang records whose customers already
+      // have a server_id (customer wasn't dirty so _pushPendingUtang was
+      // never called for them).
+      final orphanedUtang = await db.query(
+        AppDatabase.ttUtangRecordsTable,
+        where: 'is_dirty = 1 AND server_id IS NULL',
+      );
+      for (final utang in orphanedUtang) {
+        try {
+          final customerSyncId = utang['customer_sync_id'] as String;
+          final customerRows = await db.query(
+            AppDatabase.ttCustomersTable,
+            where: 'sync_id = ?',
+            whereArgs: [customerSyncId],
+            limit: 1,
+          );
+          if (customerRows.isEmpty) continue;
+          final customerServerId = customerRows.first['server_id'] as String?;
+          if (customerServerId == null) continue;
+          await _pushPendingUtang(
+            db,
+            customerSyncId,
+            customerServerId,
+            baseUrl,
+          );
+        } catch (e, st) {
+          log('[Sync] orphaned utang push error: $e\n$st', name: 'SyncService');
+        }
+      }
+
+      return count;
+    }
+
+    // pull
+    try {
+      final baseUrl = await SyncConfig.getBaseApiUrl();
+      final res = await http
+          .get(Uri.parse('$baseUrl/customers'))
+          .timeout(_requestTimeout);
+      if (res.statusCode < 200 || res.statusCode >= 300) return 0;
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final list = body['data'] as List<dynamic>;
+      var count = 0;
+      for (final item in list) {
+        final m = item as Map<String, dynamic>;
+        final serverId = m['id'] as String;
+        final localRows = await db.query(
+          table,
+          where: 'server_id = ?',
+          whereArgs: [serverId],
+          limit: 1,
+        );
+        final local = localRows.isEmpty ? null : localRows.first;
+        if (local != null && (local['is_dirty'] as int) == 1) continue;
+
+        final now = DateTime.now().toIso8601String();
+        final values = {
+          'sync_id': local?['sync_id'] ?? serverId,
+          'server_id': serverId,
+          'device_id': deviceId,
+          'name': m['name'] ?? '',
+          'phone': m['phone'] ?? '',
+          'address': m['address'] ?? '',
+          'notes': m['notes'] ?? '',
+          'balance': (m['balance'] as num?)?.toDouble() ?? 0,
+          'is_deleted': 0,
+          'is_dirty': 0,
+          'created_at': m['createdAt'] ?? now,
+          'updated_at': m['updatedAt'] ?? now,
+        };
+        if (local == null) {
+          await db.insert(
+            table,
+            values,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        } else {
+          await db.update(
+            table,
+            values,
+            where: 'id = ?',
+            whereArgs: [local['id']],
+          );
+        }
+        count++;
+      }
+      return count;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> _pushPendingUtang(
+    Database db,
+    String customerSyncId,
+    String serverCustomerId,
+    String baseUrl,
+  ) async {
+    final utangRows = await db.query(
+      AppDatabase.ttUtangRecordsTable,
+      where: 'customer_sync_id = ? AND is_dirty = 1 AND server_id IS NULL',
+      whereArgs: [customerSyncId],
+    );
+    for (final row in utangRows) {
+      try {
+        final amount = (row['amount'] as num).toDouble();
+        final isPayment = amount < 0;
+        final path = isPayment
+            ? '$baseUrl/customers/$serverCustomerId/payment'
+            : '$baseUrl/customers/$serverCustomerId/utang';
+        final res = await http
+            .post(
+              Uri.parse(path),
+              headers: const {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'amount': amount.abs(),
+                'description': row['description'],
+              }),
+            )
+            .timeout(_requestTimeout);
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final data = jsonDecode(res.body)['data'] as Map<String, dynamic>;
+          await db.update(
+            AppDatabase.ttUtangRecordsTable,
+            {'server_id': data['id'], 'is_dirty': 0},
+            where: 'sync_id = ?',
+            whereArgs: [row['sync_id']],
+          );
+        }
+      } catch (e, st) {
+        log('[Sync] _pushPendingUtang error: $e\n$st', name: 'SyncService');
+      }
+    }
+  }
+
+  Future<int> _syncTtSales(
+    Database db,
+    String deviceId, {
+    required bool isPush,
+  }) async {
+    final table = AppDatabase.ttSalesTable;
+    if (isPush) {
+      final rows = await db.query(
+        table,
+        where: 'is_dirty = 1 AND server_id IS NULL',
+      );
+      if (rows.isEmpty) return 0;
+      final baseUrl = await SyncConfig.getBaseApiUrl();
+      var count = 0;
+      for (final row in rows) {
+        try {
+          final saleSyncId = row['sync_id'] as String;
+          final itemRows = await db.query(
+            AppDatabase.ttSaleItemsTable,
+            where: 'sale_sync_id = ?',
+            whereArgs: [saleSyncId],
+          );
+          // Bug fix: refresh product_server_id from tt_products in case
+          // products were pushed (and got their server_id) in this same sync.
+          for (final item in itemRows) {
+            if (item['product_server_id'] != null) continue;
+            final pSyncId = item['product_sync_id'] as String;
+            final pRows = await db.query(
+              AppDatabase.ttProductsTable,
+              where: 'sync_id = ?',
+              whereArgs: [pSyncId],
+              limit: 1,
+            );
+            if (pRows.isNotEmpty && pRows.first['server_id'] != null) {
+              await db.update(
+                AppDatabase.ttSaleItemsTable,
+                {'product_server_id': pRows.first['server_id']},
+                where: 'sale_sync_id = ? AND product_sync_id = ?',
+                whereArgs: [saleSyncId, pSyncId],
+              );
+            }
+          }
+          // Re-query after refresh
+          final refreshedItems = await db.query(
+            AppDatabase.ttSaleItemsTable,
+            where: 'sale_sync_id = ?',
+            whereArgs: [saleSyncId],
+          );
+          final allHaveServerIds = refreshedItems.every(
+            (r) => r['product_server_id'] != null,
+          );
+          if (!allHaveServerIds) continue;
+
+          final res = await http
+              .post(
+                Uri.parse('$baseUrl/pos/checkout'),
+                headers: const {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'reference': row['reference'],
+                  'paidAmount': row['paid_amount'],
+                  if ((row['note'] as String).isNotEmpty) 'note': row['note'],
+                  'deviceId': row['device_id'],
+                  'items': refreshedItems
+                      .map(
+                        (r) => {
+                          'productId': r['product_server_id'],
+                          'quantity': r['quantity'],
+                        },
+                      )
+                      .toList(),
+                }),
+              )
+              .timeout(_requestTimeout);
+
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            final data = jsonDecode(res.body)['data'] as Map<String, dynamic>;
+            await db.update(
+              table,
+              {'server_id': data['id'], 'is_dirty': 0},
+              where: 'sync_id = ?',
+              whereArgs: [saleSyncId],
+            );
+          }
+          count++;
+        } catch (e, st) {
+          log('[Sync] sale push error: $e\n$st', name: 'SyncService');
+        }
+      }
+      return count;
+    }
+
+    // pull
+    try {
+      final baseUrl = await SyncConfig.getBaseApiUrl();
+      final res = await http
+          .get(Uri.parse('$baseUrl/pos/sales?limit=500'))
+          .timeout(_requestTimeout);
+      if (res.statusCode < 200 || res.statusCode >= 300) return 0;
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final list = body['data'] as List<dynamic>;
+      var count = 0;
+      for (final item in list) {
+        final m = item as Map<String, dynamic>;
+        final serverId = m['id'] as String;
+        final localRows = await db.query(
+          table,
+          where: 'server_id = ?',
+          whereArgs: [serverId],
+          limit: 1,
+        );
+        if (localRows.isNotEmpty) continue; // already have it
+
+        final saleSyncId = serverId;
+        final now = DateTime.now().toIso8601String();
+        await db.insert(table, {
+          'sync_id': saleSyncId,
+          'server_id': serverId,
+          'device_id': deviceId,
+          'reference': m['reference'] ?? '',
+          'note': m['note'] ?? '',
+          'subtotal': (m['subtotal'] as num?)?.toDouble() ?? 0,
+          'total_amount': (m['totalAmount'] as num?)?.toDouble() ?? 0,
+          'paid_amount': (m['paidAmount'] as num?)?.toDouble() ?? 0,
+          'change_amount': (m['changeAmount'] as num?)?.toDouble() ?? 0,
+          'total_items': (m['totalItems'] as num?)?.toInt() ?? 0,
+          'is_dirty': 0,
+          'created_at': m['createdAt'] ?? now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+        final itemsJson = m['saleItems'] as List<dynamic>? ?? [];
+        for (final si in itemsJson) {
+          final sm = si as Map<String, dynamic>;
+          final product = sm['product'] as Map<String, dynamic>? ?? {};
+          await db.insert(
+            AppDatabase.ttSaleItemsTable,
+            {
+              'sale_sync_id': saleSyncId,
+              'product_sync_id': sm['productId'] ?? '',
+              'product_server_id': sm['productId'],
+              'product_name': product['name'] ?? '',
+              'quantity': (sm['quantity'] as num?)?.toInt() ?? 0,
+              'unit_price': (sm['unitPrice'] as num?)?.toDouble() ?? 0,
+              'line_total': (sm['lineTotal'] as num?)?.toDouble() ?? 0,
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+        count++;
+      }
+      return count;
+    } catch (_) {
+      return 0;
+    }
   }
 }

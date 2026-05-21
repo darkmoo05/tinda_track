@@ -17,6 +17,15 @@ class AppDatabase {
       'owner_movement_categories';
   static const String syncStateTable = 'sync_state';
 
+  // TindaTracker local cache tables
+  static const String ttProductsTable = 'tt_products';
+  static const String ttProductCategoriesTable = 'tt_product_categories';
+  static const String ttShelfLocationsTable = 'tt_shelf_locations';
+  static const String ttCustomersTable = 'tt_customers';
+  static const String ttUtangRecordsTable = 'tt_utang_records';
+  static const String ttSalesTable = 'tt_sales';
+  static const String ttSaleItemsTable = 'tt_sale_items';
+
   static const String transactionTypeKeyColumn = 'transaction_type_key';
   static const String syncIdColumn = 'sync_id';
   static const String deviceIdColumn = 'device_id';
@@ -45,7 +54,7 @@ class AppDatabase {
     _database = await databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 14,
+        version: 18,
         onCreate: (db, version) async {
           await _createLedgerTable(db);
           await _createFeeTransactionsTable(db);
@@ -57,6 +66,14 @@ class AppDatabase {
           await _seedOwnerMovementCategoriesIfEmpty(db);
           await ensureSyncSchema(db);
           await _backfillSyncMetadata(db);
+          await _createTtProductsTable(db);
+          await _createTtProductCategoriesTable(db);
+          await _createTtShelfLocationsTable(db);
+          await _seedTtLookupTablesIfEmpty(db);
+          await _createTtCustomersTable(db);
+          await _createTtUtangRecordsTable(db);
+          await _createTtSalesTable(db);
+          await _createTtSaleItemsTable(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -259,6 +276,121 @@ class AppDatabase {
           if (oldVersion < 14) {
             await _createFeeTransactionsTable(db);
           }
+          if (oldVersion < 15) {
+            await _createTtProductsTable(db);
+            await _createTtCustomersTable(db);
+            await _createTtUtangRecordsTable(db);
+            await _createTtSalesTable(db);
+            await _createTtSaleItemsTable(db);
+          }
+          if (oldVersion < 16) {
+            // Add image and shelf-location columns to tt_products.
+            final hasImagePath = await _columnExists(
+              db,
+              ttProductsTable,
+              'image_path',
+            );
+            if (!hasImagePath) {
+              await db.execute(
+                'ALTER TABLE $ttProductsTable ADD COLUMN image_path TEXT',
+              );
+            }
+            final hasImageUrl = await _columnExists(
+              db,
+              ttProductsTable,
+              'image_url',
+            );
+            if (!hasImageUrl) {
+              await db.execute(
+                'ALTER TABLE $ttProductsTable ADD COLUMN image_url TEXT',
+              );
+            }
+            final hasShelfLocation = await _columnExists(
+              db,
+              ttProductsTable,
+              'shelf_location',
+            );
+            if (!hasShelfLocation) {
+              await db.execute(
+                "ALTER TABLE $ttProductsTable ADD COLUMN shelf_location TEXT NOT NULL DEFAULT 'Counter'",
+              );
+            }
+          }
+          if (oldVersion < 17) {
+            // Add expiration_date column to tt_products.
+            final hasExpirationDate = await _columnExists(
+              db,
+              ttProductsTable,
+              'expiration_date',
+            );
+            if (!hasExpirationDate) {
+              await db.execute(
+                'ALTER TABLE $ttProductsTable ADD COLUMN expiration_date TEXT',
+              );
+            }
+            // Create lookup tables for user-managed categories and shelf locations.
+            await _createTtProductCategoriesTable(db);
+            await _createTtShelfLocationsTable(db);
+            // Seed default values from the legacy constant lists so existing
+            // installations are not left with empty lookup tables.
+            await _seedTtLookupTablesIfEmpty(db);
+          }
+          if (oldVersion < 18) {
+            // v18 — Inventory deep-profile fields.
+            //
+            // Categories: add description, examples, and the isQuickAccess
+            // flag that pins entries to the dashboard chip row.
+            await _addColumnIfMissing(
+              db,
+              ttProductCategoriesTable,
+              'description',
+              "TEXT NOT NULL DEFAULT ''",
+            );
+            await _addColumnIfMissing(
+              db,
+              ttProductCategoriesTable,
+              'examples',
+              "TEXT NOT NULL DEFAULT ''",
+            );
+            await _addColumnIfMissing(
+              db,
+              ttProductCategoriesTable,
+              'is_quick_access',
+              'INTEGER NOT NULL DEFAULT 0',
+            );
+
+            // Shelf locations: add description, examples and the dual
+            // image_path (local file) / image_url (server URL) pair so the
+            // picture survives both offline use and full re-installs.
+            await _addColumnIfMissing(
+              db,
+              ttShelfLocationsTable,
+              'description',
+              "TEXT NOT NULL DEFAULT ''",
+            );
+            await _addColumnIfMissing(
+              db,
+              ttShelfLocationsTable,
+              'examples',
+              "TEXT NOT NULL DEFAULT ''",
+            );
+            await _addColumnIfMissing(
+              db,
+              ttShelfLocationsTable,
+              'image_path',
+              'TEXT',
+            );
+            await _addColumnIfMissing(
+              db,
+              ttShelfLocationsTable,
+              'image_url',
+              'TEXT',
+            );
+
+            // Re-seed when the user is still on the legacy short hardcoded
+            // list — never wipe customizations they made themselves.
+            await _reseedLookupsIfStillDefault(db);
+          }
         },
         onOpen: (db) async {
           await ensureWalletSchema(db);
@@ -359,6 +491,569 @@ class AppDatabase {
         $updatedAtMsColumn INTEGER NOT NULL DEFAULT 0,
         $isDeletedColumn INTEGER NOT NULL DEFAULT 0,
         $isDirtyColumn INTEGER NOT NULL DEFAULT 1
+      )
+    ''');
+  }
+
+  Future<void> _createTtProductsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ttProductsTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT NOT NULL UNIQUE,
+        server_id TEXT,
+        device_id TEXT NOT NULL DEFAULT '',
+        name TEXT NOT NULL,
+        sku TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT 'General',
+        unit TEXT NOT NULL DEFAULT 'pcs',
+        cost_price REAL NOT NULL DEFAULT 0,
+        selling_price REAL NOT NULL DEFAULT 0,
+        stock_quantity INTEGER NOT NULL DEFAULT 0,
+        reorder_point INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 1,
+        image_path TEXT,
+        image_url TEXT,
+        shelf_location TEXT NOT NULL DEFAULT 'Counter',
+        expiration_date TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createTtProductCategoriesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ttProductCategoriesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT NOT NULL UNIQUE,
+        server_id TEXT,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        examples TEXT NOT NULL DEFAULT '',
+        is_quick_access INTEGER NOT NULL DEFAULT 0,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createTtShelfLocationsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ttShelfLocationsTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT NOT NULL UNIQUE,
+        server_id TEXT,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        examples TEXT NOT NULL DEFAULT '',
+        image_path TEXT,
+        image_url TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  /// Seeds [ttProductCategoriesTable] and [ttShelfLocationsTable] with a
+  /// Philippine-market starter dataset.  The first 10 categories carry
+  /// `is_quick_access = 1` so they appear in the dashboard chip row.
+  /// Uses INSERT OR IGNORE to stay idempotent across re-installs.
+  Future<void> _seedTtLookupTablesIfEmpty(Database db) async {
+    final categories = _defaultCategorySeeds();
+    final shelfLocations = _defaultShelfLocationSeeds();
+
+    final catCount =
+        (await db.rawQuery(
+              'SELECT COUNT(*) AS c FROM $ttProductCategoriesTable WHERE is_deleted = 0',
+            )).first['c']
+            as int? ??
+        0;
+    if (catCount == 0) {
+      final now = DateTime.now().toIso8601String();
+      final batch = db.batch();
+      for (final c in categories) {
+        batch.insert(ttProductCategoriesTable, {
+          'sync_id': c.syncId,
+          'name': c.name,
+          'description': c.description,
+          'examples': c.examples,
+          'is_quick_access': c.isQuickAccess ? 1 : 0,
+          'is_deleted': 0,
+          'is_dirty': 1,
+          'created_at': now,
+          'updated_at': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await batch.commit(noResult: true);
+    }
+
+    final locCount =
+        (await db.rawQuery(
+              'SELECT COUNT(*) AS c FROM $ttShelfLocationsTable WHERE is_deleted = 0',
+            )).first['c']
+            as int? ??
+        0;
+    if (locCount == 0) {
+      final now = DateTime.now().toIso8601String();
+      final batch = db.batch();
+      for (final l in shelfLocations) {
+        batch.insert(ttShelfLocationsTable, {
+          'sync_id': l.syncId,
+          'name': l.name,
+          'description': l.description,
+          'examples': l.examples,
+          'is_deleted': 0,
+          'is_dirty': 1,
+          'created_at': now,
+          'updated_at': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await batch.commit(noResult: true);
+    }
+  }
+
+  /// v18 helper — if the lookup tables only contain the legacy short list
+  /// that v17 used to seed, replace them with the new Philippine dataset.
+  /// User-added rows (`sync_id` not starting with `seed_cat_`/`seed_loc_`)
+  /// are left untouched.
+  Future<void> _reseedLookupsIfStillDefault(Database db) async {
+    // Categories: only matters if every existing row looks like a v17 seed.
+    final allCats = await db.query(
+      ttProductCategoriesTable,
+      columns: ['sync_id'],
+    );
+    final allCatsAreLegacySeeds =
+        allCats.isNotEmpty &&
+        allCats.every(
+          (r) => (r['sync_id'] as String?)?.startsWith('seed_cat_') == true,
+        );
+    if (allCatsAreLegacySeeds) {
+      // Mark obsolete seeds deleted (they'll soft-delete on next push), then
+      // insert the new dataset.
+      await db.update(ttProductCategoriesTable, {
+        'is_deleted': 1,
+        'is_dirty': 1,
+      }, where: "sync_id LIKE 'seed_cat_%'");
+      final now = DateTime.now().toIso8601String();
+      final batch = db.batch();
+      for (final c in _defaultCategorySeeds()) {
+        batch.insert(ttProductCategoriesTable, {
+          'sync_id': c.syncId,
+          'name': c.name,
+          'description': c.description,
+          'examples': c.examples,
+          'is_quick_access': c.isQuickAccess ? 1 : 0,
+          'is_deleted': 0,
+          'is_dirty': 1,
+          'created_at': now,
+          'updated_at': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await batch.commit(noResult: true);
+    }
+
+    final allLocs = await db.query(ttShelfLocationsTable, columns: ['sync_id']);
+    final allLocsAreLegacySeeds =
+        allLocs.isNotEmpty &&
+        allLocs.every(
+          (r) => (r['sync_id'] as String?)?.startsWith('seed_loc_') == true,
+        );
+    if (allLocsAreLegacySeeds) {
+      await db.update(ttShelfLocationsTable, {
+        'is_deleted': 1,
+        'is_dirty': 1,
+      }, where: "sync_id LIKE 'seed_loc_%'");
+      final now = DateTime.now().toIso8601String();
+      final batch = db.batch();
+      for (final l in _defaultShelfLocationSeeds()) {
+        batch.insert(ttShelfLocationsTable, {
+          'sync_id': l.syncId,
+          'name': l.name,
+          'description': l.description,
+          'examples': l.examples,
+          'is_deleted': 0,
+          'is_dirty': 1,
+          'created_at': now,
+          'updated_at': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await batch.commit(noResult: true);
+    }
+  }
+
+  /// Adds a column to [table] only if it doesn't already exist.
+  /// Wrapping every ALTER TABLE in this guard makes the migration safe to
+  /// re-run on databases where partial upgrades succeeded earlier.
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String typeAndConstraints,
+  ) async {
+    if (await _columnExists(db, table, column)) return;
+    await db.execute(
+      'ALTER TABLE $table ADD COLUMN $column $typeAndConstraints',
+    );
+  }
+
+  List<_CategorySeed> _defaultCategorySeeds() => const [
+    // ── Top-10 quick-access ─────────────────────────────────────────────
+    _CategorySeed(
+      'seed_cat_snacks',
+      'Snacks',
+      'Chips, biscuits, junk foods, candies',
+      'Piattos, Chippy, Cream-O, V-Cut',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_beverages',
+      'Beverages',
+      'Soft drinks, juices, water, tea, coffee',
+      'Coke, Sprite, C2, Zesto, Wilkins',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_canned',
+      'Canned Goods',
+      'Sardines, corned beef, meat loaf, fruit cocktail',
+      'Ligo, Argentina, Purefoods, Del Monte',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_noodles',
+      'Instant Noodles',
+      'Pancit canton, lucky me, cup noodles',
+      'Lucky Me, Payless, Nissin',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_condiments',
+      'Condiments',
+      'Soy sauce, vinegar, ketchup, fish sauce',
+      'Silver Swan, Datu Puti, UFC, Mama Sita',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_rice_grains',
+      'Rice & Grains',
+      'Rice, sugar, salt, flour by weight',
+      'Sinandomeng, Dinorado, Brown sugar',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_dairy',
+      'Dairy & Eggs',
+      'Milk, eggs, cheese, butter, yogurt',
+      'Bear Brand, Alaska, Eden, Magnolia',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_personal_care',
+      'Personal Care',
+      'Shampoo, soap, toothpaste, sachets',
+      'Safeguard, Colgate, Palmolive, Sunsilk',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_laundry',
+      'Laundry & Cleaning',
+      'Detergents, bleach, fabric conditioner',
+      'Tide, Surf, Downy, Zonrox',
+      true,
+    ),
+    _CategorySeed(
+      'seed_cat_cigarettes',
+      'Cigarettes & Tobacco',
+      'Sticks and packs (age-restricted)',
+      'Marlboro, Winston, Mighty',
+      true,
+    ),
+    // ── Standard pool ───────────────────────────────────────────────────
+    _CategorySeed(
+      'seed_cat_bread_pastry',
+      'Bread & Pastries',
+      'Pandesal, sliced bread, cakes, pastries',
+      "Gardenia, Julie's, Pandesal",
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_frozen',
+      'Frozen Foods',
+      'Hotdogs, longganisa, tocino, ice cream',
+      'Purefoods Tender Juicy, Selecta',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_cooking_oil',
+      'Cooking Oil & Lard',
+      'Vegetable oil, coconut oil, lard',
+      'Baguio, Minola, Marca Leon',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_spreads',
+      'Spreads & Sandwich',
+      'Mayonnaise, peanut butter, jam, sandwich spread',
+      "Lady's Choice, Skippy, Magnolia",
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_baby_care',
+      'Baby Care',
+      'Diapers, milk, wipes, baby cologne',
+      'EQ, Pampers, Bonna, Cherifer',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_school_office',
+      'School & Office',
+      'Pen, paper, notebook, envelope',
+      'Mongol, Pilot, intermediate paper',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_medicine',
+      'OTC Medicine',
+      'Pain relievers, vitamins, cough drops',
+      'Biogesic, Alaxan, Neozep, Strepsils',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_household',
+      'Household Supplies',
+      'Light bulbs, batteries, candles, matches',
+      'Eveready, Firefly, Lite-y',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_kitchenware',
+      'Kitchenware',
+      'Spoons, plates, plastic cups, foil',
+      'Coleman, Lock & Lock, foil rolls',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_pet_supplies',
+      'Pet Supplies',
+      'Dog food, cat food, treats',
+      'Pedigree, Whiskas, Top Breed',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_load_prepaid',
+      'Mobile Load & Cards',
+      'Prepaid load, e-PINs, gaming cards',
+      'Globe, Smart, TNT, Sun, Mobile Legends',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_alcohol',
+      'Alcohol & Beer',
+      'Beer, gin, rhum, brandy (age-restricted)',
+      'San Miguel, Red Horse, GSM, Tanduay',
+      false,
+    ),
+    _CategorySeed(
+      'seed_cat_misc',
+      'Miscellaneous',
+      "Other items that don't fit the standard categories",
+      'Lighters, ice candy bags, plastic straws',
+      false,
+    ),
+  ];
+
+  List<_ShelfLocationSeed> _defaultShelfLocationSeeds() => const [
+    _ShelfLocationSeed(
+      'seed_loc_counter',
+      'Counter',
+      'Main checkout counter — impulse-buy zone',
+      'Candies, mints, sachet shampoo, single sticks',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_front_window',
+      'Front Window',
+      'Window display visible from the street',
+      'New arrivals, promo items, eye-catchers',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_shelf_a',
+      'Shelf A — Top',
+      'Top shelf on the left wall (above eye level)',
+      'Light bulbs, batteries, slow-movers',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_shelf_b',
+      'Shelf B — Middle',
+      'Eye-level shelf on the left wall (best-sellers)',
+      'Coffee 3-in-1, milk sachets, biscuits',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_shelf_c',
+      'Shelf C — Bottom',
+      'Bottom shelf on the left wall (bulky goods)',
+      'Detergent powder, 1.5L sodas',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_shelf_d',
+      'Shelf D — Top',
+      'Top shelf on the right wall',
+      'Personal care, cosmetics, cologne',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_shelf_e',
+      'Shelf E — Middle',
+      'Eye-level shelf on the right wall',
+      'Canned sardines, corned beef, condensed milk',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_shelf_f',
+      'Shelf F — Bottom',
+      'Bottom shelf on the right wall',
+      'Sacks of rice, cooking oil gallons',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_rice_area',
+      'Rice Area',
+      'Dedicated rice / grains corner with sacks and scoops',
+      'Sinandomeng, Dinorado, brown sugar sacks',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_fridge',
+      'Refrigerator',
+      'Cold drinks and dairy fridge (visible front)',
+      'Coke 1.5L, Wilkins water, Milo',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_freezer',
+      'Freezer',
+      'Chest freezer for frozen meats and ice cream',
+      'Hotdogs, longganisa, Selecta ice cream',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_bread_rack',
+      'Bread Rack',
+      'Hanging or table rack for fresh bread and pastries',
+      'Pandesal, sliced bread, polvoron',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_load_station',
+      'Load Station',
+      'Mobile load and prepaid cards area (behind counter)',
+      'Smart/Globe load wallet, gaming cards',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_medicine_cabinet',
+      'Medicine Cabinet',
+      'Locked or elevated cabinet for OTC meds',
+      'Biogesic, Alaxan FR, Neozep, Strepsils',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_cigarette_rack',
+      'Cigarette Rack',
+      'Behind-counter cigarette and tobacco rack',
+      'Marlboro packs, Winston sticks',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_alcohol_shelf',
+      'Alcohol Shelf',
+      'Liquor shelf above counter (age-restricted)',
+      'Red Horse, Tanduay, Emperador',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_stockroom',
+      'Stockroom',
+      'Back room for overstock and bulk supply',
+      'Boxes of biscuits, sacks, refill stocks',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_hanging_display',
+      'Hanging Display',
+      'Sachet strips hanging from the ceiling or grill',
+      'Sunsilk sachets, instant coffee strips, candy strips',
+    ),
+    _ShelfLocationSeed(
+      'seed_loc_storefront_table',
+      'Storefront Table',
+      'Table just outside the window for produce / promos',
+      'Bananas, garlic, onions, eggs by tray',
+    ),
+  ];
+
+  Future<void> _createTtCustomersTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ttCustomersTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT NOT NULL UNIQUE,
+        server_id TEXT,
+        device_id TEXT NOT NULL DEFAULT '',
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL DEFAULT '',
+        address TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        balance REAL NOT NULL DEFAULT 0,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createTtUtangRecordsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ttUtangRecordsTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT NOT NULL UNIQUE,
+        server_id TEXT,
+        customer_sync_id TEXT NOT NULL,
+        device_id TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        amount REAL NOT NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createTtSalesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ttSalesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT NOT NULL UNIQUE,
+        server_id TEXT,
+        device_id TEXT NOT NULL DEFAULT '',
+        reference TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        subtotal REAL NOT NULL DEFAULT 0,
+        total_amount REAL NOT NULL DEFAULT 0,
+        paid_amount REAL NOT NULL DEFAULT 0,
+        change_amount REAL NOT NULL DEFAULT 0,
+        total_items INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createTtSaleItemsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ttSaleItemsTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_sync_id TEXT NOT NULL,
+        product_sync_id TEXT NOT NULL,
+        product_server_id TEXT,
+        product_name TEXT NOT NULL DEFAULT '',
+        quantity INTEGER NOT NULL,
+        unit_price REAL NOT NULL,
+        line_total REAL NOT NULL
       )
     ''');
   }
@@ -1018,3 +1713,25 @@ class _DefaultTransactionType {
   final bool isOutflow;
   final String walletAccount;
 }
+
+// --- Inventory lookup seed records -----------------------------------------
+
+/// Internal value-class describing a seeded category row.
+class _CategorySeed {
+  const _CategorySeed(this.syncId, this.name, this.description, this.examples, this.isQuickAccess);
+  final String syncId;
+  final String name;
+  final String description;
+  final String examples;
+  final bool isQuickAccess;
+}
+
+/// Internal value-class describing a seeded shelf-location row.
+class _ShelfLocationSeed {
+  const _ShelfLocationSeed(this.syncId, this.name, this.description, this.examples);
+  final String syncId;
+  final String name;
+  final String description;
+  final String examples;
+}
+
