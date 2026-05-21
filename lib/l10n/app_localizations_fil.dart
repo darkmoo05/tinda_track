@@ -1341,4 +1341,188 @@ class AppLocalizationsFil extends AppLocalizations {
   String withdrawableEarningsNote(String amount) {
     return 'Withdrawable na kita sa ngayon: $amount';
   }
+
+  @override
+  String get inventory => 'Imbentaryo';
+
+  @override
+  String get addProduct => 'Magdagdag ng Produkto';
+
+  @override
+  String get editProduct => 'I-edit ang Produkto';
+
+  @override
+  String get updateProduct => 'I-update ang Produkto';
+
+  @override
+  String get products => 'Produkto';
+
+  @override
+  String get totalStock => 'Total Stock';
+
+  @override
+  String get lowStock => 'Low Stock';
+
+  @override
+  String get outOfStock => 'Ubos';
+
+  @override
+  String get noProducts => 'Wala pang produkto.';
+
+  @override
+  String get searchProductHint => 'Maghanap ng pangalan o barcode...';
+
+  @override
+  String get archiveProductTitle => 'I-archive ang Produkto?';
+
+  @override
+  String archiveProductMessage(String name) {
+    return 'Ang \"$name\" ay itatago sa listahan. Maaari itong ibalik mamaya.';
+  }
+
+  @override
+  String archiveBulkTitle(int count) {
+    return 'I-archive ang $count produkto?';
+  }
+
+  @override
+  String get archive => 'I-archive';
+
+  @override
+  String get archiveProduct => 'I-archive ang Produkto';
+
+  @override
+  String get no => 'Huwag';
+
+  @override
+  String get selectMultiple => 'Pumili ng marami';
+
+  @override
+  String nSelected(int count) {
+    return '$count napili';
+  }
+
+  @override
+  String nProducts(int count) {
+    return '$count produkto';
+  }
+
+  @override
+  String get adjustStock => 'Ayusin ang Stock';
+
+  @override
+  String get stockHistory => 'Kasaysayan ng Stock';
+
+  @override
+  String get stock => 'Stock';
+
+  @override
+  String get currentStockLabel => 'Kasalukuyang Stock';
+
+  @override
+  String get lowStockAlertStat => 'Low Stock Alert';
+
+  @override
+  String get noStockHistory => 'Wala pang kasaysayan ng stock.';
+
+  @override
+  String get productInformation => 'Impormasyon ng Produkto';
+
+  @override
+  String get productName => 'Pangalan ng Produkto *';
+
+  @override
+  String get nameRequired => 'Kailangan ang pangalan';
+
+  @override
+  String get skuBarcode => 'SKU / Barcode *';
+
+  @override
+  String get skuRequired => 'Kailangan ang SKU/barcode';
+
+  @override
+  String get scanBarcode => 'I-scan ang Barcode';
+
+  @override
+  String get descriptionOptional => 'Paglalarawan (opsyonal)';
+
+  @override
+  String get category => 'Kategorya';
+
+  @override
+  String get unitLabel => 'Unit';
+
+  @override
+  String get pricing => 'Presyo';
+
+  @override
+  String get costPrice => 'Halaga ng Bili (Cost)';
+
+  @override
+  String get sellingPrice => 'Presyo ng Benta *';
+
+  @override
+  String get fieldRequired => 'Kailangan';
+
+  @override
+  String get numbersOnly => 'Numero lang';
+
+  @override
+  String get initialStock => 'Initial Stock';
+
+  @override
+  String get useAdjustStockToChange => 'Gamitin ang Ayusin Stock para magbago';
+
+  @override
+  String get lowStockAlert => 'Low Stock Alert';
+
+  @override
+  String get activeLabel => 'Aktibo';
+
+  @override
+  String get activeHelperText => 'Lalabas sa listahan at POS';
+
+  @override
+  String get productAdded => 'Naidagdag ang produkto!';
+
+  @override
+  String get productUpdated => 'Na-update ang produkto!';
+
+  @override
+  String get filters => 'Mga Filter';
+
+  @override
+  String get clearAll => 'I-clear lahat';
+
+  @override
+  String get stockAlerts => 'Alerto ng Stock';
+
+  @override
+  String get lowStockOnly => 'Low Stock lamang';
+
+  @override
+  String get outOfStockOnly => 'Ubos na Stock lamang';
+
+  @override
+  String get noChange => 'Walang pagbabago.';
+
+  @override
+  String get quickAdjust => 'Mabilis na pagbabago';
+
+  @override
+  String get reason => 'Dahilan';
+
+  @override
+  String get saveStock => 'I-save ang Stock';
+
+  @override
+  String get manualAmount => 'Manual na bilang (+ o -)';
+
+  @override
+  String get resetBtn => 'I-reset';
+
+  @override
+  String categoryAndUnit(String category, String unit) {
+    return 'Kategorya: $category  |  $unit';
+  }
 }

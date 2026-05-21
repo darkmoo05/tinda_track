@@ -2517,6 +2517,354 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Withdrawable earnings right now: {amount}'**
   String withdrawableEarningsNote(String amount);
+
+  /// No description provided for @inventory.
+  ///
+  /// In en, this message translates to:
+  /// **'Inventory'**
+  String get inventory;
+
+  /// No description provided for @addProduct.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Product'**
+  String get addProduct;
+
+  /// No description provided for @editProduct.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Product'**
+  String get editProduct;
+
+  /// No description provided for @updateProduct.
+  ///
+  /// In en, this message translates to:
+  /// **'Update Product'**
+  String get updateProduct;
+
+  /// No description provided for @products.
+  ///
+  /// In en, this message translates to:
+  /// **'Products'**
+  String get products;
+
+  /// No description provided for @totalStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Stock'**
+  String get totalStock;
+
+  /// No description provided for @lowStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Low Stock'**
+  String get lowStock;
+
+  /// No description provided for @outOfStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Out of Stock'**
+  String get outOfStock;
+
+  /// No description provided for @noProducts.
+  ///
+  /// In en, this message translates to:
+  /// **'No products yet.'**
+  String get noProducts;
+
+  /// No description provided for @searchProductHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by name or barcode...'**
+  String get searchProductHint;
+
+  /// No description provided for @archiveProductTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive this Product?'**
+  String get archiveProductTitle;
+
+  /// No description provided for @archiveProductMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{name}\" will be hidden from the list. It can be restored later.'**
+  String archiveProductMessage(String name);
+
+  /// No description provided for @archiveBulkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive {count} products?'**
+  String archiveBulkTitle(int count);
+
+  /// No description provided for @archive.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive'**
+  String get archive;
+
+  /// No description provided for @archiveProduct.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive Product'**
+  String get archiveProduct;
+
+  /// No description provided for @no.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get no;
+
+  /// No description provided for @selectMultiple.
+  ///
+  /// In en, this message translates to:
+  /// **'Select multiple'**
+  String get selectMultiple;
+
+  /// No description provided for @nSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String nSelected(int count);
+
+  /// No description provided for @nProducts.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} products'**
+  String nProducts(int count);
+
+  /// No description provided for @adjustStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust Stock'**
+  String get adjustStock;
+
+  /// No description provided for @stockHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock History'**
+  String get stockHistory;
+
+  /// No description provided for @stock.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock'**
+  String get stock;
+
+  /// No description provided for @currentStockLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Stock'**
+  String get currentStockLabel;
+
+  /// No description provided for @lowStockAlertStat.
+  ///
+  /// In en, this message translates to:
+  /// **'Low Stock Alert'**
+  String get lowStockAlertStat;
+
+  /// No description provided for @noStockHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'No stock history yet.'**
+  String get noStockHistory;
+
+  /// No description provided for @productInformation.
+  ///
+  /// In en, this message translates to:
+  /// **'Product Information'**
+  String get productInformation;
+
+  /// No description provided for @productName.
+  ///
+  /// In en, this message translates to:
+  /// **'Product Name *'**
+  String get productName;
+
+  /// No description provided for @nameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Name is required'**
+  String get nameRequired;
+
+  /// No description provided for @skuBarcode.
+  ///
+  /// In en, this message translates to:
+  /// **'SKU / Barcode *'**
+  String get skuBarcode;
+
+  /// No description provided for @skuRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'SKU/barcode is required'**
+  String get skuRequired;
+
+  /// No description provided for @scanBarcode.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan Barcode'**
+  String get scanBarcode;
+
+  /// No description provided for @descriptionOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Description (optional)'**
+  String get descriptionOptional;
+
+  /// No description provided for @category.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get category;
+
+  /// No description provided for @unitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Unit'**
+  String get unitLabel;
+
+  /// No description provided for @pricing.
+  ///
+  /// In en, this message translates to:
+  /// **'Pricing'**
+  String get pricing;
+
+  /// No description provided for @costPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost Price'**
+  String get costPrice;
+
+  /// No description provided for @sellingPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'Selling Price *'**
+  String get sellingPrice;
+
+  /// No description provided for @fieldRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Required'**
+  String get fieldRequired;
+
+  /// No description provided for @numbersOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Numbers only'**
+  String get numbersOnly;
+
+  /// No description provided for @initialStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial Stock'**
+  String get initialStock;
+
+  /// No description provided for @useAdjustStockToChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Use Adjust Stock to change'**
+  String get useAdjustStockToChange;
+
+  /// No description provided for @lowStockAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Low Stock Alert'**
+  String get lowStockAlert;
+
+  /// No description provided for @activeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get activeLabel;
+
+  /// No description provided for @activeHelperText.
+  ///
+  /// In en, this message translates to:
+  /// **'Will appear in the list and POS'**
+  String get activeHelperText;
+
+  /// No description provided for @productAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Product added!'**
+  String get productAdded;
+
+  /// No description provided for @productUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Product updated!'**
+  String get productUpdated;
+
+  /// No description provided for @filters.
+  ///
+  /// In en, this message translates to:
+  /// **'Filters'**
+  String get filters;
+
+  /// No description provided for @clearAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all'**
+  String get clearAll;
+
+  /// No description provided for @stockAlerts.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock Alerts'**
+  String get stockAlerts;
+
+  /// No description provided for @lowStockOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Low Stock only'**
+  String get lowStockOnly;
+
+  /// No description provided for @outOfStockOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Out of Stock only'**
+  String get outOfStockOnly;
+
+  /// No description provided for @noChange.
+  ///
+  /// In en, this message translates to:
+  /// **'No change.'**
+  String get noChange;
+
+  /// No description provided for @quickAdjust.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick adjustment'**
+  String get quickAdjust;
+
+  /// No description provided for @reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get reason;
+
+  /// No description provided for @saveStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Stock'**
+  String get saveStock;
+
+  /// No description provided for @manualAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual amount (+ or -)'**
+  String get manualAmount;
+
+  /// No description provided for @resetBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get resetBtn;
+
+  /// No description provided for @categoryAndUnit.
+  ///
+  /// In en, this message translates to:
+  /// **'Category: {category}  |  {unit}'**
+  String categoryAndUnit(String category, String unit);
 }
 
 class _AppLocalizationsDelegate
