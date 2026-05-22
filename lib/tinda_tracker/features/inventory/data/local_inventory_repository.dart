@@ -317,6 +317,10 @@ class LocalInventoryRepository {
       totalStock: products.fold(0, (s, p) => s + p.stockQuantity),
       lowStockCount: products.where((p) => p.isLowStock).length,
       outOfStockCount: products.where((p) => p.isOutOfStock).length,
+      totalStockValue: products.fold<double>(0, (s, p) {
+        final unit = p.costPrice > 0 ? p.costPrice : p.sellingPrice;
+        return s + unit * p.stockQuantity;
+      }),
     );
   }
 
@@ -683,10 +687,16 @@ class InventorySummary {
   final int lowStockCount;
   final int outOfStockCount;
 
+  /// Total inventory value at cost (sum of `costPrice * stockQuantity` across
+  /// active products). Falls back to selling price when cost is 0 so the
+  /// dashboard tile is never blank for shop owners who skip cost entry.
+  final double totalStockValue;
+
   const InventorySummary({
     required this.totalProducts,
     required this.totalStock,
     required this.lowStockCount,
     required this.outOfStockCount,
+    this.totalStockValue = 0,
   });
 }

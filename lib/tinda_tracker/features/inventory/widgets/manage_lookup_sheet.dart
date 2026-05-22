@@ -45,9 +45,27 @@ class _ManageLookupSheet extends ConsumerStatefulWidget {
 
 class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
   final _newNameCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();
+  String _query = '';
   bool _adding = false;
 
   String get _title => widget.isCategory ? 'Categories' : 'Shelf Locations';
+
+  // True when the new-name field has at least one non-whitespace character.
+  // Used to enable/disable the Add button so the user can't tap it on an
+  // empty input (and gets a visual cue that input is required).
+  bool get _canAdd => _newNameCtrl.text.trim().isNotEmpty && !_adding;
+
+  @override
+  void initState() {
+    super.initState();
+    // Rebuild the Add button as the user types so it enables/disables live.
+    _newNameCtrl.addListener(_onNewNameChanged);
+  }
+
+  void _onNewNameChanged() {
+    if (mounted) setState(() {});
+  }
 
   void _invalidate() {
     if (widget.isCategory) {
@@ -82,15 +100,19 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
     if (!mounted) return;
     final String msg;
     if (e is QuickAccessLimitException) {
-      msg = 'You can only pin up to ${e.limit} quick-access categories.';
-    } else if (e is DuplicateNameException) {
-      // Friendly wording for the average sari-sari store owner: avoid the
-      // word "duplicate" and tell them exactly what to do.
+      // Tell the user the cap *and* the next step (unpin one).
       msg =
-          'A ${e.kind} named "${e.name}" already exists. '
-          'Please use a different name.';
+          'Quick access is full. You can only pin up to ${e.limit} '
+          'categories — unpin one first, then try again.';
+    } else if (e is DuplicateNameException) {
+      // Plain wording: avoid the word "duplicate" and suggest what to do.
+      msg =
+          'You already have a ${e.kind} named "${e.name}". '
+          'Please choose a different name.';
     } else {
-      msg = e.toString();
+      // Hide the raw exception text from end-users; log via toString() but
+      // show a calm, actionable message instead.
+      msg = 'Sorry, we couldn\'t save your changes. Please try again.';
     }
     // Top-anchored banner so the alert is visible above this bottom sheet
     // and the on-screen keyboard — a default SnackBar would be hidden.
@@ -99,7 +121,9 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
 
   @override
   void dispose() {
+    _newNameCtrl.removeListener(_onNewNameChanged);
     _newNameCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -187,17 +211,60 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _adding ? null : _add,
-                      child: _adding
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Add'),
+                    // Add button — disabled (greyed out) when the input is
+                    // empty so the user gets an immediate visual cue that a
+                    // name is required before they can tap.
+                    Tooltip(
+                      message: _canAdd
+                          ? 'Add'
+                          : (widget.isCategory
+                                ? 'Type a category name first'
+                                : 'Type a shelf or location name first'),
+                      child: FilledButton(
+                        onPressed: _canAdd ? _add : null,
+                        child: _adding
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Add'),
+                      ),
                     ),
                   ],
+                ),
+              ),
+              // Search field — lets the user filter the existing list to
+              // quickly find a category or shelf without scrolling. Matches
+              // on name, description, and examples (case-insensitive).
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: TextField(
+                  controller: _searchCtrl,
+                  textInputAction: TextInputAction.search,
+                  onChanged: (v) => setState(() => _query = v.trim()),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    hintText: widget.isCategory
+                        ? 'Search categories'
+                        : 'Search shelf locations',
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                 ),
               ),
               const Divider(height: 1),
@@ -207,11 +274,54 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
                       const Center(child: CircularProgressIndicator()),
                   error: (e, _) => Center(child: Text('Error: $e')),
                   data: (items) {
+                    // Apply the search filter. For categories we also match
+                    // description and examples; for shelves the name is the
+                    // only searchable text.
+                    final q = _query.toLowerCase();
+                    final filtered = q.isEmpty
+                        ? items
+                        : items.where((item) {
+                            if (item is CustomCategory) {
+                              return item.name.toLowerCase().contains(q) ||
+                                  item.description.toLowerCase().contains(q) ||
+                                  item.examples.toLowerCase().contains(q);
+                            }
+                            if (item is CustomShelfLocation) {
+                              return item.name.toLowerCase().contains(q);
+                            }
+                            return true;
+                          }).toList();
+
                     if (items.isEmpty) {
                       return const Center(
                         child: Text(
                           'No items yet. Add one above.',
                           style: TextStyle(color: AppColors.onSurfaceVariant),
+                        ),
+                      );
+                    }
+                    if (filtered.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.search_off_rounded,
+                                size: 48,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No matches for "$_query"',
+                                style: const TextStyle(
+                                  color: AppColors.onSurfaceVariant,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }
@@ -221,10 +331,10 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
                         horizontal: 12,
                         vertical: 8,
                       ),
-                      itemCount: items.length,
+                      itemCount: filtered.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 6),
                       itemBuilder: (_, i) {
-                        final item = items[i];
+                        final item = filtered[i];
                         if (widget.isCategory) {
                           return _CategoryTile(
                             category: item as CustomCategory,
@@ -329,50 +439,189 @@ class _CategoryTileState extends State<_CategoryTile> {
 
   @override
   Widget build(BuildContext context) {
-    return _LookupCard(
-      leading: Icon(
-        _quick ? Icons.push_pin : Icons.push_pin_outlined,
-        color: _quick ? AppColors.secondary : AppColors.onSurfaceVariant,
-        size: 20,
-      ),
-      title: widget.category.name,
-      subtitle: widget.category.description.isEmpty
-          ? null
-          : widget.category.description,
-      expanded: _expanded,
-      onTapHeader: () => setState(() => _expanded = !_expanded),
-      onDelete: _delete,
-      trailingToggle: Checkbox(
-        value: _quick,
-        onChanged: _busy
-            ? null
-            : (v) {
-                setState(() => _quick = v ?? false);
-                _save(quickOverride: v ?? false);
-              },
+    final name = widget.category.name;
+    final desc = widget.category.description;
+    final letter = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _textField(_name, 'Name'),
-          const SizedBox(height: 8),
-          _textField(_desc, 'Description', maxLines: 2),
-          const SizedBox(height: 8),
-          _textField(_examples, 'Examples (comma-separated)', maxLines: 2),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.tonal(
-              onPressed: _busy ? null : () => _save(),
-              child: _busy
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save'),
+          // Header row — tap anywhere (except the action buttons) to expand.
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+              child: Row(
+                children: [
+                  // Letter avatar — colored when pinned (secondary green),
+                  // otherwise primary blue tint.
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: _quick
+                          ? AppColors.secondary.withValues(alpha: 0.12)
+                          : AppColors.primary.withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      letter,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: _quick ? AppColors.secondary : AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Title + optional "Quick" badge + description (2 lines).
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.onSurface,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                            if (_quick) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Quick',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.secondary,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (desc.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            desc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.3,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  // Pin toggle — the only "state" control in the header.
+                  IconButton(
+                    tooltip: _quick
+                        ? 'Unpin from quick access'
+                        : 'Pin to quick access',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      _quick ? Icons.push_pin : Icons.push_pin_outlined,
+                      size: 20,
+                      color: _quick
+                          ? AppColors.secondary
+                          : AppColors.onSurfaceVariant,
+                    ),
+                    onPressed: _busy
+                        ? null
+                        : () {
+                            final next = !_quick;
+                            setState(() => _quick = next);
+                            _save(quickOverride: next);
+                          },
+                  ),
+                  // Plain chevron — visual hint only; the whole row is tappable.
+                  Icon(
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+              ),
             ),
           ),
+          // Expanded edit body — fields + Delete (left) / Save (right) row.
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _textField(_name, 'Name'),
+                  const SizedBox(height: 8),
+                  _textField(_desc, 'Description', maxLines: 2),
+                  const SizedBox(height: 8),
+                  _textField(
+                    _examples,
+                    'Examples (comma-separated)',
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: _busy ? null : _delete,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Delete'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                        ),
+                      ),
+                      const Spacer(),
+                      FilledButton.tonal(
+                        onPressed: _busy ? null : () => _save(),
+                        child: _busy
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Save'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

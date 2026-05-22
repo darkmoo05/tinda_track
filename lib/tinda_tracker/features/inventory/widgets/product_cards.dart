@@ -26,7 +26,10 @@ class ProductListTile extends StatelessWidget {
     this.bulkSelectMode = false,
   });
 
-  static final _currency = NumberFormat.currency(symbol: '?', decimalDigits: 2);
+  static final _currency = NumberFormat.currency(
+    symbol: '\u20B1',
+    decimalDigits: 2,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -42,27 +45,28 @@ class ProductListTile extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.secondary.withValues(alpha: 0.08)
               : AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected
                 ? AppColors.secondary
                 : isOut || isLow
-                ? stockColor.withValues(alpha: 0.4)
+                ? stockColor.withValues(alpha: 0.35)
                 : Colors.transparent,
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Bulk-select checkbox OR product icon
+            // Bulk-select checkbox OR product image (larger for clarity)
             if (bulkSelectMode)
               Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.only(right: 10),
                 child: Checkbox(
                   value: isSelected,
                   activeColor: AppColors.secondary,
@@ -74,24 +78,26 @@ class ProductListTile extends StatelessWidget {
               )
             else
               _ProductImage(product: product),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
 
-            // Main info
+            // Main info — name and price on their own lines for breathing room
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     product.name,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 14,
+                      fontSize: 15,
                       color: AppColors.onSurface,
+                      height: 1.2,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 4),
                   Text(
                     _currency.format(product.sellingPrice),
                     style: const TextStyle(
@@ -100,7 +106,7 @@ class ProductListTile extends StatelessWidget {
                       color: AppColors.secondary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
@@ -127,53 +133,36 @@ class ProductListTile extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
 
-            // Stock count
+            // Right side: status pill (icon + text) + inline action buttons.
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '${product.stockQuantity}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 22,
-                    color: stockColor,
-                  ),
-                ),
-                Text(
-                  product.unit,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-                if (isOut)
-                  const _StatusBadge('WALA', AppColors.error)
-                else if (isLow)
-                  const _StatusBadge('MABABA', Color(0xFFE65100)),
-              ],
-            ),
-            const SizedBox(width: 4),
-
-            // Action buttons
-            if (!bulkSelectMode)
-              Column(
-                children: [
-                  _IconBtn(
-                    icon: Icons.edit_rounded,
-                    onTap: onEdit,
-                    tooltip: 'I-edit',
-                  ),
-                  const SizedBox(height: 4),
-                  _IconBtn(
-                    icon: Icons.add_circle_rounded,
-                    onTap: onAdjustStock,
-                    color: AppColors.secondary,
-                    tooltip: 'Ayusin ang Stock',
+                StatusPill(product: product, stockColor: stockColor),
+                if (!bulkSelectMode) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _IconBtn(
+                        icon: Icons.edit_rounded,
+                        onTap: onEdit,
+                        tooltip: 'I-edit',
+                      ),
+                      const SizedBox(width: 2),
+                      _IconBtn(
+                        icon: Icons.add_circle_rounded,
+                        onTap: onAdjustStock,
+                        color: AppColors.secondary,
+                        tooltip: 'Ayusin ang Stock',
+                      ),
+                    ],
                   ),
                 ],
-              ),
+              ],
+            ),
           ],
         ),
       ),
@@ -198,7 +187,10 @@ class ProductGridCard extends StatelessWidget {
     this.bulkSelectMode = false,
   });
 
-  static final _currency = NumberFormat.currency(symbol: '?', decimalDigits: 2);
+  static final _currency = NumberFormat.currency(
+    symbol: '\u20B1',
+    decimalDigits: 2,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -386,9 +378,8 @@ class _ProductImage extends StatelessWidget {
           child: CachedNetworkImage(
             imageUrl: product.imageUrl!,
             fit: BoxFit.cover,
-            placeholder: (_, _) => const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            placeholder: (_, _) =>
+                const Center(child: CircularProgressIndicator(strokeWidth: 2)),
             errorWidget: (_, _, _) => fallback,
           ),
         ),
@@ -447,6 +438,90 @@ class _ProductIcon extends StatelessWidget {
   }
 }
 
+/// Right-side stock status pill — replaces the tiny MABABA/WALA badges.
+/// Combines an icon, the stock count + unit, and a Tagalog status label
+/// in a single colored capsule so the meaning is obvious at a glance for
+/// shop owners regardless of language familiarity.
+class StatusPill extends StatelessWidget {
+  final InventoryProduct product;
+  final Color stockColor;
+
+  const StatusPill({
+    super.key,
+    required this.product,
+    required this.stockColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isOut = product.isOutOfStock;
+    final isLow = product.isLowStock;
+
+    final IconData icon = isOut
+        ? Icons.block_rounded
+        : isLow
+        ? Icons.warning_amber_rounded
+        : Icons.check_circle_rounded;
+
+    final String label = isOut
+        ? 'Wala'
+        : isLow
+        ? 'Mababa'
+        : 'OK';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: stockColor.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: stockColor.withValues(alpha: 0.45), width: 1),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: stockColor),
+              const SizedBox(width: 4),
+              Text(
+                '${product.stockQuantity}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                  color: stockColor,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Text(
+                product.unit,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: stockColor.withValues(alpha: 0.9),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          if (isOut || isLow)
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                color: stockColor,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.3,
+                height: 1.1,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MiniChip extends StatelessWidget {
   final String label;
   final IconData? icon;
@@ -491,32 +566,6 @@ class _MiniChip extends StatelessWidget {
 
 int _daysUntil(DateTime date) =>
     date.difference(DateTime.now()).inDays.clamp(0, 9999);
-
-class _StatusBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _StatusBadge(this.label, this.color);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
 
 class _IconBtn extends StatelessWidget {
   final IconData icon;

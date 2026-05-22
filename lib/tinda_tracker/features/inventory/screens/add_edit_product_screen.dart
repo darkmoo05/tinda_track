@@ -591,19 +591,6 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
           children: [
-            // -- Product Image -------------------------------------------
-            _SectionCard(
-              title: 'Product Image',
-              child: _ImagePickerWidget(
-                localFile: _localImageFile,
-                remoteUrl: _remoteImageUrl,
-                onPickGallery: () => _pickImage(),
-                onPickCamera: () => _pickImage(useCamera: true),
-                onRemove: () => setState(() => _localImageFile = null),
-                onViewImage: _viewImage,
-              ),
-            ),
-
             // -- Basic info -----------------------------------------------
             _SectionCard(
               title: context.l10n.productInformation,
@@ -697,15 +684,12 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                     error: (_, _) => const SizedBox.shrink(),
                     data: (cats) {
                       // Only pinned categories appear as quick chips; the
-                      // rest are reachable through the "More…" chip so the
+                      // rest are reachable through the "More…" pill so the
                       // form stays compact even with a long master list.
                       final pinned = cats
                           .where((c) => c.isQuickAccess)
                           .toList();
                       final pinnedNames = pinned.map((c) => c.name).toSet();
-                      // If the currently-selected category isn't pinned
-                      // (e.g. editing an older product), keep it visible as
-                      // an extra chip so the user can see what's set.
                       final extraSelected =
                           _category.isNotEmpty &&
                           !pinnedNames.contains(_category);
@@ -716,53 +700,61 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                           (_) => setState(() => _category = pinned.first.name),
                         );
                       }
-                      return Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          ...pinned.map((cat) {
-                            final selected = _category == cat.name;
-                            return ChoiceChip(
-                              label: Text(cat.name),
-                              selected: selected,
-                              onSelected: (_) =>
-                                  setState(() => _category = cat.name),
-                              selectedColor: AppColors.secondary.withValues(
-                                alpha: 0.15,
-                              ),
-                              checkmarkColor: AppColors.secondary,
-                              labelStyle: TextStyle(
-                                color: selected
-                                    ? AppColors.secondary
-                                    : AppColors.onSurface,
-                                fontWeight: selected
-                                    ? FontWeight.w700
-                                    : FontWeight.normal,
-                              ),
-                            );
-                          }),
-                          if (extraSelected)
-                            ChoiceChip(
-                              label: Text(_category),
-                              selected: true,
-                              onSelected: (_) {},
-                              selectedColor: AppColors.secondary.withValues(
-                                alpha: 0.15,
-                              ),
-                              checkmarkColor: AppColors.secondary,
-                              labelStyle: const TextStyle(
-                                color: AppColors.secondary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ActionChip(
-                            avatar: const Icon(
-                              Icons.more_horiz_rounded,
-                              size: 18,
+                          // ── Concept B — Selected-first tile ──────────
+                          // Full-width summary of the current selection.
+                          // Tapping anywhere opens the all-categories
+                          // picker, which is faster than scanning chips
+                          // when the user already knows what to pick.
+                          _CategorySelectedTile(
+                            category: _category,
+                            onTap: () => _pickCategoryFromAll(cats),
+                          ),
+                          const SizedBox(height: 12),
+                          // Quick-access label keeps the role of the chip
+                          // grid obvious now that the selected value lives
+                          // in the tile above.
+                          const Text(
+                            'Quick access',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4,
                               color: AppColors.onSurfaceVariant,
                             ),
-                            label: const Text('More…'),
-                            onPressed: () => _pickCategoryFromAll(cats),
+                          ),
+                          const SizedBox(height: 8),
+                          // ── Concept A — Uniform pill grid ────────────
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 10,
+                            children: [
+                              ...pinned.map(
+                                (cat) => _CategoryPill(
+                                  label: cat.name,
+                                  selected: _category == cat.name,
+                                  onTap: () =>
+                                      setState(() => _category = cat.name),
+                                ),
+                              ),
+                              if (extraSelected)
+                                _CategoryPill(
+                                  label: _category,
+                                  selected: true,
+                                  onTap: () {},
+                                  trailingIcon: Icons.push_pin_outlined,
+                                ),
+                              _CategoryPill(
+                                label: 'More',
+                                selected: false,
+                                isAction: true,
+                                leadingIcon: Icons.tune_rounded,
+                                onTap: () => _pickCategoryFromAll(cats),
+                              ),
+                            ],
                           ),
                         ],
                       );
@@ -822,46 +814,6 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                   ),
             ),
 
-            // -- Expiration Date -----------------------------------------
-            _SectionCard(
-              title: 'Expiration Date (Optional)',
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate:
-                              _expirationDate ??
-                              DateTime.now().add(const Duration(days: 30)),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2100),
-                        );
-                        if (picked != null) {
-                          setState(() => _expirationDate = picked);
-                        }
-                      },
-                      icon: const Icon(Icons.calendar_month_outlined, size: 16),
-                      label: Text(
-                        _expirationDate == null
-                            ? 'No expiration date'
-                            : '${_expirationDate!.year}-${_expirationDate!.month.toString().padLeft(2, '0')}-${_expirationDate!.day.toString().padLeft(2, '0')}',
-                      ),
-                    ),
-                  ),
-                  if (_expirationDate != null) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      tooltip: 'Clear expiration date',
-                      onPressed: () => setState(() => _expirationDate = null),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
             // -- Pricing -------------------------------------------------
             _SectionCard(
               title: context.l10n.pricing,
@@ -875,7 +827,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      prefix: '?',
+                      prefix: '\u20B1',
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
                           RegExp(r'^\d*\.?\d*'),
@@ -892,7 +844,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      prefix: '?',
+                      prefix: '\u20B1',
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
                           RegExp(r'^\d*\.?\d*'),
@@ -945,20 +897,87 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
               ),
             ),
 
-            // -- Active toggle --------------------------------------------
-            _SectionCard(
-              title: context.l10n.status,
-              child: SwitchListTile.adaptive(
-                title: Text(
-                  context.l10n.activeLabel,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+            // -- More details (collapsible: image, expiration, status) ---
+            // Groups optional/rarely-edited fields behind a single tap so
+            // the form's first-screen view stays focused on the data that
+            // every product needs.
+            _MoreDetailsSection(
+              initiallyExpanded:
+                  _isEdit &&
+                  (_localImageFile != null ||
+                      (_remoteImageUrl != null &&
+                          _remoteImageUrl!.isNotEmpty) ||
+                      _expirationDate != null ||
+                      !_isActive),
+              children: [
+                _SectionCard(
+                  title: 'Product Image',
+                  child: _ImagePickerWidget(
+                    localFile: _localImageFile,
+                    remoteUrl: _remoteImageUrl,
+                    onPickGallery: () => _pickImage(),
+                    onPickCamera: () => _pickImage(useCamera: true),
+                    onRemove: () => setState(() => _localImageFile = null),
+                    onViewImage: _viewImage,
+                  ),
                 ),
-                subtitle: Text(context.l10n.activeHelperText),
-                value: _isActive,
-                activeThumbColor: AppColors.secondary,
-                onChanged: (v) => setState(() => _isActive = v),
-                contentPadding: EdgeInsets.zero,
-              ),
+                _SectionCard(
+                  title: 'Expiration Date (Optional)',
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate:
+                                  _expirationDate ??
+                                  DateTime.now().add(const Duration(days: 30)),
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2100),
+                            );
+                            if (picked != null) {
+                              setState(() => _expirationDate = picked);
+                            }
+                          },
+                          icon: const Icon(
+                            Icons.calendar_month_outlined,
+                            size: 16,
+                          ),
+                          label: Text(
+                            _expirationDate == null
+                                ? 'No expiration date'
+                                : '${_expirationDate!.year}-${_expirationDate!.month.toString().padLeft(2, '0')}-${_expirationDate!.day.toString().padLeft(2, '0')}',
+                          ),
+                        ),
+                      ),
+                      if (_expirationDate != null) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          tooltip: 'Clear expiration date',
+                          onPressed: () =>
+                              setState(() => _expirationDate = null),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                _SectionCard(
+                  title: context.l10n.status,
+                  child: SwitchListTile.adaptive(
+                    title: Text(
+                      context.l10n.activeLabel,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(context.l10n.activeHelperText),
+                    value: _isActive,
+                    activeThumbColor: AppColors.secondary,
+                    onChanged: (v) => setState(() => _isActive = v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 16),
@@ -1190,6 +1209,233 @@ class _ImagePickerWidget extends StatelessWidget {
 // -----------------------------------------------------------------------------
 // Section card wrapper
 // -----------------------------------------------------------------------------
+
+/// Collapsible "More details" group. Visually mimics a `_SectionCard` but its
+/// body is gated by an `ExpansionTile`, so optional fields (image, expiration,
+/// status) don't crowd the form's first screen on a phone.
+class _MoreDetailsSection extends StatelessWidget {
+  final List<Widget> children;
+  final bool initiallyExpanded;
+
+  const _MoreDetailsSection({
+    required this.children,
+    this.initiallyExpanded = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        // Strip the default ExpansionTile divider lines so the section reads
+        // as part of the surrounding card stack instead of a list row.
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          title: const Text(
+            'More details',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          subtitle: const Text(
+            'Image · Expiration · Status',
+            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+          ),
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Category selection widgets (Concept A pills + Concept B selected tile)
+// -----------------------------------------------------------------------------
+
+/// Selected-first summary tile (Concept B). Tapping anywhere opens the full
+/// category picker; designed to dominate the section so the user can confirm
+/// or change the choice at a glance without scanning chips.
+class _CategorySelectedTile extends StatelessWidget {
+  final String category;
+  final VoidCallback onTap;
+
+  const _CategorySelectedTile({required this.category, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSelection = category.isNotEmpty;
+    return Material(
+      color: hasSelection
+          ? AppColors.secondary.withValues(alpha: 0.08)
+          : AppColors.background,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: hasSelection
+                  ? AppColors.secondary.withValues(alpha: 0.4)
+                  : AppColors.outlineVariant,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: hasSelection
+                      ? AppColors.secondary.withValues(alpha: 0.18)
+                      : AppColors.outlineVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  hasSelection
+                      ? Icons.category_rounded
+                      : Icons.add_circle_outline_rounded,
+                  size: 20,
+                  color: hasSelection
+                      ? AppColors.secondary
+                      : AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      hasSelection ? 'Selected category' : 'Choose a category',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hasSelection ? category : 'Tap to browse all',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: hasSelection
+                            ? AppColors.onSurface
+                            : AppColors.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.unfold_more_rounded,
+                size: 20,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Uniform-geometry quick-access pill (Concept A). All variants share the
+/// same height (36) and corner radius so the row reads as a single button
+/// family — solves the visual unevenness that ChoiceChip/ActionChip caused.
+class _CategoryPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final bool isAction;
+  final IconData? leadingIcon;
+  final IconData? trailingIcon;
+  final VoidCallback onTap;
+
+  const _CategoryPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.isAction = false,
+    this.leadingIcon,
+    this.trailingIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg;
+    final Color fg;
+    final Color border;
+    if (selected) {
+      bg = AppColors.secondary;
+      fg = Colors.white;
+      border = AppColors.secondary;
+    } else if (isAction) {
+      bg = AppColors.background;
+      fg = AppColors.onSurfaceVariant;
+      border = AppColors.outlineVariant;
+    } else {
+      bg = AppColors.surfaceContainerLowest;
+      fg = AppColors.onSurface;
+      border = AppColors.outlineVariant;
+    }
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (leadingIcon != null) ...[
+                Icon(leadingIcon, size: 16, color: fg),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  letterSpacing: 0.2,
+                  color: fg,
+                ),
+              ),
+              if (trailingIcon != null) ...[
+                const SizedBox(width: 6),
+                Icon(trailingIcon, size: 14, color: fg),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _SectionCard extends StatelessWidget {
   final String title;

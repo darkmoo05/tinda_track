@@ -230,10 +230,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 : const SizedBox.shrink(),
           ),
 
-          // Summary header
+          // Summary header — Dashboard tiles (2x2) with tappable filter
+          // shortcuts. Each tile maps to a specific filter so the most
+          // urgent stats double as one-tap navigation.
           summaryAsync.when(
-            data: (summary) => _SummaryHeader(summary: summary),
-            loading: () => const SizedBox(height: 64),
+            data: (summary) => _DashboardTiles(
+              summary: summary,
+              activeLowOnly: filter.lowStockOnly,
+              activeOutOnly: filter.outOfStockOnly,
+              onTapProducts: () => notifier.clearFilters(),
+              onTapLow: notifier.toggleLowStockOnly,
+              onTapOut: notifier.toggleOutOfStockOnly,
+            ),
+            loading: () => const SizedBox(height: 132),
             error: (_, _) => const SizedBox.shrink(),
           ),
 
@@ -435,32 +444,16 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     InventoryFilterState filter,
   ) {
     if (products.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.inventory_2_outlined,
-              size: 64,
-              color: AppColors.onSurfaceVariant,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.noProducts,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: _openAddProduct,
-              icon: const Icon(Icons.add_rounded),
-              label: Text(context.l10n.addProduct),
-            ),
-          ],
-        ),
+      return _ContextualEmptyState(
+        filter: filter,
+        onAddProduct: _openAddProduct,
+        onClearFilters: () =>
+            ref.read(inventoryFilterProvider.notifier).clearFilters(),
+        onClearSearch: () {
+          _searchCtrl.clear();
+          ref.read(inventoryFilterProvider.notifier).setSearch('');
+          setState(() {});
+        },
       );
     }
 
@@ -527,98 +520,199 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 // Summary header
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-class _SummaryHeader extends StatelessWidget {
-  final InventorySummary summary;
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard tiles  (Concept 2 — monitoring hero, 2x2 grid)
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const _SummaryHeader({required this.summary});
+/// 2x2 grid of monitoring tiles. Each tile is tappable to drill into the
+/// matching filter, turning the summary into a one-tap shortcut bar.
+class _DashboardTiles extends StatelessWidget {
+  final InventorySummary summary;
+  final bool activeLowOnly;
+  final bool activeOutOnly;
+  final VoidCallback onTapProducts;
+  final VoidCallback onTapLow;
+  final VoidCallback onTapOut;
+
+  const _DashboardTiles({
+    required this.summary,
+    required this.activeLowOnly,
+    required this.activeOutOnly,
+    required this.onTapProducts,
+    required this.onTapLow,
+    required this.onTapOut,
+  });
 
   static final _compact = NumberFormat.compact();
+  static final _peso = NumberFormat.compactCurrency(
+    symbol: '₱',
+    decimalDigits: 0,
+  );
 
   @override
   Widget build(BuildContext context) {
+    // The tiles sit on a light gray strip that visually separates the green
+    // AppBar from the rest of the body — breaks up the green dominance and
+    // gives the monitoring stats their own breathing room.
     return Container(
-      color: AppColors.secondary,
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      child: Row(
+      color: AppColors.background,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      child: Column(
         children: [
-          _StatChip(
-            label: context.l10n.products,
-            value: '${summary.totalProducts}',
-            icon: Icons.inventory_2_rounded,
+          Row(
+            children: [
+              Expanded(
+                child: _DashTile(
+                  label: context.l10n.products,
+                  value: _compact.format(summary.totalProducts),
+                  icon: Icons.inventory_2_rounded,
+                  accent: AppColors.primary,
+                  onTap: onTapProducts,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DashTile(
+                  label: 'Stock Value',
+                  value: _peso.format(summary.totalStockValue),
+                  icon: Icons.payments_rounded,
+                  accent: AppColors.secondary,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          _StatChip(
-            label: context.l10n.totalStock,
-            value: _compact.format(summary.totalStock),
-            icon: Icons.layers_rounded,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _DashTile(
+                  label: context.l10n.lowStock,
+                  value: '${summary.lowStockCount}',
+                  icon: Icons.warning_amber_rounded,
+                  accent: const Color(0xFFE65100),
+                  active: activeLowOnly,
+                  muted: summary.lowStockCount == 0,
+                  onTap: summary.lowStockCount == 0 ? null : onTapLow,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DashTile(
+                  label: context.l10n.outOfStock,
+                  value: '${summary.outOfStockCount}',
+                  icon: Icons.block_rounded,
+                  accent: AppColors.error,
+                  active: activeOutOnly,
+                  muted: summary.outOfStockCount == 0,
+                  onTap: summary.outOfStockCount == 0 ? null : onTapOut,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          _StatChip(
-            label: context.l10n.lowStock,
-            value: '${summary.lowStockCount}',
-            icon: Icons.warning_amber_rounded,
-            urgent: summary.lowStockCount > 0,
-          ),
-          if (summary.outOfStockCount > 0) ...[
-            const SizedBox(width: 8),
-            _StatChip(
-              label: context.l10n.outOfStock,
-              value: '${summary.outOfStockCount}',
-              icon: Icons.block_rounded,
-              urgent: true,
-            ),
-          ],
         ],
       ),
     );
   }
 }
 
-class _StatChip extends StatelessWidget {
+class _DashTile extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
-  final bool urgent;
+  final Color accent;
+  final bool active;
+  final bool muted;
+  final VoidCallback? onTap;
 
-  const _StatChip({
+  const _DashTile({
     required this.label,
     required this.value,
     required this.icon,
-    this.urgent = false,
+    required this.accent,
+    this.active = false,
+    this.muted = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bg = urgent
-        ? AppColors.error.withValues(alpha: 0.85)
-        : Colors.white.withValues(alpha: 0.18);
-
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white, size: 16),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
+    final effectiveAccent = muted ? AppColors.onSurfaceVariant : accent;
+    return Material(
+      color: AppColors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: active
+                  ? effectiveAccent
+                  : AppColors.outlineVariant.withValues(alpha: 0.5),
+              width: active ? 2 : 1,
+            ),
+            // Colored left-edge wash — the only color cue on an otherwise
+            // white tile, so the eye can sort tiles by urgency at a glance.
+            gradient: LinearGradient(
+              colors: [
+                effectiveAccent.withValues(alpha: active ? 0.18 : 0.10),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.06],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: effectiveAccent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 20, color: effectiveAccent),
               ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 9),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: muted
+                            ? AppColors.onSurfaceVariant
+                            : AppColors.onSurface,
+                        height: 1.1,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -649,11 +743,12 @@ class _CategoryChips extends StatelessWidget {
     return SizedBox(
       height: 44,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               children: [
                 _buildChip(
                   context.l10n.all,
@@ -688,28 +783,39 @@ class _CategoryChips extends StatelessWidget {
   Widget _buildChip(String label, bool isSelected, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 130),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.secondary
-                : AppColors.surfaceContainerHigh,
+      child: Center(
+        // Center vertically inside the 44px row so the chip doesn't stretch
+        // to fill height; keeps the pill compact and visually balanced.
+        child: Material(
+          color: isSelected
+              ? AppColors.secondary
+              : AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? AppColors.secondary
-                  : AppColors.outlineVariant,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isSelected ? Colors.white : AppColors.onSurface,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 130),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? AppColors.secondary
+                      : AppColors.outlineVariant,
+                ),
+              ),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.1,
+                  letterSpacing: 0.2,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : AppColors.onSurface,
+                ),
+              ),
             ),
           ),
         ),
@@ -722,7 +828,7 @@ class _CategoryChips extends StatelessWidget {
 // Grouped by shelf view
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-class _GroupedShelfView extends StatelessWidget {
+class _GroupedShelfView extends StatefulWidget {
   final List<InventoryProduct> products;
   final InventoryFilterState filter;
   final ValueChanged<InventoryProduct> onTap;
@@ -738,68 +844,144 @@ class _GroupedShelfView extends StatelessWidget {
   });
 
   @override
+  State<_GroupedShelfView> createState() => _GroupedShelfViewState();
+}
+
+class _GroupedShelfViewState extends State<_GroupedShelfView> {
+  /// Per-shelf collapse state, keyed by shelf name. Defaults to expanded.
+  final Map<String, bool> _collapsed = {};
+
+  /// Natural / numeric-aware shelf comparator.
+  ///
+  /// String sorting puts "Aisle 10" before "Aisle 2" which is confusing for
+  /// shop owners labelling shelves numerically. This walks both strings and
+  /// compares contiguous digit runs as integers, falling back to a
+  /// case-insensitive lexicographic comparison for non-numeric segments.
+  static int _compareShelfNames(String a, String b) {
+    int i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+      final ca = a.codeUnitAt(i);
+      final cb = b.codeUnitAt(j);
+      final aIsDigit = ca >= 0x30 && ca <= 0x39;
+      final bIsDigit = cb >= 0x30 && cb <= 0x39;
+
+      if (aIsDigit && bIsDigit) {
+        int ni = i;
+        while (ni < a.length &&
+            a.codeUnitAt(ni) >= 0x30 &&
+            a.codeUnitAt(ni) <= 0x39) {
+          ni++;
+        }
+        int nj = j;
+        while (nj < b.length &&
+            b.codeUnitAt(nj) >= 0x30 &&
+            b.codeUnitAt(nj) <= 0x39) {
+          nj++;
+        }
+        final na = int.parse(a.substring(i, ni));
+        final nb = int.parse(b.substring(j, nj));
+        if (na != nb) return na.compareTo(nb);
+        i = ni;
+        j = nj;
+      } else {
+        final cmp = a[i].toLowerCase().compareTo(b[j].toLowerCase());
+        if (cmp != 0) return cmp;
+        i++;
+        j++;
+      }
+    }
+    return a.length.compareTo(b.length);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final Map<String, List<InventoryProduct>> grouped = {};
-    for (final p in products) {
+    for (final p in widget.products) {
       grouped.putIfAbsent(p.shelfLocation, () => []).add(p);
     }
-    final shelves = grouped.keys.toList()..sort();
+    final shelves = grouped.keys.toList()..sort(_compareShelfNames);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 120),
-      children: shelves.map((shelf) {
-        final shelfProducts = grouped[shelf]!;
-        return _ShelfSection(
-          shelf: shelf,
-          products: shelfProducts,
-          filter: filter,
-          onTap: onTap,
-          onEdit: onEdit,
-          onAdjustStock: onAdjustStock,
-        );
-      }).toList(),
+    return CustomScrollView(
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 12)),
+        for (final shelf in shelves) ...[
+          // Sticky header — uses SliverPersistentHeader so it pins to the
+          // top of the viewport while the shelf's products scroll past.
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _ShelfHeaderDelegate(
+              shelf: shelf,
+              productCount: grouped[shelf]!.length,
+              collapsed: _collapsed[shelf] == true,
+              onToggle: () => setState(() {
+                _collapsed[shelf] = !(_collapsed[shelf] ?? false);
+              }),
+            ),
+          ),
+          if (_collapsed[shelf] != true)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              sliver: SliverList.separated(
+                itemCount: grouped[shelf]!.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (_, i) {
+                  final p = grouped[shelf]![i];
+                  return ProductListTile(
+                    product: p,
+                    isSelected: widget.filter.selectedIds.contains(p.id),
+                    bulkSelectMode: widget.filter.bulkSelectMode,
+                    onTap: () => widget.onTap(p),
+                    onEdit: () => widget.onEdit(p),
+                    onAdjustStock: () => widget.onAdjustStock(p),
+                  );
+                },
+              ),
+            ),
+        ],
+        const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
+      ],
     );
   }
 }
 
-class _ShelfSection extends StatefulWidget {
+/// Pinned header shown above each shelf section. Tapping anywhere on the
+/// header collapses or expands the section so a long inventory can be
+/// "table of contents"-navigated without endless scrolling.
+class _ShelfHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String shelf;
-  final List<InventoryProduct> products;
-  final InventoryFilterState filter;
-  final ValueChanged<InventoryProduct> onTap;
-  final ValueChanged<InventoryProduct> onEdit;
-  final ValueChanged<InventoryProduct> onAdjustStock;
+  final int productCount;
+  final bool collapsed;
+  final VoidCallback onToggle;
 
-  const _ShelfSection({
+  _ShelfHeaderDelegate({
     required this.shelf,
-    required this.products,
-    required this.filter,
-    required this.onTap,
-    required this.onEdit,
-    required this.onAdjustStock,
+    required this.productCount,
+    required this.collapsed,
+    required this.onToggle,
   });
 
   @override
-  State<_ShelfSection> createState() => _ShelfSectionState();
-}
-
-class _ShelfSectionState extends State<_ShelfSection> {
-  bool _expanded = true;
+  double get minExtent => 48;
+  @override
+  double get maxExtent => 48;
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(
+      color: AppColors.background,
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      child: Material(
+        color: AppColors.secondary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: AppColors.secondary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
             child: Row(
               children: [
                 const Icon(
@@ -808,17 +990,20 @@ class _ShelfSectionState extends State<_ShelfSection> {
                   color: AppColors.secondary,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  widget.shelf,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: AppColors.secondary,
+                Expanded(
+                  child: Text(
+                    shelf,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      color: AppColors.secondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
                 Text(
-                  context.l10n.nProducts(widget.products.length),
+                  context.l10n.nProducts(productCount),
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.onSurfaceVariant,
@@ -826,32 +1011,135 @@ class _ShelfSectionState extends State<_ShelfSection> {
                 ),
                 const SizedBox(width: 4),
                 Icon(
-                  _expanded
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
+                  collapsed
+                      ? Icons.keyboard_arrow_down_rounded
+                      : Icons.keyboard_arrow_up_rounded,
                   color: AppColors.secondary,
                 ),
               ],
             ),
           ),
         ),
-        if (_expanded) ...[
-          ...widget.products.map(
-            (p) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: ProductListTile(
-                product: p,
-                isSelected: widget.filter.selectedIds.contains(p.id),
-                bulkSelectMode: widget.filter.bulkSelectMode,
-                onTap: () => widget.onTap(p),
-                onEdit: () => widget.onEdit(p),
-                onAdjustStock: () => widget.onAdjustStock(p),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _ShelfHeaderDelegate oldDelegate) {
+    return oldDelegate.shelf != shelf ||
+        oldDelegate.productCount != productCount ||
+        oldDelegate.collapsed != collapsed;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contextual empty state
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Empty state that adapts its message and CTAs to *why* the list is empty:
+/// active filters, a search miss, or genuinely no products yet.
+class _ContextualEmptyState extends StatelessWidget {
+  final InventoryFilterState filter;
+  final VoidCallback onAddProduct;
+  final VoidCallback onClearFilters;
+  final VoidCallback onClearSearch;
+
+  const _ContextualEmptyState({
+    required this.filter,
+    required this.onAddProduct,
+    required this.onClearFilters,
+    required this.onClearSearch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSearch = filter.search.isNotEmpty;
+    final hasFilters =
+        filter.category != null ||
+        filter.shelfLocation != null ||
+        filter.lowStockOnly ||
+        filter.outOfStockOnly;
+
+    final IconData icon;
+    final String title;
+    final String subtitle;
+    if (hasSearch) {
+      icon = Icons.search_off_rounded;
+      title = 'Walang nahanap';
+      subtitle =
+          'No products match "${filter.search}". Try a different keyword.';
+    } else if (hasFilters) {
+      icon = Icons.filter_alt_off_rounded;
+      final parts = <String>[
+        if (filter.category != null) filter.category!,
+        if (filter.shelfLocation != null) filter.shelfLocation!,
+        if (filter.lowStockOnly) 'Low stock',
+        if (filter.outOfStockOnly) 'Out of stock',
+      ];
+      title = 'No products match these filters';
+      subtitle = parts.join(' · ');
+    } else {
+      icon = Icons.inventory_2_outlined;
+      title = context.l10n.noProducts;
+      subtitle = 'Add your first product to start tracking stock.';
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 64, color: AppColors.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
               ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ],
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                if (hasSearch)
+                  OutlinedButton.icon(
+                    onPressed: onClearSearch,
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: const Text('Clear search'),
+                  ),
+                if (hasFilters)
+                  OutlinedButton.icon(
+                    onPressed: onClearFilters,
+                    icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
+                    label: const Text('Clear filters'),
+                  ),
+                FilledButton.icon(
+                  onPressed: onAddProduct,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.secondary,
+                  ),
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text(context.l10n.addProduct),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -868,7 +1156,7 @@ class _ProductActionSheet extends StatelessWidget {
   final VoidCallback onDelete;
 
   static final _currency = NumberFormat.currency(
-    symbol: 'â‚±',
+    symbol: '\u20B1',
     decimalDigits: 2,
   );
 

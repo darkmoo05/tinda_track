@@ -177,6 +177,10 @@ final inventorySummaryProvider =
           totalStock: products.fold(0, (s, p) => s + p.stockQuantity),
           lowStockCount: products.where((p) => p.isLowStock).length,
           outOfStockCount: products.where((p) => p.isOutOfStock).length,
+          totalStockValue: products.fold<double>(0, (s, p) {
+            final unit = p.costPrice > 0 ? p.costPrice : p.sellingPrice;
+            return s + unit * p.stockQuantity;
+          }),
         );
       });
     });
