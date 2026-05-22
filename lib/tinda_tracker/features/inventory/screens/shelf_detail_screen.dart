@@ -73,7 +73,7 @@ class ShelfDetailScreen extends ConsumerWidget {
                   ),
                   sliver: SliverList.separated(
                     itemCount: products.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (_, i) => _ProductRow(
                       product: products[i],
                       onTap: () => _openEdit(context, products[i]),
@@ -122,7 +122,7 @@ class ShelfDetailScreen extends ConsumerWidget {
       image = CachedNetworkImage(
         imageUrl: shelf.imageUrl!,
         fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _placeholderBanner(),
+        errorWidget: (_, _, _) => _placeholderBanner(),
       );
     } else {
       image = _placeholderBanner();
@@ -441,7 +441,7 @@ class _ProductRow extends StatelessWidget {
       child = CachedNetworkImage(
         imageUrl: p.imageUrl!,
         fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => const Icon(
+        errorWidget: (_, _, _) => const Icon(
           Icons.inventory_2_outlined,
           color: AppColors.onSurfaceVariant,
         ),

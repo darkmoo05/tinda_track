@@ -232,8 +232,8 @@ class _MainShellState extends State<MainShell>
                           sigmaY: 10 * progress,
                         ),
                         child: Container(
-                          color: AppColors.onSurface.withOpacity(
-                            0.10 * progress,
+                          color: AppColors.onSurface.withValues(
+                            alpha: 0.10 * progress,
                           ),
                         ),
                       );
@@ -436,8 +436,8 @@ class _AnimatedSubFabButtonState extends State<_AnimatedSubFabButton> {
                 borderRadius: BorderRadius.circular(20),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  splashColor: widget.color.withOpacity(0.10),
-                  highlightColor: widget.color.withOpacity(0.06),
+                  splashColor: widget.color.withValues(alpha: 0.10),
+                  highlightColor: widget.color.withValues(alpha: 0.06),
                   onTapDown: (_) => setState(() => _pressed = true),
                   onTapUp: (_) => setState(() => _pressed = false),
                   onTapCancel: () => setState(() => _pressed = false),
@@ -447,17 +447,17 @@ class _AnimatedSubFabButtonState extends State<_AnimatedSubFabButton> {
                       color: AppColors.surfaceContainerLowest,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: widget.color.withOpacity(0.18),
+                        color: widget.color.withValues(alpha: 0.18),
                         width: 1.2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: widget.color.withOpacity(0.12),
+                          color: widget.color.withValues(alpha: 0.12),
                           blurRadius: _pressed ? 8 : 10,
                           offset: Offset(0, _pressed ? 3 : 4),
                         ),
                         BoxShadow(
-                          color: AppColors.onSurface.withOpacity(0.06),
+                          color: AppColors.onSurface.withValues(alpha: 0.06),
                           blurRadius: _pressed ? 4 : 5,
                           offset: Offset(0, _pressed ? 1 : 1),
                         ),
@@ -478,8 +478,8 @@ class _AnimatedSubFabButtonState extends State<_AnimatedSubFabButton> {
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                                 colors: [
-                                  widget.color.withOpacity(0.18),
-                                  widget.color.withOpacity(0.08),
+                                  widget.color.withValues(alpha: 0.18),
+                                  widget.color.withValues(alpha: 0.08),
                                 ],
                               ),
                               borderRadius: BorderRadius.circular(12),
@@ -513,7 +513,7 @@ class _AnimatedSubFabButtonState extends State<_AnimatedSubFabButton> {
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w500,
-                                    color: widget.color.withOpacity(0.75),
+                                    color: widget.color.withValues(alpha: 0.75),
                                     letterSpacing: 0.2,
                                   ),
                                 ),
@@ -531,7 +531,7 @@ class _AnimatedSubFabButtonState extends State<_AnimatedSubFabButton> {
                               width: 28,
                               height: 28,
                               decoration: BoxDecoration(
-                                color: widget.color.withOpacity(0.10),
+                                color: widget.color.withValues(alpha: 0.10),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(

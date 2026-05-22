@@ -694,7 +694,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                   .watch(allCategoriesProvider)
                   .when(
                     loading: () => const LinearProgressIndicator(),
-                    error: (_, __) => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
                     data: (cats) {
                       // Only pinned categories appear as quick chips; the
                       // rest are reachable through the "More…" chip so the
@@ -795,7 +795,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                   .watch(allShelfLocationsProvider)
                   .when(
                     loading: () => const LinearProgressIndicator(),
-                    error: (_, __) => _dropdown(
+                    error: (_, _) => _dropdown(
                       label: 'Shelf Location',
                       value: _shelfLocation,
                       items: const ['Counter'],
@@ -899,10 +899,12 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                         ),
                       ],
                       validator: (v) {
-                        if (v == null || v.isEmpty)
+                        if (v == null || v.isEmpty) {
                           return context.l10n.fieldRequired;
-                        if (double.tryParse(v) == null)
+                        }
+                        if (double.tryParse(v) == null) {
                           return context.l10n.numbersOnly;
+                        }
                         return null;
                       },
                     ),
@@ -953,7 +955,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                 ),
                 subtitle: Text(context.l10n.activeHelperText),
                 value: _isActive,
-                activeColor: AppColors.secondary,
+                activeThumbColor: AppColors.secondary,
                 onChanged: (v) => setState(() => _isActive = v),
                 contentPadding: EdgeInsets.zero,
               ),
@@ -1050,7 +1052,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     required IconData icon,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       onChanged: onChanged,
       items: items
           .map((e) => DropdownMenuItem(value: e, child: Text(e)))
@@ -1105,7 +1107,7 @@ class _ImagePickerWidget extends StatelessWidget {
                   localFile!,
                   fit: BoxFit.cover,
                   key: ValueKey(localFile!.path),
-                  errorBuilder: (_, __, ___) => const Icon(
+                  errorBuilder: (_, _, _) => const Icon(
                     Icons.broken_image_rounded,
                     color: AppColors.onSurfaceVariant,
                   ),
@@ -1113,7 +1115,7 @@ class _ImagePickerWidget extends StatelessWidget {
               : Image.network(
                   remoteUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
+                  errorBuilder: (_, _, _) =>
                       const Icon(Icons.broken_image_rounded),
                 ))
         : const Icon(
@@ -1292,7 +1294,7 @@ class _ImageReviewScreen extends StatelessWidget {
   final File? localFile;
   final String? remoteUrl;
 
-  const _ImageReviewScreen({super.key, this.localFile, this.remoteUrl});
+  const _ImageReviewScreen({this.localFile, this.remoteUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -1303,7 +1305,7 @@ class _ImageReviewScreen extends StatelessWidget {
         : Image.network(
             remoteUrl!,
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Icon(
+            errorBuilder: (_, _, _) => const Icon(
               Icons.broken_image_rounded,
               size: 64,
               color: Colors.white38,

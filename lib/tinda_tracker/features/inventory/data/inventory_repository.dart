@@ -39,10 +39,14 @@ class InventoryRepository {
   }
 
   Future<void> adjustStock(String id, int delta, {String? note}) async {
-    await ApiClient.instance.post('/inventory/products/$id/adjust-stock', {
-      'quantityDelta': delta,
-      if (note != null) 'note': note,
-    });
+    final payload = <String, Object?>{'quantityDelta': delta};
+    if (note != null) {
+      payload['note'] = note;
+    }
+    await ApiClient.instance.post(
+      '/inventory/products/$id/adjust-stock',
+      payload,
+    );
   }
 
   Future<void> deleteProduct(String id) async {

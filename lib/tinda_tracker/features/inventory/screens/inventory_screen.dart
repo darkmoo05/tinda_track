@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -19,7 +19,7 @@ import 'add_edit_product_screen.dart';
 import 'shelf_detail_screen.dart';
 import 'stock_history_screen.dart';
 
-/// Main Inventory screen — backed by NestJS API, powered by Riverpod.
+/// Main Inventory screen â€” backed by NestJS API, powered by Riverpod.
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
 
@@ -234,10 +234,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           summaryAsync.when(
             data: (summary) => _SummaryHeader(summary: summary),
             loading: () => const SizedBox(height: 64),
-            error: (_, __) => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
           ),
 
-          // Category chips — sourced from the QuickAccess pin list so users
+          // Category chips â€” sourced from the QuickAccess pin list so users
           // can curate which categories belong on their main dashboard,
           // independent of which categories happen to have stock today.
           Builder(
@@ -255,7 +255,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                   );
                 },
                 loading: () => const SizedBox(height: 44),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
               );
             },
           ),
@@ -523,9 +523,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Summary header
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _SummaryHeader extends StatelessWidget {
   final InventorySummary summary;
@@ -625,9 +625,9 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Category chips
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _CategoryChips extends StatelessWidget {
   final List<String> categories;
@@ -718,9 +718,9 @@ class _CategoryChips extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Grouped by shelf view
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _GroupedShelfView extends StatelessWidget {
   final List<InventoryProduct> products;
@@ -856,9 +856,9 @@ class _ShelfSectionState extends State<_ShelfSection> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Product action sheet (on tap)
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _ProductActionSheet extends StatelessWidget {
   final InventoryProduct product;
@@ -867,7 +867,10 @@ class _ProductActionSheet extends StatelessWidget {
   final VoidCallback onHistory;
   final VoidCallback onDelete;
 
-  static final _currency = NumberFormat.currency(symbol: '₱', decimalDigits: 2);
+  static final _currency = NumberFormat.currency(
+    symbol: 'â‚±',
+    decimalDigits: 2,
+  );
 
   const _ProductActionSheet({
     required this.product,
@@ -1020,7 +1023,7 @@ class _ProductActionSheet extends StatelessWidget {
 }
 
 // -----------------------------------------------------------------------------
-// Phase 3 � minimal full-screen QR scanner used by the "Scan shelf" action.
+// Phase 3 — minimal full-screen QR scanner used by the "Scan shelf" action.
 // Returns the raw scanned string via Navigator.pop on the first detection.
 // -----------------------------------------------------------------------------
 
@@ -1066,7 +1069,7 @@ class _ShelfScannerScreenState extends State<_ShelfScannerScreen> {
           IconButton(
             icon: ValueListenableBuilder<MobileScannerState>(
               valueListenable: _controller,
-              builder: (_, state, __) {
+              builder: (_, state, _) {
                 final on = state.torchState == TorchState.on;
                 return Icon(on ? Icons.flash_on : Icons.flash_off);
               },
@@ -1105,7 +1108,7 @@ class _ShelfScannerScreenState extends State<_ShelfScannerScreen> {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Text(
-                  'Aim at a TT-SHELF-� code',
+                  'Aim at a TT-SHELF-… code',
                   style: TextStyle(color: Colors.white),
                 ),
               ),

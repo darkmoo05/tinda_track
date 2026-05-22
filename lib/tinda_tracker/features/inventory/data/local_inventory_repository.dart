@@ -159,24 +159,48 @@ class LocalInventoryRepository {
     final syncId = row['sync_id'] as String;
 
     final patch = <String, Object?>{
-      if (name != null) 'name': name,
-      if (sku != null) 'sku': sku,
-      if (description != null) 'description': description,
-      if (category != null) 'category': category,
-      if (unit != null) 'unit': unit,
-      if (costPrice != null) 'cost_price': costPrice,
-      if (sellingPrice != null) 'selling_price': sellingPrice,
-      if (reorderPoint != null) 'reorder_point': reorderPoint,
-      if (isActive != null) 'is_active': isActive ? 1 : 0,
-      if (shelfLocation != null) 'shelf_location': shelfLocation,
-      if (imagePath != null) 'image_path': imagePath,
-      // Clear the cached server URL so the sync service re-uploads the new file.
-      if (imagePath != null) 'image_url': null,
-      if (expirationDate != _updateSentinel)
-        'expiration_date': (expirationDate as DateTime?)?.toIso8601String(),
       'is_dirty': 1,
       'updated_at': DateTime.now().toIso8601String(),
     };
+    if (name != null) {
+      patch['name'] = name;
+    }
+    if (sku != null) {
+      patch['sku'] = sku;
+    }
+    if (description != null) {
+      patch['description'] = description;
+    }
+    if (category != null) {
+      patch['category'] = category;
+    }
+    if (unit != null) {
+      patch['unit'] = unit;
+    }
+    if (costPrice != null) {
+      patch['cost_price'] = costPrice;
+    }
+    if (sellingPrice != null) {
+      patch['selling_price'] = sellingPrice;
+    }
+    if (reorderPoint != null) {
+      patch['reorder_point'] = reorderPoint;
+    }
+    if (isActive != null) {
+      patch['is_active'] = isActive ? 1 : 0;
+    }
+    if (shelfLocation != null) {
+      patch['shelf_location'] = shelfLocation;
+    }
+    if (imagePath != null) {
+      patch['image_path'] = imagePath;
+      // Clear the cached server URL so the sync service re-uploads the new file.
+      patch['image_url'] = null;
+    }
+    if (expirationDate != _updateSentinel) {
+      patch['expiration_date'] = (expirationDate as DateTime?)
+          ?.toIso8601String();
+    }
 
     final db = await _db.database;
     await db.update(

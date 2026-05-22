@@ -78,6 +78,10 @@ class GuidedCameraService {
       return null;
     }
 
+    if (!context.mounted) {
+      return null;
+    }
+
     // Step 1 — Guided camera screen.
     final result = await Navigator.push<GuidedCameraResult>(
       context,

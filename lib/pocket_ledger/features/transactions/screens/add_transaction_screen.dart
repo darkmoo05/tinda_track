@@ -143,10 +143,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return _enteredAmount + _chargeFee;
   }
 
-  String get _selectedService {
-    return _selectedServiceKey ?? '';
-  }
-
   bool get _canCustomizeFeeHandling {
     return _selectedServiceKey == 'cashin' || _selectedServiceKey == 'cashout';
   }
@@ -1029,7 +1025,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<_ChargeHandlingMode>(
-            value: _chargeHandlingMode,
+            initialValue: _chargeHandlingMode,
             isExpanded: true,
             icon: const Icon(Icons.keyboard_arrow_down_rounded),
             decoration: InputDecoration(
@@ -1282,7 +1278,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               title: context.l10n.transactionTypeLabel,
               subtitle: 'Cash In, Cash Out, Load, Bills, or QR',
               child: DropdownButtonFormField<String>(
-                value: _selectedServiceKey,
+                initialValue: _selectedServiceKey,
                 isExpanded: true,
                 icon: const Icon(Icons.keyboard_arrow_down_rounded),
                 decoration: InputDecoration(
@@ -1633,23 +1629,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         return context.l10n.qrPaymentService;
       default:
         return serviceKey;
-    }
-  }
-
-  IconData _serviceIcon(String serviceKey) {
-    switch (serviceKey) {
-      case 'cashin':
-        return Icons.south_west_rounded;
-      case 'cashout':
-        return Icons.north_east_rounded;
-      case 'load':
-        return Icons.mobile_friendly_rounded;
-      case 'paybills':
-        return Icons.receipt_long_rounded;
-      case 'qrpayment':
-        return Icons.qr_code_scanner_rounded;
-      default:
-        return Icons.tune_rounded;
     }
   }
 

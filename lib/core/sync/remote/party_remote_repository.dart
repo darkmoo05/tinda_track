@@ -19,10 +19,11 @@ class PartyRemoteRepository {
     int? since,
   }) async {
     try {
-      final res = await ApiClient.instance.get(
-        '/parties/pull',
-        params: {'deviceId': deviceId, if (since != null) 'since': since},
-      );
+      final params = <String, Object?>{'deviceId': deviceId};
+      if (since != null) {
+        params['since'] = since;
+      }
+      final res = await ApiClient.instance.get('/parties/pull', params: params);
       final data = res.data['data'] as List<dynamic>;
       return data.cast<Map<String, dynamic>>();
     } on DioException catch (_) {

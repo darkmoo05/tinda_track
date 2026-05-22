@@ -26,7 +26,7 @@ class ArchitectCard extends StatelessWidget {
           // Traditional shadows are discouraged, but we use a very subtle one for elevation if needed
           boxShadow: [
             BoxShadow(
-              color: AppColors.onSurface.withOpacity(0.04),
+              color: AppColors.onSurface.withValues(alpha: 0.04),
               blurRadius: 24,
               offset: const Offset(0, 8),
             ),

@@ -690,47 +690,6 @@ class DashboardRepository {
     return double.tryParse((match.group(1) ?? '').replaceAll(',', '')) ?? 0;
   }
 
-  _ChargeRouting _deriveChargeRouting(Map<String, Object?> row) {
-    final iconKey = ((row['icon_key'] as String?) ?? '').toLowerCase();
-    final walletAccount = ((row['wallet_account'] as String?) ?? '').trim();
-    final amount = (row['amount'] as num?)?.toDouble() ?? 0;
-    final walletDelta = (row['wallet_delta'] as num?)?.toDouble() ?? 0;
-    final mayaWalletDelta = (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0;
-    final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
-
-    final isOutflow = iconKey.contains('out');
-    final selectedWalletDelta = mayaWalletDelta != 0
-        ? mayaWalletDelta
-        : walletDelta;
-
-    final principal = isOutflow
-        ? (onHandDelta < 0 ? -onHandDelta : 0)
-        : (selectedWalletDelta < 0 ? -selectedWalletDelta : 0);
-
-    var chargeAmount = amount - principal;
-    if (chargeAmount.abs() < 0.0001) {
-      chargeAmount = 0;
-    }
-    if (chargeAmount < 0) {
-      chargeAmount = 0;
-    }
-
-    var destination = isOutflow
-        ? (walletAccount.isEmpty ? 'Wallet' : walletAccount)
-        : 'On-hand Cash';
-
-    // Legacy rows may not follow the new transaction note/delta conventions.
-    if (chargeAmount == 0) {
-      final parsedCharge = _extractChargeAmount(row);
-      if (parsedCharge > 0) {
-        chargeAmount = parsedCharge;
-        destination = _extractChargeDestination(row);
-      }
-    }
-
-    return _ChargeRouting(amount: chargeAmount, destination: destination);
-  }
-
   String _resolveFeeMovementSource(
     Map<String, Object?> row,
     String movementType,
@@ -1118,13 +1077,6 @@ class _DashboardAlertContent {
   final String title;
   final String message;
   final String actionLabel;
-}
-
-class _ChargeRouting {
-  const _ChargeRouting({required this.amount, required this.destination});
-
-  final double amount;
-  final String destination;
 }
 
 class _FeeLedgerEvent {

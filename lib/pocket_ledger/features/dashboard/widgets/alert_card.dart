@@ -30,7 +30,7 @@ class ArchitectAlertCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(
                 0xFFD48A3E,
-              ).withOpacity(0.2), // Darker orange icon container
+              ).withValues(alpha: 0.2), // Darker orange icon container
               shape: BoxShape.circle,
             ),
             child: const Icon(

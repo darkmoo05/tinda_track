@@ -20,9 +20,13 @@ class MovementCategoryRemoteRepository {
     int? since,
   }) async {
     try {
+      final params = <String, Object?>{'deviceId': deviceId};
+      if (since != null) {
+        params['since'] = since;
+      }
       final res = await ApiClient.instance.get(
         '/movement-categories/pull',
-        params: {'deviceId': deviceId, if (since != null) 'since': since},
+        params: params,
       );
       final data = res.data['data'] as List<dynamic>;
       return data.cast<Map<String, dynamic>>();

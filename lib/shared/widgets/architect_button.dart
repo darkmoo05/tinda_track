@@ -25,10 +25,7 @@ class ArchitectButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
           ),
         ),
-        child: Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
       );
     }
 
@@ -44,7 +41,7 @@ class ArchitectButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(24), // 1.5rem roundedness
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.2),
+            color: AppColors.primary.withValues(alpha: 0.2),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),

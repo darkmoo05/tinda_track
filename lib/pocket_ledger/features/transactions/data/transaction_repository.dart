@@ -156,15 +156,17 @@ class TransactionRepository {
     String? status,
   }) async {
     try {
-      final response = await _apiClient.get(
-        '/transactions',
-        params: {
-          if (walletProvider != null) 'walletProvider': walletProvider,
-          if (direction != null) 'direction': direction,
-          'limit': limit,
-          if (status != null) 'status': status,
-        },
-      );
+      final params = <String, Object?>{'limit': limit};
+      if (walletProvider != null) {
+        params['walletProvider'] = walletProvider;
+      }
+      if (direction != null) {
+        params['direction'] = direction;
+      }
+      if (status != null) {
+        params['status'] = status;
+      }
+      final response = await _apiClient.get('/transactions', params: params);
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;

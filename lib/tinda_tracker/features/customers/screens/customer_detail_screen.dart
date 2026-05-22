@@ -31,13 +31,16 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       final customer = await CustomerRepository.instance.getCustomer(
         widget.customerId,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _customer = customer;
           _loading = false;
         });
+      }
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -306,7 +309,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 32),
                       sliver: SliverList.separated(
                         itemCount: _customer!.utangRecords.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        separatorBuilder: (_, _) => const SizedBox(height: 6),
                         itemBuilder: (context, index) {
                           final record = _customer!.utangRecords[index];
                           return _TransactionRow(

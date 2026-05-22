@@ -227,7 +227,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 value: _isActive,
-                activeColor: AppColors.secondary,
+                activeThumbColor: AppColors.secondary,
                 onChanged: (v) => setState(() => _isActive = v),
               ),
               const SizedBox(height: 28),

@@ -146,7 +146,7 @@ class _ShelfLabelsScreenState extends ConsumerState<ShelfLabelsScreen> {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       itemCount: shelves.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 6),
+      separatorBuilder: (_, _) => const SizedBox(height: 6),
       itemBuilder: (_, i) {
         final shelf = shelves[i];
         final isSel = _selected.contains(shelf.syncId);
@@ -212,7 +212,7 @@ class _ShelfLabelsScreenState extends ConsumerState<ShelfLabelsScreen> {
           width: 40,
           height: 40,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _placeholderThumb(),
+          errorBuilder: (_, _, _) => _placeholderThumb(),
         ),
       );
     }

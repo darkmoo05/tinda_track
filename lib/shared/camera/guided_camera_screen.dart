@@ -208,7 +208,7 @@ class _GuidedCameraScreenState extends State<GuidedCameraScreen>
     // Hide system UI for a full immersive camera feel.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     return PopScope(
-      onPopInvokedWithResult: (_, __) =>
+      onPopInvokedWithResult: (_, _) =>
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
       child: Scaffold(
         backgroundColor: Colors.black,

@@ -94,7 +94,7 @@ class _InventoryFilterSheet extends ConsumerWidget {
                     .watch(allCategoriesProvider)
                     .when(
                       loading: () => const SizedBox.shrink(),
-                      error: (_, __) => const SizedBox.shrink(),
+                      error: (_, _) => const SizedBox.shrink(),
                       data: (cats) => Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -136,7 +136,7 @@ class _InventoryFilterSheet extends ConsumerWidget {
                     .watch(allShelfLocationsProvider)
                     .when(
                       loading: () => const SizedBox.shrink(),
-                      error: (_, __) => const SizedBox.shrink(),
+                      error: (_, _) => const SizedBox.shrink(),
                       data: (locs) => Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -168,14 +168,14 @@ class _InventoryFilterSheet extends ConsumerWidget {
                 SwitchListTile.adaptive(
                   title: Text(context.l10n.lowStockOnly),
                   value: filter.lowStockOnly,
-                  activeColor: AppColors.secondary,
+                  activeThumbColor: AppColors.secondary,
                   onChanged: (_) => notifier.toggleLowStockOnly(),
                   contentPadding: EdgeInsets.zero,
                 ),
                 SwitchListTile.adaptive(
                   title: Text(context.l10n.outOfStockOnly),
                   value: filter.outOfStockOnly,
-                  activeColor: AppColors.secondary,
+                  activeThumbColor: AppColors.secondary,
                   onChanged: (_) => notifier.toggleOutOfStockOnly(),
                   contentPadding: EdgeInsets.zero,
                 ),

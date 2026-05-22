@@ -222,7 +222,7 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
                         vertical: 8,
                       ),
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      separatorBuilder: (_, _) => const SizedBox(height: 6),
                       itemBuilder: (_, i) {
                         final item = items[i];
                         if (widget.isCategory) {
@@ -763,9 +763,9 @@ class _LookupCard extends StatelessWidget {
                             color: AppColors.onSurface,
                           ),
                         ),
-                        if (subtitle != null)
+                        if (subtitle case final subtitleText?)
                           Text(
-                            subtitle!,
+                            subtitleText,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -776,7 +776,7 @@ class _LookupCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (trailingToggle != null) trailingToggle!,
+                  ...?trailingToggle == null ? null : [trailingToggle!],
                   IconButton(
                     icon: Icon(
                       expanded

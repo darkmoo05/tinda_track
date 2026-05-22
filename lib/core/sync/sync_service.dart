@@ -1199,7 +1199,7 @@ class SyncService {
                   db: db,
                   table: table,
                   syncId: syncId,
-                  serverId: serverId!,
+                  serverId: serverId,
                   imagePath: patchImagePath,
                   baseUrl: baseUrl,
                 ),

@@ -1568,7 +1568,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   Future<void> _generateGeneralLedgerReport(
     _LedgerReportRequest request,
   ) async {
-    _showSnack(context.l10n.preparingReport);
+    final l10n = context.l10n;
+    _showSnack(l10n.preparingReport);
 
     try {
       final entries = await _loadLedgerEntriesForRange(
@@ -1580,17 +1581,20 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         if (!mounted) {
           return;
         }
-        _showSnack(context.l10n.noLedgerRecordsForDateRange);
+        _showSnack(l10n.noLedgerRecordsForDateRange);
         return;
       }
 
       final reportsDir = await _resolveSaveDirectory();
+      if (!mounted) {
+        return;
+      }
       if (reportsDir == null) {
-        _showSnack(context.l10n.reportGenerationCanceled);
+        _showSnack(l10n.reportGenerationCanceled);
         return;
       }
 
-      _showSnack(context.l10n.generatingReport);
+      _showSnack(l10n.generatingReport);
 
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final filePath = path.join(
@@ -1622,7 +1626,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         return;
       }
 
-      _showSnack(context.l10n.reportSavedTo(filePath));
+      _showSnack(l10n.reportSavedTo(filePath));
 
       if (!_supportsShareSheet) {
         return;
@@ -1632,28 +1636,29 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         await Share.shareXFiles(
           [XFile(filePath)],
           text:
-              '${context.l10n.generalLedgerReport} (${_fullDateFormat.format(request.beginDate)} - ${_fullDateFormat.format(request.endDate)})',
+              '${l10n.generalLedgerReport} (${_fullDateFormat.format(request.beginDate)} - ${_fullDateFormat.format(request.endDate)})',
         );
       } catch (shareError, shareStack) {
         debugPrint(
           'Share failed for generated report: $shareError\n$shareStack',
         );
-        _showSnack(context.l10n.reportShareUnavailable);
+        _showSnack(l10n.reportShareUnavailable);
       }
     } catch (error, stackTrace) {
       debugPrint('Report generation failed: $error\n$stackTrace');
       if (!mounted) {
         return;
       }
-      _showSnack(context.l10n.reportGenerationFailed, isError: true);
+      _showSnack(l10n.reportGenerationFailed, isError: true);
     }
   }
 
   Future<Directory?> _resolveSaveDirectory() async {
     try {
+      final l10n = context.l10n;
       final fallbackDir = await _resolveReportsDirectory();
       final selectedPath = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: context.l10n.chooseFolder,
+        dialogTitle: l10n.chooseFolder,
         initialDirectory: fallbackDir.path,
       );
 
@@ -2335,11 +2340,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return item.walletDelta;
   }
 
-  String _signedCurrency(double amount) {
-    final sign = amount < 0 ? '−' : '+';
-    return '$sign ${_currencyFormat.format(amount.abs())}';
-  }
-
   bool _isWalletOutflow(_HistoryRow item) {
     if (item.entryType == 'transaction') {
       if (_selectedWalletFilter == 'on_hand') {
@@ -2530,7 +2530,6 @@ class _LedgerExportRow {
     required this.chargeDestination,
     required this.chargeBreakdown,
     required this.runningBalance,
-    this.chargeDestinationKey,
   });
 
   final DateTime createdAt;
@@ -2551,7 +2550,6 @@ class _LedgerExportRow {
   final String chargeDestination;
   final String chargeBreakdown;
   final double runningBalance;
-  final String? chargeDestinationKey;
 }
 
 class _LedgerTotals {

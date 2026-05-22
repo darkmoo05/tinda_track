@@ -313,10 +313,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         }
       });
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() => _isLoadingFeeIncome = false);
       }
-      setState(() => _isLoadingFeeIncome = false);
     }
   }
 
@@ -624,9 +623,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: tone.withOpacity(0.08),
+        color: tone.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tone.withOpacity(0.18)),
+        border: Border.all(color: tone.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
@@ -634,7 +633,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: tone.withOpacity(0.15),
+              color: tone.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 18, color: tone),
@@ -722,7 +721,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
           )
         else
           DropdownButtonFormField<String>(
-            value: _selectedCategory,
+            initialValue: _selectedCategory,
             hint: Text(
               context.l10n.chooseExpenseCategory,
               style: const TextStyle(
@@ -804,7 +803,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -813,7 +812,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 20),
@@ -903,7 +902,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           onChanged: onChanged,
           decoration: _inputDecoration(
             hasError: hasError,
@@ -1322,7 +1321,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         : null;
     final persistedNote = [
       notes.isNotEmpty ? notes : _defaultNote,
-      if (cashTransferBreakdown != null) cashTransferBreakdown,
+      ?cashTransferBreakdown,
     ].join(' • ');
     final transferTitle = 'Cash Transfer - On-Hand Cash to $_destinationLabel';
     final feeWithdrawalTitle = 'Fee Withdrawal - From $_destinationLabel';
@@ -2071,9 +2070,6 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     );
 
     var totalWithdrawn = 0.0;
-    var withdrawnViaFeeWithdrawal = 0.0;
-    var withdrawnViaFeeTransfer = 0.0;
-    var withdrawnViaCashTransferCharge = 0.0;
     for (final row in withdrawnRows) {
       final movementType = ((row['owner_movement_type'] as String?) ?? '')
           .trim()
@@ -2090,7 +2086,6 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       if (movementType == 'fee withdrawal' &&
           walletAccount == normalizedSource) {
         totalWithdrawn += amount;
-        withdrawnViaFeeWithdrawal += amount;
         feeEvents.add(
           _FeeBalanceEvent(
             timestampMs: _eventTimestampMs(row['created_at']),
@@ -2104,7 +2099,6 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       if (movementType == 'fee transfer' &&
           ownerPartyAccount == normalizedSource) {
         totalWithdrawn += amount;
-        withdrawnViaFeeTransfer += amount;
         feeEvents.add(
           _FeeBalanceEvent(
             timestampMs: _eventTimestampMs(row['created_at']),
@@ -2119,7 +2113,6 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
           normalizedSource == 'on_hand') {
         final charge = _extractChargeAmountFromNote(note);
         totalWithdrawn += charge;
-        withdrawnViaCashTransferCharge += charge;
         if (charge > 0) {
           feeEvents.add(
             _FeeBalanceEvent(
@@ -2781,7 +2774,7 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
                       )
                     : ListView.separated(
                         itemCount: _visibleCategories.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final category = _visibleCategories[index];
                           return ListTile(
