@@ -1,3 +1,5 @@
+import 'product_unit_conversion.dart';
+
 /// Plain Dart model matching the backend `products` table.
 class InventoryProduct {
   final String id;
@@ -5,10 +7,10 @@ class InventoryProduct {
   final String sku; // barcode / SKU
   final String description;
   final String category;
-  final String unit;
+  final String baseUnit;
   final double costPrice;
   final double sellingPrice;
-  final int stockQuantity;
+  final double stockInBaseUnit;
   final int reorderPoint; // min stock level
   final bool isActive;
   final bool isDeleted;
@@ -27,19 +29,22 @@ class InventoryProduct {
   /// Product-level expiration date. Set by the owner during product creation
   /// or editing to enable at-a-glance expiry alerts.
   final DateTime? expirationDate;
+  final List<ProductUnitConversion> unitConversions;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const InventoryProduct({
+  InventoryProduct({
     required this.id,
     required this.name,
     required this.sku,
     this.description = '',
     this.category = 'General',
-    this.unit = 'pcs',
+    String? unit,
+    String? baseUnit,
     this.costPrice = 0,
     required this.sellingPrice,
-    this.stockQuantity = 0,
+    int? stockQuantity,
+    double? stockInBaseUnit,
     this.reorderPoint = 0,
     this.isActive = true,
     this.isDeleted = false,
@@ -47,12 +52,20 @@ class InventoryProduct {
     this.imageUrl,
     this.shelfLocation = 'Counter',
     this.expirationDate,
+    this.unitConversions = const [],
     required this.createdAt,
     required this.updatedAt,
-  });
+  }) : baseUnit = (baseUnit ?? unit ?? 'pcs'),
+       stockInBaseUnit = stockInBaseUnit ?? (stockQuantity?.toDouble() ?? 0);
+
+  // Backward-compatible alias used throughout existing UI.
+  String get unit => baseUnit;
+
+  // Backward-compatible integer stock view used by old widgets.
+  int get stockQuantity => stockInBaseUnit.floor();
 
   bool get isLowStock => stockQuantity > 0 && stockQuantity <= reorderPoint;
-  bool get isOutOfStock => stockQuantity == 0;
+  bool get isOutOfStock => stockInBaseUnit <= 0;
   double get profit => sellingPrice - costPrice;
 
   /// True when [expirationDate] is set and within the next 30 days.
@@ -76,10 +89,14 @@ class InventoryProduct {
       sku: json['sku'] as String,
       description: (json['description'] as String?) ?? '',
       category: (json['category'] as String?) ?? 'General',
-      unit: (json['unit'] as String?) ?? 'pcs',
+      baseUnit:
+          (json['baseUnit'] as String?) ?? (json['unit'] as String?) ?? 'pcs',
       costPrice: (json['costPrice'] as num?)?.toDouble() ?? 0,
       sellingPrice: (json['sellingPrice'] as num).toDouble(),
-      stockQuantity: (json['stockQuantity'] as num?)?.toInt() ?? 0,
+      stockInBaseUnit:
+          (json['stockInBaseUnit'] as num?)?.toDouble() ??
+          (json['stockQuantity'] as num?)?.toDouble() ??
+          0,
       reorderPoint: (json['reorderPoint'] as num?)?.toInt() ?? 0,
       isActive: (json['isActive'] as bool?) ?? true,
       isDeleted: (json['isDeleted'] as bool?) ?? false,
@@ -89,6 +106,9 @@ class InventoryProduct {
       expirationDate: json['expirationDate'] != null
           ? DateTime.tryParse(json['expirationDate'] as String)
           : null,
+      unitConversions: ((json['unitConversions'] as List<dynamic>?) ?? const [])
+          .map((e) => ProductUnitConversion.fromJson(e as Map<String, dynamic>))
+          .toList(growable: false),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -105,10 +125,14 @@ class InventoryProduct {
       sku: row['sku'] as String,
       description: (row['description'] as String?) ?? '',
       category: (row['category'] as String?) ?? 'General',
-      unit: (row['unit'] as String?) ?? 'pcs',
+      baseUnit:
+          (row['base_unit'] as String?) ?? (row['unit'] as String?) ?? 'pcs',
       costPrice: (row['cost_price'] as num?)?.toDouble() ?? 0,
       sellingPrice: (row['selling_price'] as num).toDouble(),
-      stockQuantity: (row['stock_quantity'] as num?)?.toInt() ?? 0,
+      stockInBaseUnit:
+          (row['stock_in_base_unit'] as num?)?.toDouble() ??
+          (row['stock_quantity'] as num?)?.toDouble() ??
+          0,
       reorderPoint: (row['reorder_point'] as num?)?.toInt() ?? 0,
       isActive: (row['is_active'] as int? ?? 1) == 1,
       isDeleted: (row['is_deleted'] as int? ?? 0) == 1,
@@ -118,6 +142,7 @@ class InventoryProduct {
       expirationDate: row['expiration_date'] != null
           ? DateTime.tryParse(row['expiration_date'] as String)
           : null,
+      unitConversions: const [],
       createdAt: DateTime.parse(row['created_at'] as String),
       updatedAt: DateTime.parse(row['updated_at'] as String),
     );
@@ -129,9 +154,11 @@ class InventoryProduct {
     'sku': sku,
     'description': description,
     'category': category,
-    'unit': unit,
+    'baseUnit': baseUnit,
+    'unit': baseUnit,
     'costPrice': costPrice,
     'sellingPrice': sellingPrice,
+    'stockInBaseUnit': stockInBaseUnit,
     'stockQuantity': stockQuantity,
     'reorderPoint': reorderPoint,
     'isActive': isActive,
@@ -139,6 +166,7 @@ class InventoryProduct {
     'imageUrl': imageUrl,
     'shelfLocation': shelfLocation,
     'expirationDate': expirationDate?.toIso8601String(),
+    'unitConversions': unitConversions.map((e) => e.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
   };
@@ -149,9 +177,11 @@ class InventoryProduct {
     String? sku,
     String? description,
     String? category,
+    String? baseUnit,
     String? unit,
     double? costPrice,
     double? sellingPrice,
+    double? stockInBaseUnit,
     int? stockQuantity,
     int? reorderPoint,
     bool? isActive,
@@ -160,6 +190,7 @@ class InventoryProduct {
     Object? imageUrl = _sentinel,
     String? shelfLocation,
     Object? expirationDate = _sentinel,
+    List<ProductUnitConversion>? unitConversions,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -169,10 +200,11 @@ class InventoryProduct {
       sku: sku ?? this.sku,
       description: description ?? this.description,
       category: category ?? this.category,
-      unit: unit ?? this.unit,
+      baseUnit: baseUnit ?? unit ?? this.baseUnit,
       costPrice: costPrice ?? this.costPrice,
       sellingPrice: sellingPrice ?? this.sellingPrice,
-      stockQuantity: stockQuantity ?? this.stockQuantity,
+      stockInBaseUnit:
+          stockInBaseUnit ?? stockQuantity?.toDouble() ?? this.stockInBaseUnit,
       reorderPoint: reorderPoint ?? this.reorderPoint,
       isActive: isActive ?? this.isActive,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -182,6 +214,7 @@ class InventoryProduct {
       expirationDate: expirationDate == _sentinel
           ? this.expirationDate
           : expirationDate as DateTime?,
+      unitConversions: unitConversions ?? this.unitConversions,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

@@ -35,8 +35,17 @@ class _QuickStockSheet extends StatefulWidget {
 class _QuickStockSheetState extends State<_QuickStockSheet> {
   final _manualController = TextEditingController();
   String _reason = kStockAdjustmentReasons.first;
+  String _selectedRestockUnit = '__base__';
   bool _loading = false;
   int _previewDelta = 0;
+
+  double get _selectedConversionFactor {
+    if (_selectedRestockUnit == '__base__') return 1;
+    for (final c in widget.product.unitConversions) {
+      if (c.unitName == _selectedRestockUnit) return c.conversionFactor;
+    }
+    return 1;
+  }
 
   @override
   void dispose() {
@@ -48,7 +57,7 @@ class _QuickStockSheetState extends State<_QuickStockSheet> {
       (widget.product.stockQuantity + _previewDelta).clamp(0, 9999999);
 
   Future<void> _save() async {
-    final manual = int.tryParse(_manualController.text) ?? 0;
+    final manual = double.tryParse(_manualController.text) ?? 0;
     final total = _previewDelta + manual;
     if (total == 0) {
       ScaffoldMessenger.of(
@@ -56,14 +65,22 @@ class _QuickStockSheetState extends State<_QuickStockSheet> {
       ).showSnackBar(SnackBar(content: Text(context.l10n.noChange)));
       return;
     }
+
+    final totalInBase = _reason == 'Restock'
+        ? total * _selectedConversionFactor
+        : total;
+
     setState(() => _loading = true);
     try {
       final movementType = _reasonToType(_reason);
       await LocalInventoryRepository.instance.adjustStock(
         productId: widget.product.id,
-        quantityDelta: total,
+        quantityDelta: total.floor(),
+        quantityDeltaBase: totalInBase,
         movementType: movementType,
-        note: _reason,
+        note: _reason == 'Restock' && _selectedRestockUnit != '__base__'
+            ? '$_reason ($_selectedRestockUnit x ${total.toStringAsFixed(2)})'
+            : _reason,
       );
       widget.ref.invalidate(allProductsProvider);
       if (mounted) Navigator.pop(context, true);
@@ -152,7 +169,7 @@ class _QuickStockSheetState extends State<_QuickStockSheet> {
                         ),
                       ),
                       Text(
-                        widget.product.unit,
+                        widget.product.baseUnit,
                         style: const TextStyle(
                           fontSize: 14,
                           color: AppColors.onSurfaceVariant,
@@ -227,10 +244,13 @@ class _QuickStockSheetState extends State<_QuickStockSheet> {
                       child: TextField(
                         controller: _manualController,
                         keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
                           signed: true,
                         ),
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'^-?\d*')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^-?\d*\.?\d*'),
+                          ),
                         ],
                         decoration: InputDecoration(
                           labelText: context.l10n.manualAmount,
@@ -258,6 +278,47 @@ class _QuickStockSheetState extends State<_QuickStockSheet> {
                   ],
                 ),
                 const SizedBox(height: 16),
+
+                if (_reason == 'Restock') ...[
+                  Text(
+                    'Restock unit',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedRestockUnit,
+                    onChanged: (v) =>
+                        setState(() => _selectedRestockUnit = v ?? '__base__'),
+                    items: [
+                      DropdownMenuItem(
+                        value: '__base__',
+                        child: Text('Base unit (${widget.product.baseUnit})'),
+                      ),
+                      ...widget.product.unitConversions.map(
+                        (c) => DropdownMenuItem(
+                          value: c.unitName,
+                          child: Text(
+                            '${c.unitName} (${c.conversionFactor} ${widget.product.baseUnit})',
+                          ),
+                        ),
+                      ),
+                    ],
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.inventory_2_outlined),
+                      helperText: _selectedRestockUnit == '__base__'
+                          ? null
+                          : 'Entered quantity will be converted to ${widget.product.baseUnit} automatically',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 Text(
                   context.l10n.reason,

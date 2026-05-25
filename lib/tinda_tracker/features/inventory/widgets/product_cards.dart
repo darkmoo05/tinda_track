@@ -7,6 +7,72 @@ import 'package:intl/intl.dart';
 import '../../../../../core/app_theme.dart';
 import '../data/models/inventory_product.dart';
 
+String _fmtQty(double v) {
+  if (v == v.truncateToDouble()) return v.toInt().toString();
+  return v.toStringAsFixed(2).replaceFirst(RegExp(r'\.00$'), '');
+}
+
+String _pluralizeUnit(String unitName, double qty) {
+  if (qty == 1) return unitName;
+  final lower = unitName.toLowerCase();
+  if (lower.endsWith('ch') ||
+      lower.endsWith('sh') ||
+      lower.endsWith('s') ||
+      lower.endsWith('x') ||
+      lower.endsWith('z')) {
+    return '${unitName}es';
+  }
+  if (lower.endsWith('y') && unitName.length > 1) {
+    final prev = lower[lower.length - 2];
+    const vowels = {'a', 'e', 'i', 'o', 'u'};
+    if (!vowels.contains(prev)) {
+      return '${unitName.substring(0, unitName.length - 1)}ies';
+    }
+  }
+  return '${unitName}s';
+}
+
+({double qty, String unitName})? _bestPackEquivalent(InventoryProduct p) {
+  final valid = p.unitConversions
+      .where((c) => c.conversionFactor > 0)
+      .toList(growable: false);
+  if (valid.isEmpty || p.stockInBaseUnit <= 0) return null;
+
+  final candidates = valid
+      .map(
+        (c) => (
+          qty: p.stockInBaseUnit / c.conversionFactor,
+          unit: c.unitName,
+          factor: c.conversionFactor,
+        ),
+      )
+      .where((e) => e.qty >= 1)
+      .toList(growable: false);
+  if (candidates.isEmpty) return null;
+
+  // Best-fit rule: prefer exact whole-package equivalents first, then the
+  // largest package size (higher factor) to keep the summary easy to scan.
+  final exact = candidates
+      .where((e) => (e.qty - e.qty.roundToDouble()).abs() < 0.000001)
+      .toList(growable: false);
+  final pool = exact.isNotEmpty ? exact : candidates;
+  pool.sort((a, b) => b.factor.compareTo(a.factor));
+  final top = pool.first;
+  return (qty: top.qty, unitName: top.unit);
+}
+
+String _stockDisplay(InventoryProduct p) {
+  final base = '${_fmtQty(p.stockInBaseUnit)} ${p.baseUnit}';
+  final best = _bestPackEquivalent(p);
+  if (best == null) return base;
+  final packLabel = _pluralizeUnit(best.unitName, best.qty);
+  return '$base (or ${_fmtQty(best.qty)} $packLabel)';
+}
+
+String _baseStockDisplay(InventoryProduct p) {
+  return '${_fmtQty(p.stockInBaseUnit)} ${p.baseUnit}';
+}
+
 /// Full-width list tile for the List View mode.
 class ProductListTile extends StatelessWidget {
   final InventoryProduct product;
@@ -250,7 +316,7 @@ class ProductGridCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '${product.stockQuantity} ${product.unit}',
+                      _baseStockDisplay(product),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
@@ -486,7 +552,7 @@ class StatusPill extends StatelessWidget {
               Icon(icon, size: 14, color: stockColor),
               const SizedBox(width: 4),
               Text(
-                '${product.stockQuantity}',
+                _fmtQty(product.stockInBaseUnit),
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 16,
@@ -496,7 +562,7 @@ class StatusPill extends StatelessWidget {
               ),
               const SizedBox(width: 3),
               Text(
-                product.unit,
+                product.baseUnit,
                 style: TextStyle(
                   fontSize: 10,
                   color: stockColor.withValues(alpha: 0.9),
@@ -505,6 +571,24 @@ class StatusPill extends StatelessWidget {
               ),
             ],
           ),
+          if (product.unitConversions.isNotEmpty)
+            Builder(
+              builder: (_) {
+                final best = _bestPackEquivalent(product);
+                if (best == null) return const SizedBox.shrink();
+                final label = _pluralizeUnit(best.unitName, best.qty);
+                return Text(
+                  'or ${_fmtQty(best.qty)} $label',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: stockColor,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                    height: 1.1,
+                  ),
+                );
+              },
+            ),
           if (isOut || isLow)
             Text(
               label,

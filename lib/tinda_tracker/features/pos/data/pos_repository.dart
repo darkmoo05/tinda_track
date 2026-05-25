@@ -8,10 +8,12 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/sync/sync_config.dart';
+import '../../inventory/data/models/inventory_product.dart';
+import 'models/cart_item.dart';
 import 'sale_model.dart';
 
 class CheckoutRequest {
-  final List<TtCartItem> items;
+  final List<CartItem> items;
   final double paidAmount;
   final String? note;
   final String? deviceId;
@@ -54,7 +56,42 @@ class PosRepository {
 
   // ─── public API ───────────────────────────────────────────────────────────
 
+  Future<InventoryProduct?> findProductBySku(String scannedCode) async {
+    final normalizedInput = _normalizeBarcode(scannedCode);
+    if (normalizedInput.isEmpty) return null;
+
+    final db = await _db.database;
+    final rows = await db.query(
+      AppDatabase.ttProductsTable,
+      where: 'is_deleted = 0 AND is_active = 1',
+      orderBy: 'name ASC',
+    );
+
+    InventoryProduct? bestMatch;
+    for (final row in rows) {
+      final product = InventoryProduct.fromLocalDb(row);
+      final productSku = _normalizeBarcode(product.sku);
+      if (productSku.isEmpty) continue;
+      if (_isBarcodeMatch(productSku, normalizedInput)) {
+        bestMatch = product;
+        break;
+      }
+    }
+
+    return bestMatch;
+  }
+
   Future<TtSale> checkout(CheckoutRequest request) async {
+    if (request.items.isEmpty) {
+      throw Exception(
+        'Walang item sa checkout queue. Mag-add muna bago mag-checkout.',
+      );
+    }
+
+    if (request.paidAmount < 0) {
+      throw Exception('Hindi puwedeng negative ang amount received.');
+    }
+
     final db = await _db.database;
     final deviceId = request.deviceId ?? await _db.getOrCreateDeviceId();
     final now = DateTime.now().toIso8601String();
@@ -62,72 +99,114 @@ class PosRepository {
     final reference = _generateReference();
 
     double subtotal = 0;
-    int totalItems = 0;
+    final totalItems = request.items.length;
     final enrichedItems = <Map<String, Object?>>[];
 
-    for (final item in request.items) {
-      // Look up the product row to get sync_id / server_id
-      final productRows = await db.query(
-        AppDatabase.ttProductsTable,
-        where: 'server_id = ? OR sync_id = ?',
-        whereArgs: [item.productId, item.productId],
-        limit: 1,
-      );
-      if (productRows.isEmpty) {
-        throw Exception('Product not found: ${item.productId}');
-      }
-      final pRow = productRows.first;
-      final pSyncId = pRow['sync_id'] as String;
-      final pServerId = pRow['server_id'] as String?;
-      final lineTotal = item.unitPrice * item.quantity;
-      subtotal += lineTotal;
-      totalItems += item.quantity;
+    await db.transaction((txn) async {
+      for (final item in request.items) {
+        // Look up the product row to get sync_id / server_id
+        final productRows = await txn.query(
+          AppDatabase.ttProductsTable,
+          where: 'server_id = ? OR sync_id = ?',
+          whereArgs: [item.product.id, item.product.id],
+          limit: 1,
+        );
+        if (productRows.isEmpty) {
+          throw Exception('Product not found: ${item.product.name}');
+        }
+        final pRow = productRows.first;
+        final pSyncId = pRow['sync_id'] as String;
+        final pServerId = pRow['server_id'] as String?;
+        final baseUnit =
+            (pRow['base_unit'] as String?) ?? (pRow['unit'] as String?) ?? 'pc';
+        final selectedUnit = item.selectedUnitName;
 
-      enrichedItems.add({
-        'sale_sync_id': saleSyncId,
-        'product_sync_id': pSyncId,
-        'product_server_id': pServerId,
-        'product_name': item.productName,
-        'quantity': item.quantity,
-        'unit_price': item.unitPrice,
-        'line_total': lineTotal,
+        double conversionFactor = 1;
+        if (selectedUnit.toLowerCase() != baseUnit.toLowerCase()) {
+          final conversionRows = await txn.query(
+            AppDatabase.ttProductConversionsTable,
+            where:
+                'product_id = ? AND LOWER(unit_name) = LOWER(?) AND is_deleted = 0',
+            whereArgs: [pSyncId, selectedUnit],
+            limit: 1,
+          );
+          if (conversionRows.isEmpty) {
+            throw Exception(
+              'Hindi naka-set ang unit na $selectedUnit para sa ${item.product.name}.',
+            );
+          }
+          conversionFactor = (conversionRows.first['conversion_factor'] as num)
+              .toDouble();
+        }
+
+        final computedBaseQuantity = item.quantity * conversionFactor;
+        final currentBaseStock =
+            (pRow['stock_in_base_unit'] as num?)?.toDouble() ??
+            (pRow['stock_quantity'] as num?)?.toDouble() ??
+            0;
+        if (computedBaseQuantity > currentBaseStock) {
+          throw Exception('Kulang ang stocks para sa ${item.product.name}.');
+        }
+
+        final lineTotal = item.appliedPrice * item.quantity;
+        subtotal += lineTotal;
+
+        enrichedItems.add({
+          'sale_sync_id': saleSyncId,
+          'product_sync_id': pSyncId,
+          'product_server_id': pServerId,
+          'product_name': item.product.name,
+          'selected_unit': selectedUnit,
+          'quantity': item.quantity,
+          'unit_price': item.appliedPrice,
+          'computed_base_quantity': computedBaseQuantity,
+          'line_total': lineTotal,
+        });
+
+        final newBaseStock = currentBaseStock - computedBaseQuantity;
+        await txn.update(
+          AppDatabase.ttProductsTable,
+          {
+            'stock_in_base_unit': newBaseStock,
+            'stock_quantity': max(0, newBaseStock.floor()),
+            'is_dirty': 1,
+            'updated_at': now,
+          },
+          where: 'sync_id = ?',
+          whereArgs: [pSyncId],
+        );
+      }
+
+      final totalAmount = subtotal;
+      if (request.paidAmount < totalAmount) {
+        throw Exception(
+          'Kulangan ang binayad. Paki-check ulit bago mag-checkout.',
+        );
+      }
+      final changeAmount = request.paidAmount - totalAmount;
+
+      await txn.insert(AppDatabase.ttSalesTable, {
+        'sync_id': saleSyncId,
+        'server_id': null,
+        'device_id': deviceId,
+        'reference': reference,
+        'note': request.note ?? '',
+        'subtotal': subtotal,
+        'total_amount': totalAmount,
+        'paid_amount': request.paidAmount,
+        'change_amount': changeAmount,
+        'total_items': totalItems,
+        'is_dirty': 1,
+        'created_at': now,
       });
 
-      // Deduct stock locally
-      final currentStock = pRow['stock_quantity'] as int;
-      await db.update(
-        AppDatabase.ttProductsTable,
-        {
-          'stock_quantity': max(0, currentStock - item.quantity),
-          'is_dirty': 1,
-          'updated_at': now,
-        },
-        where: 'sync_id = ?',
-        whereArgs: [pSyncId],
-      );
-    }
+      for (final item in enrichedItems) {
+        await txn.insert(AppDatabase.ttSaleItemsTable, item);
+      }
+    });
 
     final totalAmount = subtotal;
     final changeAmount = request.paidAmount - totalAmount;
-
-    await db.insert(AppDatabase.ttSalesTable, {
-      'sync_id': saleSyncId,
-      'server_id': null,
-      'device_id': deviceId,
-      'reference': reference,
-      'note': request.note ?? '',
-      'subtotal': subtotal,
-      'total_amount': totalAmount,
-      'paid_amount': request.paidAmount,
-      'change_amount': changeAmount,
-      'total_items': totalItems,
-      'is_dirty': 1,
-      'created_at': now,
-    });
-
-    for (final item in enrichedItems) {
-      await db.insert(AppDatabase.ttSaleItemsTable, item);
-    }
 
     final saleRows = await db.query(
       AppDatabase.ttSalesTable,
@@ -138,6 +217,20 @@ class PosRepository {
     final sale = await _buildSale(saleRows.first);
     unawaited(_pushCheckout(saleSyncId));
     return sale;
+  }
+
+  String _normalizeBarcode(String value) {
+    return value.replaceAll(RegExp(r'\s+'), '').trim();
+  }
+
+  String _stripLeadingZeros(String value) {
+    final stripped = value.replaceFirst(RegExp(r'^0+'), '');
+    return stripped.isEmpty ? '0' : stripped;
+  }
+
+  bool _isBarcodeMatch(String sku, String scanned) {
+    if (sku == scanned) return true;
+    return _stripLeadingZeros(sku) == _stripLeadingZeros(scanned);
   }
 
   Future<List<TtSale>> listSales({int? limit, String? from, String? to}) async {
@@ -202,14 +295,24 @@ class PosRepository {
     final lowStock = productRows
         .where(
           (r) =>
-              (r['stock_quantity'] as int) <= (r['reorder_point'] as int) &&
-              (r['stock_quantity'] as int) > 0,
+              ((r['stock_in_base_unit'] as num?)?.toDouble() ??
+                      (r['stock_quantity'] as num?)?.toDouble() ??
+                      0) <=
+                  (r['reorder_point'] as int) &&
+              ((r['stock_in_base_unit'] as num?)?.toDouble() ??
+                      (r['stock_quantity'] as num?)?.toDouble() ??
+                      0) >
+                  0,
         )
         .map(
           (r) => LowStockProduct(
             id: (r['server_id'] as String?) ?? r['sync_id'] as String,
             name: r['name'] as String,
-            stockQuantity: r['stock_quantity'] as int,
+            stockQuantity:
+                ((r['stock_in_base_unit'] as num?)?.toDouble() ??
+                        (r['stock_quantity'] as num?)?.toDouble() ??
+                        0)
+                    .floor(),
             reorderPoint: r['reorder_point'] as int,
           ),
         )
@@ -329,6 +432,9 @@ class PosRepository {
                     (r) => {
                       'productId': r['product_server_id'],
                       'quantity': r['quantity'],
+                      'selectedUnit': r['selected_unit'],
+                      'unitPrice': r['unit_price'],
+                      'computedBaseQuantity': r['computed_base_quantity'],
                     },
                   )
                   .toList(),

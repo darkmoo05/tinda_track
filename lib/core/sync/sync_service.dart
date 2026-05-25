@@ -22,9 +22,18 @@ class SyncService {
   static final SyncService instance = SyncService._();
 
   final AppDatabase _database = AppDatabase.instance;
+  final StreamController<SyncRunResult> _syncResultsController =
+      StreamController<SyncRunResult>.broadcast();
   static const Duration _requestTimeout = Duration(seconds: 12);
+  static const List<String> _reachabilityProbePaths = [
+    '/health',
+    '/inventory/categories/pull?since=0',
+    '/parties/pull?since=0',
+  ];
 
   bool _isSyncing = false;
+
+  Stream<SyncRunResult> get syncResults => _syncResultsController.stream;
 
   Future<SyncRunResult> syncAll() async {
     // Guard against concurrent calls (e.g. startup fire-and-forget overlapping
@@ -32,7 +41,9 @@ class SyncService {
     if (_isSyncing) return const SyncRunResult(pushed: 0, pulled: 0);
     _isSyncing = true;
     try {
-      return await _doSyncAll();
+      final result = await _doSyncAll();
+      _syncResultsController.add(result);
+      return result;
     } finally {
       _isSyncing = false;
     }
@@ -42,13 +53,41 @@ class SyncService {
     final db = await _database.database;
     await _database.ensureSyncSchema(db);
 
-    // Fast reachability check — avoids burning through individual 12-second
-    // timeouts for every operation when the server is simply offline.
-    final baseUrl = await SyncConfig.getBaseApiUrl();
-    final reachable = await _isServerReachable(baseUrl);
-    if (!reachable) {
-      log('[Sync] Server unreachable, skipping sync', name: 'SyncService');
-      return const SyncRunResult(pushed: 0, pulled: 0);
+    // Fast reachability check — probe current URL first, then hostname/IP
+    // fallbacks, and persist the first reachable candidate.
+    final currentBaseUrl = await SyncConfig.getBaseApiUrl();
+    final probeCandidates = SyncConfig.buildProbeCandidates(currentBaseUrl);
+    String? activeBaseUrl;
+    for (final candidate in probeCandidates) {
+      if (await _isServerReachable(candidate)) {
+        activeBaseUrl = candidate;
+        break;
+      }
+    }
+
+    if (activeBaseUrl == null) {
+      final diagnosis = await _diagnoseHealthProbeFailure(currentBaseUrl);
+      if (diagnosis != null) {
+        log('[Sync] $diagnosis', name: 'SyncService');
+      } else {
+        log('[Sync] Server unreachable, skipping sync', name: 'SyncService');
+      }
+
+      // Do not hard-stop here. Some environments (especially mobile tunnels)
+      // can fail probe endpoints while real sync endpoints still work.
+      activeBaseUrl = currentBaseUrl;
+      log(
+        '[Sync] Proceeding with sync attempt despite probe failure: $activeBaseUrl',
+        name: 'SyncService',
+      );
+    }
+
+    if (activeBaseUrl != currentBaseUrl) {
+      await SyncConfig.setBaseApiUrl(activeBaseUrl);
+      log(
+        '[Sync] Switched API URL to reachable endpoint: $activeBaseUrl',
+        name: 'SyncService',
+      );
     }
 
     final deviceId = await _database.getOrCreateDeviceId();
@@ -707,14 +746,14 @@ class SyncService {
           .timeout(_requestTimeout),
       uri,
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        'Pull failed for $path: ${response.statusCode} ${response.body}',
-      );
-    }
+    _ensureJsonApiResponse(response, uri, operation: 'pull $path');
 
-    final body = jsonDecode(response.body);
-    if (body is! Map<String, dynamic>) {
+    final body = _decodeJsonMapBody(
+      response.body,
+      uri,
+      operation: 'pull $path',
+    );
+    if (body.isEmpty) {
       return const [];
     }
     final data = body['data'];
@@ -858,17 +897,211 @@ class SyncService {
     return false;
   }
 
-  /// Returns true if the server responds to a lightweight health probe within
-  /// 3 seconds. Used to short-circuit sync when the device is offline or the
-  /// server is down, avoiding individual 12-second timeouts per operation.
+  /// Returns true if the server responds with API JSON to at least one probe
+  /// endpoint within 3 seconds. Falls back to real sync routes when /health is
+  /// unavailable so sync can still proceed.
   Future<bool> _isServerReachable(String baseUrl) async {
-    try {
-      final res = await http
-          .get(Uri.parse('$baseUrl/health'))
-          .timeout(const Duration(seconds: 3));
-      return res.statusCode < 500;
-    } catch (_) {
+    var sawTunnelAuthGate = false;
+
+    for (final path in _reachabilityProbePaths) {
+      final uri = Uri.parse('$baseUrl$path');
+      try {
+        final res = await http
+            .get(uri, headers: const {'accept': 'application/json'})
+            .timeout(const Duration(seconds: 3));
+
+        if (_looksLikeTunnelAuthGate(res) || _looksLikeHtml(res.body)) {
+          sawTunnelAuthGate = true;
+          continue;
+        }
+
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          continue;
+        }
+
+        if (!_isLikelyJsonResponse(res)) {
+          continue;
+        }
+
+        final body = _tryDecodeJsonMapBody(res.body);
+        if (body == null) {
+          continue;
+        }
+
+        if (path == '/health') {
+          final status = _asString(body['status']).toLowerCase();
+          if (status == 'ok') {
+            return true;
+          }
+          continue;
+        }
+
+        // Non-health endpoints use { success, data } envelope.
+        return true;
+      } catch (_) {
+        continue;
+      }
+    }
+
+    if (sawTunnelAuthGate) {
       return false;
+    }
+
+    return false;
+  }
+
+  Future<String?> _diagnoseHealthProbeFailure(String baseUrl) async {
+    SocketException? socketError;
+    var sawTimeout = false;
+    var sawTunnelAuthGate = false;
+    final statusMessages = <String>[];
+
+    for (final path in _reachabilityProbePaths) {
+      final uri = Uri.parse('$baseUrl$path');
+      try {
+        final res = await http
+            .get(uri, headers: const {'accept': 'application/json'})
+            .timeout(const Duration(seconds: 3));
+
+        if (_looksLikeTunnelAuthGate(res) || _looksLikeHtml(res.body)) {
+          sawTunnelAuthGate = true;
+          statusMessages.add('$uri => login/auth HTML');
+          continue;
+        }
+
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          statusMessages.add('$uri => HTTP ${res.statusCode}');
+          continue;
+        }
+
+        if (!_isLikelyJsonResponse(res)) {
+          statusMessages.add(
+            '$uri => non-JSON (${res.headers['content-type'] ?? 'unknown'})',
+          );
+          continue;
+        }
+      } on TimeoutException {
+        sawTimeout = true;
+      } on SocketException catch (error) {
+        socketError = error;
+      } catch (_) {
+        continue;
+      }
+    }
+
+    if (sawTunnelAuthGate) {
+      return 'Sync probe warning: Dev Tunnel is returning a login/auth page on one or more probe endpoints. '
+          '${statusMessages.join('; ')}. Set forwarded port 8080 to public/anonymous for API testing.';
+    }
+
+    if (statusMessages.isNotEmpty) {
+      return 'Sync probe warning: probe endpoints did not return a usable API response. '
+          '${statusMessages.join('; ')}';
+    }
+    if (sawTimeout) {
+      return 'Sync probe warning: probe request timed out for $baseUrl.';
+    }
+    if (socketError != null) {
+      return 'Sync probe warning: cannot connect to $baseUrl (${socketError!.message}).';
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _tryDecodeJsonMapBody(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isLikelyJsonResponse(http.Response response) {
+    final contentType = (response.headers['content-type'] ?? '')
+        .toLowerCase()
+        .trim();
+    return contentType.contains('application/json') ||
+        contentType.contains('+json');
+  }
+
+  bool _looksLikeHtml(String body) {
+    final normalized = body.trimLeft().toLowerCase();
+    return normalized.startsWith('<!doctype html') ||
+        normalized.startsWith('<html');
+  }
+
+  bool _looksLikeTunnelAuthGate(http.Response response) {
+    final requestHost = response.request?.url.host.toLowerCase() ?? '';
+    final location = (response.headers['location'] ?? '').toLowerCase();
+    final body = response.body.toLowerCase();
+    return requestHost.contains('github.com') ||
+        location.contains('github.com/login') ||
+        location.contains('/auth/github/signin') ||
+        body.contains('sign in to github') ||
+        body.contains('continue to dev tunnels') ||
+        body.contains('auth/github/signin');
+  }
+
+  String _previewBody(String body, {int maxChars = 180}) {
+    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.isEmpty) return '';
+    if (compact.length <= maxChars) return compact;
+    return '${compact.substring(0, maxChars)}...';
+  }
+
+  Map<String, dynamic> _decodeJsonMapBody(
+    String body,
+    Uri uri, {
+    required String operation,
+  }) {
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+
+    throw StateError(
+      'Invalid API response for $operation at $uri: expected a JSON object envelope.',
+    );
+  }
+
+  void _ensureJsonApiResponse(
+    http.Response response,
+    Uri uri, {
+    required String operation,
+  }) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (response.statusCode == 401 ||
+          response.statusCode == 403 ||
+          response.statusCode == 406 ||
+          _looksLikeTunnelAuthGate(response)) {
+        throw StateError(
+          'Sync blocked by tunnel authentication while calling $operation at $uri '
+          '(HTTP ${response.statusCode}). Make port 8080 public/anonymous in VS Code Dev Tunnels, '
+          'or use an endpoint that does not require GitHub sign-in.',
+        );
+      }
+
+      throw StateError(
+        'Pull failed for $operation: HTTP ${response.statusCode}. ${_previewBody(response.body)}',
+      );
+    }
+
+    if (!_isLikelyJsonResponse(response) || _looksLikeHtml(response.body)) {
+      if (_looksLikeTunnelAuthGate(response)) {
+        throw StateError(
+          'Sync blocked by a Dev Tunnel login page while calling $operation at $uri. '
+          'The response is HTML instead of JSON. Make the forwarded port public/anonymous for testing.',
+        );
+      }
+
+      throw StateError(
+        'Invalid response for $operation at $uri: expected JSON but got '
+        '"${response.headers['content-type'] ?? 'unknown'}". ${_previewBody(response.body)}',
+      );
     }
   }
 
@@ -927,7 +1160,16 @@ class SyncService {
             )
             .timeout(_requestTimeout);
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          final body = jsonDecode(res.body);
+          _ensureJsonApiResponse(
+            res,
+            Uri.parse('$baseUrl/$pushEndpoint'),
+            operation: 'push $pushEndpoint',
+          );
+          final body = _decodeJsonMapBody(
+            res.body,
+            Uri.parse('$baseUrl/$pushEndpoint'),
+            operation: 'push $pushEndpoint',
+          );
           final rawData = body is Map ? body['data'] : null;
           final serverItems =
               (rawData as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
@@ -967,12 +1209,20 @@ class SyncService {
     try {
       final sinceRaw = await _database.getSyncState('tt_last_sync_ms');
       final sinceMs = sinceRaw != null ? int.tryParse(sinceRaw) ?? 0 : 0;
-      final res = await http
-          .get(Uri.parse('$baseUrl/$pullEndpoint?since=$sinceMs'))
-          .timeout(_requestTimeout);
-      if (res.statusCode < 200 || res.statusCode >= 300) return 0;
-      final list = (jsonDecode(res.body)['data'] as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+      final pullUri = Uri.parse('$baseUrl/$pullEndpoint?since=$sinceMs');
+      final res = await _runRequest(
+        () => http
+            .get(pullUri, headers: const {'accept': 'application/json'})
+            .timeout(_requestTimeout),
+        pullUri,
+      );
+      _ensureJsonApiResponse(res, pullUri, operation: 'pull $pullEndpoint');
+      final body = _decodeJsonMapBody(
+        res.body,
+        pullUri,
+        operation: 'pull $pullEndpoint',
+      );
+      final list = (body['data'] as List<dynamic>).cast<Map<String, dynamic>>();
       var count = 0;
       for (final item in list) {
         final syncId = item['syncId'] as String?;
@@ -1024,6 +1274,10 @@ class SyncService {
     String deviceId, {
     required bool isPush,
   }) async {
+    if (isPush) {
+      await _normalizeQuickAccessCategoryPins(db, maxPinned: 10);
+    }
+
     return _syncTtLookupTable(
       db,
       localTable: AppDatabase.ttProductCategoriesTable,
@@ -1040,6 +1294,52 @@ class SyncService {
         'examples': (m['examples'] as String?) ?? '',
         'is_quick_access': (m['isQuickAccess'] as bool? ?? false) ? 1 : 0,
       },
+    );
+  }
+
+  Future<void> _normalizeQuickAccessCategoryPins(
+    Database db, {
+    required int maxPinned,
+  }) async {
+    final rows = await db.query(
+      AppDatabase.ttProductCategoriesTable,
+      columns: const ['id'],
+      where: 'is_deleted = 0 AND is_quick_access = 1',
+      orderBy: 'updated_at DESC, id DESC',
+    );
+    if (rows.length <= maxPinned) {
+      return;
+    }
+
+    final now = DateTime.now().toIso8601String();
+    final overflowRows = rows.skip(maxPinned);
+    final batch = db.batch();
+    var changed = 0;
+
+    for (final row in overflowRows) {
+      final id = row['id'];
+      if (id is! int) {
+        continue;
+      }
+
+      batch.update(
+        AppDatabase.ttProductCategoriesTable,
+        {'is_quick_access': 0, 'is_dirty': 1, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      changed++;
+    }
+
+    if (changed == 0) {
+      return;
+    }
+
+    await batch.commit(noResult: true);
+    log(
+      '[Sync] Normalized quick-access categories before push: '
+      'max=$maxPinned, unpinned=$changed',
+      name: 'SyncService',
     );
   }
 
@@ -1087,6 +1387,7 @@ class SyncService {
           final syncId = row['sync_id'] as String;
           final serverId = row['server_id'] as String?;
           final isDeleted = (row['is_deleted'] as int) == 1;
+          final conversions = await _loadLocalProductConversions(db, syncId);
 
           // Bug fix: never push a deleted record that was never on server
           if (isDeleted && serverId == null) {
@@ -1117,14 +1418,16 @@ class SyncService {
                     'sku': row['sku'],
                     'description': row['description'],
                     'category': row['category'],
-                    'unit': row['unit'],
+                    'baseUnit': row['base_unit'] ?? row['unit'] ?? 'pcs',
                     'costPrice': row['cost_price'],
                     'sellingPrice': row['selling_price'],
-                    'stockQuantity': row['stock_quantity'],
+                    'stockInBaseUnit':
+                        row['stock_in_base_unit'] ?? row['stock_quantity'],
                     'reorderPoint': row['reorder_point'],
                     'isActive': (row['is_active'] as int) == 1,
                     'shelfLocation': row['shelf_location'] ?? 'Counter',
                     'expirationDate': row['expiration_date'],
+                    'unitConversions': conversions,
                   }),
                 )
                 .timeout(_requestTimeout);
@@ -1171,14 +1474,16 @@ class SyncService {
                     'sku': row['sku'],
                     'description': row['description'],
                     'category': row['category'],
-                    'unit': row['unit'],
+                    'baseUnit': row['base_unit'] ?? row['unit'] ?? 'pcs',
                     'costPrice': row['cost_price'],
                     'sellingPrice': row['selling_price'],
-                    'stockQuantity': row['stock_quantity'],
+                    'stockInBaseUnit':
+                        row['stock_in_base_unit'] ?? row['stock_quantity'],
                     'reorderPoint': row['reorder_point'],
                     'isActive': (row['is_active'] as int) == 1,
                     'shelfLocation': row['shelf_location'] ?? 'Counter',
                     'expirationDate': row['expiration_date'],
+                    'unitConversions': conversions,
                   }),
                 )
                 .timeout(_requestTimeout);
@@ -1263,10 +1568,19 @@ class SyncService {
           'sku': m['sku'] ?? '',
           'description': m['description'] ?? '',
           'category': m['category'] ?? 'General',
-          'unit': m['unit'] ?? 'pcs',
+          'unit': m['baseUnit'] ?? m['unit'] ?? 'pcs',
+          'base_unit': m['baseUnit'] ?? m['unit'] ?? 'pcs',
           'cost_price': (m['costPrice'] as num?)?.toDouble() ?? 0,
           'selling_price': (m['sellingPrice'] as num?)?.toDouble() ?? 0,
-          'stock_quantity': (m['stockQuantity'] as num?)?.toInt() ?? 0,
+          'stock_quantity':
+              ((m['stockInBaseUnit'] as num?) ?? (m['stockQuantity'] as num?))
+                  ?.toDouble()
+                  .floor() ??
+              0,
+          'stock_in_base_unit':
+              ((m['stockInBaseUnit'] as num?) ?? (m['stockQuantity'] as num?))
+                  ?.toDouble() ??
+              0,
           'reorder_point': (m['reorderPoint'] as num?)?.toInt() ?? 0,
           'is_active': (m['isActive'] as bool? ?? true) ? 1 : 0,
           'is_deleted': (m['isDeleted'] as bool? ?? false) ? 1 : 0,
@@ -1291,6 +1605,11 @@ class SyncService {
             whereArgs: [local['id']],
           );
         }
+        await _replaceLocalProductConversions(
+          db,
+          productSyncId: values['sync_id'] as String,
+          fromServer: (m['unitConversions'] as List<dynamic>?) ?? const [],
+        );
         count++;
       }
       return count;
@@ -1298,6 +1617,64 @@ class SyncService {
       return 0;
     }
   }
+
+  Future<List<Map<String, dynamic>>> _loadLocalProductConversions(
+    Database db,
+    String productSyncId,
+  ) async {
+    final rows = await db.query(
+      AppDatabase.ttProductConversionsTable,
+      where: 'product_id = ? AND is_deleted = 0',
+      whereArgs: [productSyncId],
+      orderBy: 'conversion_factor DESC, unit_name ASC',
+    );
+    return rows
+        .map(
+          (r) => {
+            'syncId': r['sync_id'],
+            'unitName': r['unit_name'],
+            'conversionFactor': (r['conversion_factor'] as num).toDouble(),
+            'costPrice': (r['cost_price'] as num).toDouble(),
+            'sellingPrice': (r['selling_price'] as num).toDouble(),
+          },
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> _replaceLocalProductConversions(
+    Database db, {
+    required String productSyncId,
+    required List<dynamic> fromServer,
+  }) async {
+    final batch = db.batch();
+    batch.delete(
+      AppDatabase.ttProductConversionsTable,
+      where: 'product_id = ?',
+      whereArgs: [productSyncId],
+    );
+    final now = DateTime.now().toIso8601String();
+    for (final item in fromServer) {
+      final m = item as Map<String, dynamic>;
+      final factor = (m['conversionFactor'] as num?)?.toDouble() ?? 0;
+      final unitName = (m['unitName'] as String?)?.trim() ?? '';
+      if (unitName.isEmpty || factor <= 0) continue;
+      batch.insert(AppDatabase.ttProductConversionsTable, {
+        'sync_id': (m['syncId'] as String?) ?? _randomSyncId(),
+        'product_id': productSyncId,
+        'unit_name': unitName,
+        'conversion_factor': factor,
+        'cost_price': (m['costPrice'] as num?)?.toDouble() ?? 0,
+        'selling_price': (m['sellingPrice'] as num?)?.toDouble() ?? 0,
+        'is_deleted': 0,
+        'is_dirty': 0,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+    await batch.commit(noResult: true);
+  }
+
+  String _randomSyncId() => DateTime.now().microsecondsSinceEpoch.toString();
 
   /// Uploads a product image to the server using multipart POST.
   /// Updates [table].image_url in SQLite on success.
@@ -1719,6 +2096,9 @@ class SyncService {
                         (r) => {
                           'productId': r['product_server_id'],
                           'quantity': r['quantity'],
+                          'selectedUnit': r['selected_unit'],
+                          'unitPrice': r['unit_price'],
+                          'computedBaseQuantity': r['computed_base_quantity'],
                         },
                       )
                       .toList(),
@@ -1792,8 +2172,14 @@ class SyncService {
               'product_sync_id': sm['productId'] ?? '',
               'product_server_id': sm['productId'],
               'product_name': product['name'] ?? '',
-              'quantity': (sm['quantity'] as num?)?.toInt() ?? 0,
+              'selected_unit':
+                  sm['selectedUnit'] ?? product['baseUnit'] ?? 'pc',
+              'quantity': (sm['quantity'] as num?)?.toDouble() ?? 0,
               'unit_price': (sm['unitPrice'] as num?)?.toDouble() ?? 0,
+              'computed_base_quantity':
+                  (sm['computedBaseQuantity'] as num?)?.toDouble() ??
+                  (sm['quantity'] as num?)?.toDouble() ??
+                  0,
               'line_total': (sm['lineTotal'] as num?)?.toDouble() ?? 0,
             },
             conflictAlgorithm: ConflictAlgorithm.ignore,

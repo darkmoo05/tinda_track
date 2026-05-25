@@ -19,6 +19,7 @@ class AppDatabase {
 
   // TindaTracker local cache tables
   static const String ttProductsTable = 'tt_products';
+  static const String ttProductConversionsTable = 'tt_product_conversions';
   static const String ttProductCategoriesTable = 'tt_product_categories';
   static const String ttShelfLocationsTable = 'tt_shelf_locations';
   static const String ttCustomersTable = 'tt_customers';
@@ -54,7 +55,7 @@ class AppDatabase {
     _database = await databaseFactory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 18,
+        version: 20,
         onCreate: (db, version) async {
           await _createLedgerTable(db);
           await _createFeeTransactionsTable(db);
@@ -67,6 +68,7 @@ class AppDatabase {
           await ensureSyncSchema(db);
           await _backfillSyncMetadata(db);
           await _createTtProductsTable(db);
+          await _createTtProductConversionsTable(db);
           await _createTtProductCategoriesTable(db);
           await _createTtShelfLocationsTable(db);
           await _seedTtLookupTablesIfEmpty(db);
@@ -391,11 +393,63 @@ class AppDatabase {
             // list — never wipe customizations they made themselves.
             await _reseedLookupsIfStillDefault(db);
           }
+          if (oldVersion < 19) {
+            // v19 — multi-unit inventory foundation.
+            // Keep legacy `stock_quantity` for compatibility while introducing
+            // floating base-unit storage and explicit base-unit label.
+            await _addColumnIfMissing(
+              db,
+              ttProductsTable,
+              'stock_in_base_unit',
+              'REAL NOT NULL DEFAULT 0',
+            );
+            await _addColumnIfMissing(
+              db,
+              ttProductsTable,
+              'base_unit',
+              "TEXT NOT NULL DEFAULT 'pcs'",
+            );
+
+            // Backfill from the legacy integer stock + unit columns.
+            await db.execute(
+              'UPDATE $ttProductsTable '
+              'SET stock_in_base_unit = CAST(stock_quantity AS REAL) '
+              'WHERE stock_in_base_unit IS NULL OR stock_in_base_unit = 0',
+            );
+            await db.execute(
+              'UPDATE $ttProductsTable '
+              'SET base_unit = COALESCE(NULLIF(unit, ""), "pcs") '
+              'WHERE base_unit IS NULL OR base_unit = ""',
+            );
+
+            await _createTtProductConversionsTable(db);
+          }
+          if (oldVersion < 20) {
+            await _addColumnIfMissing(
+              db,
+              ttSaleItemsTable,
+              'selected_unit',
+              "TEXT NOT NULL DEFAULT 'pc'",
+            );
+            await _addColumnIfMissing(
+              db,
+              ttSaleItemsTable,
+              'computed_base_quantity',
+              'REAL NOT NULL DEFAULT 0',
+            );
+
+            await db.execute(
+              'UPDATE $ttSaleItemsTable '
+              'SET computed_base_quantity = CAST(quantity AS REAL) '
+              'WHERE computed_base_quantity IS NULL OR computed_base_quantity = 0',
+            );
+          }
         },
         onOpen: (db) async {
           await ensureWalletSchema(db);
           await ensureTransactionTypeSchema(db);
           await ensureSyncSchema(db);
+          await _normalizeLegacyInventoryUnits(db);
           await _seedOwnerMovementCategoriesIfEmpty(db);
           await _backfillDefaultOutflowTypes(db);
           await _removeLegacyDummyParties(db);
@@ -507,9 +561,11 @@ class AppDatabase {
         description TEXT NOT NULL DEFAULT '',
         category TEXT NOT NULL DEFAULT 'General',
         unit TEXT NOT NULL DEFAULT 'pcs',
+        base_unit TEXT NOT NULL DEFAULT 'pcs',
         cost_price REAL NOT NULL DEFAULT 0,
         selling_price REAL NOT NULL DEFAULT 0,
         stock_quantity INTEGER NOT NULL DEFAULT 0,
+        stock_in_base_unit REAL NOT NULL DEFAULT 0,
         reorder_point INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
         is_deleted INTEGER NOT NULL DEFAULT 0,
@@ -518,6 +574,24 @@ class AppDatabase {
         image_url TEXT,
         shelf_location TEXT NOT NULL DEFAULT 'Counter',
         expiration_date TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createTtProductConversionsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $ttProductConversionsTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT NOT NULL UNIQUE,
+        product_id TEXT NOT NULL,
+        unit_name TEXT NOT NULL,
+        conversion_factor REAL NOT NULL,
+        cost_price REAL NOT NULL DEFAULT 0,
+        selling_price REAL NOT NULL DEFAULT 0,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        is_dirty INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -1051,8 +1125,10 @@ class AppDatabase {
         product_sync_id TEXT NOT NULL,
         product_server_id TEXT,
         product_name TEXT NOT NULL DEFAULT '',
-        quantity INTEGER NOT NULL,
+        selected_unit TEXT NOT NULL DEFAULT 'pc',
+        quantity REAL NOT NULL,
         unit_price REAL NOT NULL,
+        computed_base_quantity REAL NOT NULL DEFAULT 0,
         line_total REAL NOT NULL
       )
     ''');
@@ -1144,6 +1220,28 @@ class AppDatabase {
       });
     }
     await batch.commit(noResult: true);
+  }
+
+  /// Normalizes legacy inventory unit values created by older app versions.
+  ///
+  /// Historical rows may contain `pcs`/`piece` while current unit lists use
+  /// `pc`. This keeps dropdown values consistent and prevents assertion
+  /// failures when editing products.
+  Future<void> _normalizeLegacyInventoryUnits(Database db) async {
+    if (await _columnExists(db, ttProductsTable, 'unit')) {
+      await db.execute(
+        "UPDATE $ttProductsTable "
+        "SET unit = 'pc' "
+        "WHERE LOWER(TRIM(unit)) IN ('pcs', 'piece', 'pieces')",
+      );
+    }
+    if (await _columnExists(db, ttProductsTable, 'base_unit')) {
+      await db.execute(
+        "UPDATE $ttProductsTable "
+        "SET base_unit = 'pc' "
+        "WHERE LOWER(TRIM(base_unit)) IN ('pcs', 'piece', 'pieces')",
+      );
+    }
   }
 
   Future<List<String>> loadTransactionTypes() async {
@@ -1718,7 +1816,13 @@ class _DefaultTransactionType {
 
 /// Internal value-class describing a seeded category row.
 class _CategorySeed {
-  const _CategorySeed(this.syncId, this.name, this.description, this.examples, this.isQuickAccess);
+  const _CategorySeed(
+    this.syncId,
+    this.name,
+    this.description,
+    this.examples,
+    this.isQuickAccess,
+  );
   final String syncId;
   final String name;
   final String description;
@@ -1728,10 +1832,14 @@ class _CategorySeed {
 
 /// Internal value-class describing a seeded shelf-location row.
 class _ShelfLocationSeed {
-  const _ShelfLocationSeed(this.syncId, this.name, this.description, this.examples);
+  const _ShelfLocationSeed(
+    this.syncId,
+    this.name,
+    this.description,
+    this.examples,
+  );
   final String syncId;
   final String name;
   final String description;
   final String examples;
 }
-

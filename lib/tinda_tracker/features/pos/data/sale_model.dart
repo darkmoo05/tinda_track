@@ -1,15 +1,21 @@
+export 'models/cart_item.dart';
+
 class TtSaleItem {
   final String productId;
   final String productName;
-  final int quantity;
+  final String selectedUnit;
+  final double quantity;
   final double unitPrice;
+  final double computedBaseQuantity;
   final double lineTotal;
 
   const TtSaleItem({
     required this.productId,
     required this.productName,
+    required this.selectedUnit,
     required this.quantity,
     required this.unitPrice,
+    required this.computedBaseQuantity,
     required this.lineTotal,
   });
 
@@ -18,9 +24,16 @@ class TtSaleItem {
     return TtSaleItem(
       productId: json['productId'] as String,
       productName: product?['name'] as String? ?? '',
-      quantity: json['quantity'] as int,
-      unitPrice: (json['unitPrice'] as num).toDouble(),
-      lineTotal: (json['lineTotal'] as num).toDouble(),
+      selectedUnit:
+          (json['selectedUnit'] as String?) ??
+          (product?['baseUnit'] as String?) ??
+          'pc',
+      quantity: _toDouble(json['quantity']),
+      unitPrice: _toDouble(json['unitPrice']),
+      computedBaseQuantity: _toDouble(json['computedBaseQuantity']) != 0
+          ? _toDouble(json['computedBaseQuantity'])
+          : _toDouble(json['quantity']),
+      lineTotal: _toDouble(json['lineTotal']),
     );
   }
 
@@ -30,10 +43,20 @@ class TtSaleItem {
           (row['product_server_id'] as String?) ??
           row['product_sync_id'] as String,
       productName: row['product_name'] as String? ?? '',
-      quantity: row['quantity'] as int,
+      selectedUnit: (row['selected_unit'] as String?) ?? 'pc',
+      quantity: (row['quantity'] as num).toDouble(),
       unitPrice: (row['unit_price'] as num).toDouble(),
+      computedBaseQuantity:
+          (row['computed_base_quantity'] as num?)?.toDouble() ??
+          (row['quantity'] as num).toDouble(),
       lineTotal: (row['line_total'] as num).toDouble(),
     );
+  }
+
+  static double _toDouble(Object? value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0;
   }
 }
 
@@ -94,22 +117,4 @@ class TtSale {
       saleItems: items,
     );
   }
-}
-
-class TtCartItem {
-  final String productId;
-  final String productName;
-  final double unitPrice;
-  final double costPrice;
-  int quantity;
-
-  TtCartItem({
-    required this.productId,
-    required this.productName,
-    required this.unitPrice,
-    required this.costPrice,
-    this.quantity = 1,
-  });
-
-  double get lineTotal => unitPrice * quantity;
 }

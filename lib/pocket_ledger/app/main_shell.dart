@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../../core/sync/sync_service.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
 import '../features/activity/screens/activity_history_screen.dart';
@@ -31,6 +33,7 @@ class _MainShellState extends State<MainShell>
   int _historyViewToken = 0;
   HistoryWalletPerspective? _historyWalletPerspective;
   late final AnimationController _fabMenuController;
+  late final StreamSubscription<SyncRunResult> _syncResultsSub;
 
   @override
   void initState() {
@@ -40,10 +43,20 @@ class _MainShellState extends State<MainShell>
       duration: const Duration(milliseconds: 200),
       reverseDuration: const Duration(milliseconds: 140),
     );
+    _syncResultsSub = SyncService.instance.syncResults.listen((result) {
+      if (!mounted) {
+        return;
+      }
+      if (result.pushed == 0 && result.pulled == 0) {
+        return;
+      }
+      _handleDataChanged();
+    });
   }
 
   @override
   void dispose() {
+    _syncResultsSub.cancel();
     _fabMenuController.dispose();
     super.dispose();
   }

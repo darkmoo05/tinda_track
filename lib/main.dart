@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -11,6 +10,7 @@ import 'core/database/app_database.dart';
 import 'core/sync/sync_service.dart';
 import 'core/l10n/l10n_extension.dart';
 import 'core/l10n/locale_provider.dart';
+import 'shared/widgets/app_loading_modal.dart';
 import 'pocket_ledger/app/main_shell.dart';
 import 'tinda_tracker/app/tinda_tracker_shell.dart';
 
@@ -101,18 +101,47 @@ class StartupSyncGate extends StatefulWidget {
 }
 
 class _StartupSyncGateState extends State<StartupSyncGate> {
+  bool _ready = false;
+  bool _startupTaskStarted = false;
+
   @override
   void initState() {
     super.initState();
-    // Sync runs in the background — never block the UI on it.
-    // The app reads from local SQLite and is fully usable offline.
-    // Any data pulled from the server will refresh providers via
-    // the periodic sync timer in AppModeHost.
-    SyncService.instance.syncAll().ignore();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _runStartupSync());
+  }
+
+  Future<void> _runStartupSync() async {
+    if (_startupTaskStarted || !mounted) {
+      return;
+    }
+    _startupTaskStarted = true;
+
+    final loading = showAppLoadingModal(
+      context,
+      message: 'Syncing startup data...',
+      caption: 'Please wait while we fetch your latest records.',
+    );
+
+    try {
+      await SyncService.instance.syncAll();
+    } catch (_) {
+      // Startup should continue even if first sync attempt fails.
+    } finally {
+      if (!mounted) {
+        return;
+      }
+      loading.close();
+      setState(() {
+        _ready = true;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_ready) {
+      return const Scaffold(body: SizedBox.expand());
+    }
     return const AppModeHost();
   }
 }
@@ -124,44 +153,39 @@ class AppModeHost extends StatefulWidget {
   State<AppModeHost> createState() => _AppModeHostState();
 }
 
-class _AppModeHostState extends State<AppModeHost> {
+class _AppModeHostState extends State<AppModeHost> with WidgetsBindingObserver {
   AppMode _mode = AppMode.pocketLedger;
-
-  late final StreamSubscription<List<ConnectivityResult>> _connectivitySub;
-  Timer? _syncDebounce;
-  Timer? _periodicSync;
-  // Track previous state so we only sync on offline → online transitions.
-  bool _wasOffline = false;
+  bool _exitSyncInFlight = false;
 
   @override
   void initState() {
     super.initState();
-    _connectivitySub = Connectivity().onConnectivityChanged.listen(
-      _onConnectivityChanged,
-    );
-    // Sync every 60 s while the app is open and online.
-    _periodicSync = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (!_wasOffline) SyncService.instance.syncAll();
-    });
+    WidgetsBinding.instance.addObserver(this);
   }
 
-  void _onConnectivityChanged(List<ConnectivityResult> results) {
-    final isOffline = results.every((r) => r == ConnectivityResult.none);
-    if (_wasOffline && !isOffline) {
-      // Came back online — debounce 3 s then sync.
-      _syncDebounce?.cancel();
-      _syncDebounce = Timer(const Duration(seconds: 3), () {
-        SyncService.instance.syncAll();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Run one best-effort sync when the app is backgrounded/exiting.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      if (_exitSyncInFlight) {
+        return;
+      }
+      _exitSyncInFlight = true;
+      SyncService.instance.syncAll().whenComplete(() {
+        _exitSyncInFlight = false;
       });
+      return;
     }
-    _wasOffline = isOffline;
+
+    if (state == AppLifecycleState.resumed) {
+      _exitSyncInFlight = false;
+    }
   }
 
   @override
   void dispose() {
-    _connectivitySub.cancel();
-    _syncDebounce?.cancel();
-    _periodicSync?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 

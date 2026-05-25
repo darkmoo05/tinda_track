@@ -12,6 +12,7 @@ import '../data/inventory_constants.dart';
 import '../data/local_inventory_repository.dart';
 import '../data/models/custom_category.dart';
 import '../data/models/inventory_product.dart';
+import '../data/models/product_unit_conversion.dart';
 import '../data/product_image_service.dart';
 import '../providers/inventory_providers.dart';
 import '../widgets/manage_lookup_sheet.dart';
@@ -37,6 +38,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   late final TextEditingController _sellCtrl;
   late final TextEditingController _stockCtrl;
   late final TextEditingController _reorderCtrl;
+  late final TextEditingController _baseUnitCtrl;
+
+  final List<_AltUnitDraft> _altUnits = [];
 
   late String _category;
   late String _unit;
@@ -83,8 +87,21 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     _unit = p?.unit ?? kProductUnits.first;
     _isActive = p?.isActive ?? true;
     _shelfLocation = p?.shelfLocation ?? '';
+    _baseUnitCtrl = TextEditingController(
+      text: p?.baseUnit ?? p?.unit ?? 'pcs',
+    );
     _expirationDate = p?.expirationDate;
     _remoteImageUrl = p?.imageUrl;
+    for (final c in p?.unitConversions ?? const <ProductUnitConversion>[]) {
+      _altUnits.add(
+        _AltUnitDraft(
+          unitName: c.unitName,
+          factor: c.conversionFactor.toString(),
+          costPrice: c.costPrice.toString(),
+          sellingPrice: c.sellingPrice.toString(),
+        ),
+      );
+    }
     if (p?.imagePath != null) {
       final f = File(p!.imagePath!);
       if (f.existsSync()) _localImageFile = f;
@@ -100,7 +117,18 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     _sellCtrl.dispose();
     _stockCtrl.dispose();
     _reorderCtrl.dispose();
+    _baseUnitCtrl.dispose();
+    for (final d in _altUnits) {
+      d.dispose();
+    }
     super.dispose();
+  }
+
+  List<ProductUnitConversion> _buildConversionsForSave() {
+    return _altUnits
+        .map((d) => d.toModel())
+        .whereType<ProductUnitConversion>()
+        .toList(growable: false);
   }
 
   // -- Image picker --------------------------------------------------------
@@ -363,9 +391,15 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           sku: _skuCtrl.text.trim(),
           description: _descCtrl.text.trim(),
           category: _category,
-          unit: _unit,
+          unit: _baseUnitCtrl.text.trim().isEmpty
+              ? _unit
+              : _baseUnitCtrl.text.trim(),
+          baseUnit: _baseUnitCtrl.text.trim().isEmpty
+              ? _unit
+              : _baseUnitCtrl.text.trim(),
           costPrice: double.tryParse(_costCtrl.text) ?? 0,
           sellingPrice: double.tryParse(_sellCtrl.text) ?? 0,
+          stockInBaseUnit: double.tryParse(_stockCtrl.text) ?? 0,
           reorderPoint: int.tryParse(_reorderCtrl.text) ?? 0,
           isActive: _isActive,
           shelfLocation: _shelfLocation,
@@ -373,6 +407,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           // Passing null leaves the existing image_path/image_url untouched.
           imagePath: _imageChanged ? _localImageFile?.path : null,
           expirationDate: _expirationDate,
+          unitConversions: _buildConversionsForSave(),
         );
       } else {
         await repo.createProduct(
@@ -380,15 +415,22 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           sku: _skuCtrl.text.trim(),
           description: _descCtrl.text.trim(),
           category: _category,
-          unit: _unit,
+          unit: _baseUnitCtrl.text.trim().isEmpty
+              ? _unit
+              : _baseUnitCtrl.text.trim(),
+          baseUnit: _baseUnitCtrl.text.trim().isEmpty
+              ? _unit
+              : _baseUnitCtrl.text.trim(),
           costPrice: double.tryParse(_costCtrl.text) ?? 0,
           sellingPrice: double.tryParse(_sellCtrl.text) ?? 0,
           stockQuantity: int.tryParse(_stockCtrl.text) ?? 0,
+          stockInBaseUnit: double.tryParse(_stockCtrl.text) ?? 0,
           reorderPoint: int.tryParse(_reorderCtrl.text) ?? 0,
           isActive: _isActive,
           shelfLocation: _shelfLocation,
           imagePath: _localImageFile?.path,
           expirationDate: _expirationDate,
+          unitConversions: _buildConversionsForSave(),
         );
       }
 
@@ -774,6 +816,63 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
               ),
             ),
 
+            // -- Measurement Setup --------------------------------------
+            _SectionCard(
+              title: 'Measurement Setup',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _field(
+                    controller: _baseUnitCtrl,
+                    label: 'Base Unit (e.g., pcs, grams)',
+                    icon: Icons.straighten_rounded,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Base unit is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Alternative unit packages',
+                    style: TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ..._altUnits.asMap().entries.map(
+                    (entry) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _AltUnitCard(
+                        draft: entry.value,
+                        baseUnitCtrl: _baseUnitCtrl,
+                        onRemove: () {
+                          setState(() {
+                            entry.value.dispose();
+                            _altUnits.removeAt(entry.key);
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _altUnits.add(_AltUnitDraft());
+                        });
+                      },
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('Add Alternative Unit Package'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             // -- Shelf Location ------------------------------------------
             _SectionCard(
               title: 'Shelf Location',
@@ -1070,10 +1169,29 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     required ValueChanged<String?> onChanged,
     required IconData icon,
   }) {
+    // Guard against legacy/custom values (e.g. "pcs") and accidental
+    // duplicates, which would otherwise throw DropdownButton assertions.
+    final normalizedItems = <String>[];
+    final seen = <String>{};
+    for (final raw in items) {
+      final item = raw.trim();
+      if (item.isEmpty) continue;
+      if (seen.add(item)) normalizedItems.add(item);
+    }
+
+    final normalizedValue = value.trim();
+    if (normalizedValue.isNotEmpty && seen.add(normalizedValue)) {
+      normalizedItems.insert(0, normalizedValue);
+    }
+
+    final safeValue = normalizedValue.isEmpty || normalizedItems.isEmpty
+        ? null
+        : normalizedValue;
+
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      initialValue: safeValue,
       onChanged: onChanged,
-      items: items
+      items: normalizedItems
           .map((e) => DropdownMenuItem(value: e, child: Text(e)))
           .toList(),
       decoration: InputDecoration(
@@ -1432,6 +1550,150 @@ class _CategoryPill extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AltUnitDraft {
+  final TextEditingController unitName;
+  final TextEditingController factor;
+  final TextEditingController costPrice;
+  final TextEditingController sellingPrice;
+
+  _AltUnitDraft({
+    String unitName = '',
+    String factor = '',
+    String costPrice = '',
+    String sellingPrice = '',
+  }) : unitName = TextEditingController(text: unitName),
+       factor = TextEditingController(text: factor),
+       costPrice = TextEditingController(text: costPrice),
+       sellingPrice = TextEditingController(text: sellingPrice);
+
+  ProductUnitConversion? toModel() {
+    final unit = unitName.text.trim();
+    final f = double.tryParse(factor.text.trim()) ?? 0;
+    if (unit.isEmpty || f <= 0) return null;
+    return ProductUnitConversion(
+      id: '',
+      syncId: '',
+      productId: '',
+      unitName: unit,
+      conversionFactor: f,
+      costPrice: double.tryParse(costPrice.text.trim()) ?? 0,
+      sellingPrice: double.tryParse(sellingPrice.text.trim()) ?? 0,
+    );
+  }
+
+  void dispose() {
+    unitName.dispose();
+    factor.dispose();
+    costPrice.dispose();
+    sellingPrice.dispose();
+  }
+}
+
+class _AltUnitCard extends StatelessWidget {
+  final _AltUnitDraft draft;
+  final TextEditingController baseUnitCtrl;
+  final VoidCallback onRemove;
+
+  const _AltUnitCard({
+    required this.draft,
+    required this.baseUnitCtrl,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Alternative package',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: onRemove,
+                tooltip: 'Remove package',
+                icon: const Icon(Icons.delete_outline, size: 18),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: draft.unitName,
+            decoration: const InputDecoration(
+              labelText: 'Unit Name (e.g., Box, Case, Sack)',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: draft.factor,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+            ],
+            decoration: InputDecoration(
+              labelText:
+                  'Contains (e.g., 24 ${baseUnitCtrl.text.trim().isEmpty ? 'pcs' : baseUnitCtrl.text.trim()})',
+              isDense: true,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: draft.costPrice,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Wholesale Cost',
+                    prefixText: '\u20B1',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: draft.sellingPrice,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Wholesale Sell',
+                    prefixText: '\u20B1',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -9,6 +9,7 @@ import '../../../../core/sync/sync_config.dart';
 import 'models/custom_category.dart';
 import 'models/custom_shelf_location.dart';
 import 'models/inventory_product.dart';
+import 'models/product_unit_conversion.dart';
 import 'models/stock_movement.dart';
 
 /// Thrown by [LocalInventoryRepository.createProduct] when a local product
@@ -66,7 +67,19 @@ class LocalInventoryRepository {
         return name.contains(q) || sku.contains(q);
       }).toList();
     }
-    return rows.map(InventoryProduct.fromLocalDb).toList();
+    final syncIds = rows
+        .map((r) => r['sync_id'] as String)
+        .where((id) => id.isNotEmpty)
+        .toList(growable: false);
+    final conversionsBySyncId = await _loadConversionsByProductSyncIds(syncIds);
+    return rows
+        .map(
+          (row) => InventoryProduct.fromLocalDb(row).copyWith(
+            unitConversions:
+                conversionsBySyncId[row['sync_id'] as String] ?? const [],
+          ),
+        )
+        .toList();
   }
 
   Future<InventoryProduct> getById(String id) async {
@@ -81,14 +94,17 @@ class LocalInventoryRepository {
     String description = '',
     String category = 'General',
     String unit = 'pcs',
+    String? baseUnit,
     double costPrice = 0,
     required double sellingPrice,
     int stockQuantity = 0,
+    double? stockInBaseUnit,
     int reorderPoint = 0,
     bool isActive = true,
     String shelfLocation = 'Counter',
     String? imagePath,
     DateTime? expirationDate,
+    List<ProductUnitConversion> unitConversions = const [],
   }) async {
     // Block duplicate SKU locally — throw so the UI can offer a restock flow.
     final db = await _db.database;
@@ -104,6 +120,11 @@ class LocalInventoryRepository {
     final syncId = _uuid.v4();
     final deviceId = await _db.getOrCreateDeviceId();
     final now = DateTime.now().toIso8601String();
+    final effectiveBaseUnit = (baseUnit ?? unit).trim().isEmpty
+        ? 'pcs'
+        : (baseUnit ?? unit).trim();
+    final effectiveStockInBaseUnit =
+        stockInBaseUnit ?? stockQuantity.toDouble();
 
     await db.insert(AppDatabase.ttProductsTable, {
       'sync_id': syncId,
@@ -113,10 +134,12 @@ class LocalInventoryRepository {
       'sku': sku,
       'description': description,
       'category': category,
-      'unit': unit,
+      'unit': effectiveBaseUnit,
+      'base_unit': effectiveBaseUnit,
       'cost_price': costPrice,
       'selling_price': sellingPrice,
       'stock_quantity': stockQuantity,
+      'stock_in_base_unit': effectiveStockInBaseUnit,
       'reorder_point': reorderPoint,
       'is_active': isActive ? 1 : 0,
       'is_deleted': 0,
@@ -129,13 +152,22 @@ class LocalInventoryRepository {
       'updated_at': now,
     });
 
+    if (unitConversions.isNotEmpty) {
+      await _replaceProductConversions(
+        productSyncId: syncId,
+        conversions: unitConversions,
+      );
+    }
+
     final rows = await db.query(
       AppDatabase.ttProductsTable,
       where: 'sync_id = ?',
       whereArgs: [syncId],
       limit: 1,
     );
-    final product = InventoryProduct.fromLocalDb(rows.first);
+    final product = InventoryProduct.fromLocalDb(
+      rows.first,
+    ).copyWith(unitConversions: unitConversions);
     return product;
   }
 
@@ -146,13 +178,16 @@ class LocalInventoryRepository {
     String? description,
     String? category,
     String? unit,
+    String? baseUnit,
     double? costPrice,
     double? sellingPrice,
+    double? stockInBaseUnit,
     int? reorderPoint,
     bool? isActive,
     String? shelfLocation,
     String? imagePath,
     Object? expirationDate = _updateSentinel,
+    List<ProductUnitConversion>? unitConversions,
   }) async {
     final row = await _rowById(id);
     if (row == null) throw Exception('Product not found: $id');
@@ -174,14 +209,20 @@ class LocalInventoryRepository {
     if (category != null) {
       patch['category'] = category;
     }
-    if (unit != null) {
-      patch['unit'] = unit;
+    final nextBaseUnit = baseUnit ?? unit;
+    if (nextBaseUnit != null) {
+      patch['unit'] = nextBaseUnit;
+      patch['base_unit'] = nextBaseUnit;
     }
     if (costPrice != null) {
       patch['cost_price'] = costPrice;
     }
     if (sellingPrice != null) {
       patch['selling_price'] = sellingPrice;
+    }
+    if (stockInBaseUnit != null) {
+      patch['stock_in_base_unit'] = stockInBaseUnit;
+      patch['stock_quantity'] = stockInBaseUnit.floor();
     }
     if (reorderPoint != null) {
       patch['reorder_point'] = reorderPoint;
@@ -209,19 +250,29 @@ class LocalInventoryRepository {
       where: 'sync_id = ?',
       whereArgs: [syncId],
     );
+    if (unitConversions != null) {
+      await _replaceProductConversions(
+        productSyncId: syncId,
+        conversions: unitConversions,
+      );
+    }
     final result = await db.query(
       AppDatabase.ttProductsTable,
       where: 'sync_id = ?',
       whereArgs: [syncId],
       limit: 1,
     );
-    final product = InventoryProduct.fromLocalDb(result.first);
+    final product = InventoryProduct.fromLocalDb(result.first).copyWith(
+      unitConversions:
+          unitConversions ?? await _listConversionsForProductSyncId(syncId),
+    );
     return product;
   }
 
   Future<InventoryProduct> adjustStock({
     required String productId,
-    required int quantityDelta,
+    int quantityDelta = 0,
+    double? quantityDeltaBase,
     String movementType = 'ADJUSTMENT',
     String note = '',
     DateTime? expirationDate,
@@ -230,7 +281,13 @@ class LocalInventoryRepository {
     if (row == null) throw Exception('Product not found: $productId');
     final syncId = row['sync_id'] as String;
     final serverId = row['server_id'] as String?;
-    final newStock = (row['stock_quantity'] as int) + quantityDelta;
+    final deltaBase = quantityDeltaBase ?? quantityDelta.toDouble();
+    final currentBase =
+        (row['stock_in_base_unit'] as num?)?.toDouble() ??
+        (row['stock_quantity'] as num?)?.toDouble() ??
+        0;
+    final newBaseStock = currentBase + deltaBase;
+    final newStock = newBaseStock.floor();
 
     final effectiveNote = expirationDate != null
         ? '$note${note.isNotEmpty ? ' ' : ''}(expires: ${expirationDate.toIso8601String().split('T').first})'
@@ -241,6 +298,7 @@ class LocalInventoryRepository {
       AppDatabase.ttProductsTable,
       {
         'stock_quantity': newStock,
+        'stock_in_base_unit': newBaseStock,
         'is_dirty': 1,
         'updated_at': DateTime.now().toIso8601String(),
       },
@@ -262,7 +320,7 @@ class LocalInventoryRepository {
         _pushAdjustMovement(
           serverId: serverId,
           syncId: syncId,
-          quantityDelta: quantityDelta,
+          quantityDelta: deltaBase,
           movementType: movementType,
           note: effectiveNote,
           expirationDate: expirationDate,
@@ -319,7 +377,7 @@ class LocalInventoryRepository {
       outOfStockCount: products.where((p) => p.isOutOfStock).length,
       totalStockValue: products.fold<double>(0, (s, p) {
         final unit = p.costPrice > 0 ? p.costPrice : p.sellingPrice;
-        return s + unit * p.stockQuantity;
+        return s + unit * p.stockInBaseUnit;
       }),
     );
   }
@@ -330,7 +388,7 @@ class LocalInventoryRepository {
   Future<void> _pushAdjustMovement({
     required String serverId,
     required String syncId,
-    required int quantityDelta,
+    required double quantityDelta,
     required String movementType,
     required String note,
     DateTime? expirationDate,
@@ -364,6 +422,67 @@ class LocalInventoryRepository {
     } catch (_) {
       // Offline or server error — syncAll() will patch the quantity later.
     }
+  }
+
+  Future<Map<String, List<ProductUnitConversion>>>
+  _loadConversionsByProductSyncIds(List<String> productSyncIds) async {
+    if (productSyncIds.isEmpty) return const {};
+    final db = await _db.database;
+    final placeholders = List.filled(productSyncIds.length, '?').join(',');
+    final rows = await db.rawQuery(
+      'SELECT * FROM ${AppDatabase.ttProductConversionsTable} '
+      'WHERE is_deleted = 0 AND product_id IN ($placeholders) '
+      'ORDER BY conversion_factor DESC, unit_name ASC',
+      productSyncIds,
+    );
+    final map = <String, List<ProductUnitConversion>>{};
+    for (final row in rows) {
+      final syncId = (row['product_id'] as String?) ?? '';
+      if (syncId.isEmpty) continue;
+      map
+          .putIfAbsent(syncId, () => <ProductUnitConversion>[])
+          .add(ProductUnitConversion.fromLocalDb(row));
+    }
+    return map;
+  }
+
+  Future<List<ProductUnitConversion>> _listConversionsForProductSyncId(
+    String productSyncId,
+  ) async {
+    final map = await _loadConversionsByProductSyncIds([productSyncId]);
+    return map[productSyncId] ?? const [];
+  }
+
+  Future<void> _replaceProductConversions({
+    required String productSyncId,
+    required List<ProductUnitConversion> conversions,
+  }) async {
+    final db = await _db.database;
+    final now = DateTime.now().toIso8601String();
+    final batch = db.batch();
+    batch.delete(
+      AppDatabase.ttProductConversionsTable,
+      where: 'product_id = ?',
+      whereArgs: [productSyncId],
+    );
+    for (final c in conversions) {
+      final unit = c.unitName.trim();
+      if (unit.isEmpty) continue;
+      if (c.conversionFactor <= 0) continue;
+      batch.insert(AppDatabase.ttProductConversionsTable, {
+        'sync_id': c.syncId.isNotEmpty ? c.syncId : _uuid.v4(),
+        'product_id': productSyncId,
+        'unit_name': unit,
+        'conversion_factor': c.conversionFactor,
+        'cost_price': c.costPrice,
+        'selling_price': c.sellingPrice,
+        'is_deleted': 0,
+        'is_dirty': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+    await batch.commit(noResult: true);
   }
 
   // ─── Category CRUD ────────────────────────────────────────────────────────
