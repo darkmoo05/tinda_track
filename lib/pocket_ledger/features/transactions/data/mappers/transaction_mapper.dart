@@ -4,6 +4,7 @@ import '../../../../../core/database/app_database.dart';
 import '../../../../../core/domain/enums.dart';
 import '../../../../../core/domain/sync_metadata.dart';
 import '../../domain/entities/transaction.dart';
+import '../../../../../core/sync/remote/json_coercion.dart';
 
 extension TransactionRowMapper on TransactionRow {
   TxRecord toDomain() => TxRecord(
@@ -102,13 +103,13 @@ TransactionsCompanion transactionCompanionFromRemoteJson(
     ),
     walletProvider: Value(json['walletProvider'] as String),
     direction: Value(json['direction'] as String),
-    amount: Value((json['amount'] as num).toDouble()),
-    chargeAmount: Value(((json['chargeAmount'] as num?) ?? 0).toDouble()),
-    totalAmount: Value((json['totalAmount'] as num).toDouble()),
-    balanceBefore: Value((json['balanceBefore'] as num).toDouble()),
-    balanceAfter: Value((json['balanceAfter'] as num).toDouble()),
-    chargeLowerBound: Value((json['chargeLowerBound'] as num?)?.toDouble()),
-    chargeUpperBound: Value((json['chargeUpperBound'] as num?)?.toDouble()),
+    amount: Value(asDouble(json['amount'])),
+    chargeAmount: Value(asDouble(json['chargeAmount'])),
+    totalAmount: Value(asDouble(json['totalAmount'])),
+    balanceBefore: Value(asDouble(json['balanceBefore'])),
+    balanceAfter: Value(asDouble(json['balanceAfter'])),
+    chargeLowerBound: Value(asDoubleOrNull(json['chargeLowerBound'])),
+    chargeUpperBound: Value(asDoubleOrNull(json['chargeUpperBound'])),
     chargeHandling: Value((json['chargeHandling'] as String?) ?? 'addOnTop'),
     receiptImagePath: Value(json['receiptImagePath'] as String?),
     receiptOriginalName: Value(json['receiptOriginalName'] as String?),
@@ -117,7 +118,7 @@ TransactionsCompanion transactionCompanionFromRemoteJson(
       parseDt(json['receiptUploadedAt'])?.millisecondsSinceEpoch,
     ),
     ocrStatus: Value((json['ocrStatus'] as String?) ?? 'PENDING'),
-    ocrExtractedAmount: Value((json['ocrExtractedAmount'] as num?)?.toDouble()),
+    ocrExtractedAmount: Value(asDoubleOrNull(json['ocrExtractedAmount'])),
     ocrRawText: Value(json['ocrRawText'] as String?),
     ocrProcessedAtMs: Value(
       parseDt(json['ocrProcessedAt'])?.millisecondsSinceEpoch,

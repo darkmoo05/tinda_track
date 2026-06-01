@@ -5,6 +5,7 @@ import '../../../../../core/domain/sync_metadata.dart';
 import '../../domain/entities/sale.dart';
 import '../../domain/entities/sale_item.dart';
 import 'sale_item_mapper.dart';
+import '../../../../../core/sync/remote/json_coercion.dart';
 
 extension SaleRowMapper on SaleRow {
   /// Note: items are populated separately by the repository, since they live
@@ -64,11 +65,11 @@ SalesCompanion saleCompanionFromRemoteJson(Map<String, dynamic> json) {
     ),
     reference: Value(json['reference'] as String),
     note: Value((json['note'] as String?) ?? ''),
-    subtotal: Value((json['subtotal'] as num).toDouble()),
-    totalAmount: Value((json['totalAmount'] as num).toDouble()),
-    paidAmount: Value((json['paidAmount'] as num).toDouble()),
-    changeAmount: Value(((json['changeAmount'] as num?) ?? 0).toDouble()),
-    totalItems: Value((json['totalItems'] as num).toInt()),
+    subtotal: Value(asDouble(json['subtotal'])),
+    totalAmount: Value(asDouble(json['totalAmount'])),
+    paidAmount: Value(asDouble(json['paidAmount'])),
+    changeAmount: Value(asDouble(json['changeAmount'])),
+    totalItems: Value(asInt(json['totalItems'])),
   );
 }
 

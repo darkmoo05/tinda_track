@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../../../../../core/database/app_database.dart';
 import '../../../../../core/domain/sync_metadata.dart';
 import '../../domain/entities/fee_transaction.dart';
+import '../../../../../core/sync/remote/json_coercion.dart';
 
 extension FeeTransactionRowMapper on FeeTransactionRow {
   FeeTransaction toDomain() => FeeTransaction(
@@ -56,7 +57,7 @@ FeeTransactionsCompanion feeTransactionCompanionFromRemoteJson(
     relatedTransactionSyncId: Value(
       json['relatedTransactionSyncId'] as String?,
     ),
-    feeAmount: Value((json['feeAmount'] as num).toDouble()),
+    feeAmount: Value(asDouble(json['feeAmount'])),
     feeType: Value(json['feeType'] as String),
     chargeDestination: Value(json['chargeDestination'] as String),
   );

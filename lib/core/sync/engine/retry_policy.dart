@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'dart:math';
 
-/// Exponential-backoff retry helper used by sync orchestrators.
+import 'sync_errors.dart';
+
+/// Exponential-backoff retry helper used by the sync engine.
 ///
-/// The policy is intentionally conservative — sync should never block the UI
-/// thread for long. Default: up to 3 attempts, base 500ms, factor 2,
-/// jitter ±20%.
+/// The policy is intentionally conservative — sync runs in the foreground
+/// and must not block the UI for long. Default: up to 3 attempts, base
+/// 500ms, factor 2, jitter ±20%.
+///
+/// By default only [SyncError.isTransient] failures (network, 5xx) are
+/// retried; auth/validation/schema errors fail fast.
 class RetryPolicy {
   const RetryPolicy({
     this.maxAttempts = 3,
@@ -33,7 +38,7 @@ class RetryPolicy {
       } catch (error, stack) {
         lastError = error;
         lastStack = stack;
-        final shouldRetry = retryWhen?.call(error) ?? true;
+        final shouldRetry = (retryWhen ?? _defaultRetryWhen)(error);
         final isLast = attempt == maxAttempts - 1;
         if (!shouldRetry || isLast) break;
 
@@ -44,5 +49,11 @@ class RetryPolicy {
       }
     }
     Error.throwWithStackTrace(lastError!, lastStack ?? StackTrace.current);
+  }
+
+  static bool _defaultRetryWhen(Object error) {
+    if (error is SyncError) return error.isTransient;
+    // Unknown error: retry once-ish to be safe (Dio quirks etc.).
+    return true;
   }
 }

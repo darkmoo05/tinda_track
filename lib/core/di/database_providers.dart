@@ -1,14 +1,9 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../database/app_database.dart';
-
-/// Singleton-per-process [AppDatabase] provider.
+/// Legacy import path — re-exports the canonical
+/// `appDatabaseProvider` from
+/// `core/database/providers/database_providers.dart`.
 ///
-/// Riverpod disposes the database when the app shuts down or the provider
-/// container is torn down (tests). Feature DAOs and repositories should
-/// depend on this provider rather than constructing a database directly.
-final appDatabaseProvider = Provider<AppDatabase>((ref) {
-  final db = AppDatabase();
-  ref.onDispose(db.close);
-  return db;
-});
+/// Kept so existing imports of `core/di/database_providers.dart` keep
+/// resolving. New code should depend on the canonical path directly.
+library;
+
+export '../database/providers/database_providers.dart' show appDatabaseProvider;

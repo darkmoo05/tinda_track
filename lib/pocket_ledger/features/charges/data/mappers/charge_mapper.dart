@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../../../../../core/database/app_database.dart';
 import '../../../../../core/domain/sync_metadata.dart';
 import '../../domain/entities/charge.dart';
+import '../../../../../core/sync/remote/json_coercion.dart';
 
 /// Bidirectional conversions between Drift rows, domain models and JSON.
 ///
@@ -57,9 +58,9 @@ ChargesCompanion chargeCompanionFromRemoteJson(Map<String, dynamic> json) {
     updatedAtMs: Value(
       DateTime.parse(json['updatedAt'] as String).millisecondsSinceEpoch,
     ),
-    lowerBound: Value((json['lowerBound'] as num).toDouble()),
-    upperBound: Value((json['upperBound'] as num).toDouble()),
-    chargeAmount: Value((json['chargeAmount'] as num).toDouble()),
+    lowerBound: Value(asDouble(json['lowerBound'])),
+    upperBound: Value(asDouble(json['upperBound'])),
+    chargeAmount: Value(asDouble(json['chargeAmount'])),
     transactionTypeKey: Value(
       (json['transactionTypeKey'] as String?) ?? 'gcash_cashin',
     ),

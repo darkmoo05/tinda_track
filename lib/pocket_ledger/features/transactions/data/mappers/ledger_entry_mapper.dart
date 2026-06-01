@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../../../../../core/database/app_database.dart';
 import '../../../../../core/domain/sync_metadata.dart';
 import '../../domain/entities/ledger_entry.dart';
+import '../../../../../core/sync/remote/json_coercion.dart';
 
 extension LedgerEntryRowMapper on LedgerEntryRow {
   LedgerEntry toDomain() => LedgerEntry(
@@ -88,11 +89,11 @@ LedgerEntriesCompanion ledgerEntryCompanionFromRemoteJson(
     title: Value((json['title'] as String?) ?? ''),
     note: Value((json['note'] as String?) ?? ''),
     reference: Value((json['reference'] as String?) ?? ''),
-    amount: Value((json['amount'] as num).toDouble()),
-    walletDelta: Value(((json['walletDelta'] as num?) ?? 0).toDouble()),
-    mayaWalletDelta: Value(((json['mayaWalletDelta'] as num?) ?? 0).toDouble()),
-    onHandDelta: Value(((json['onHandDelta'] as num?) ?? 0).toDouble()),
-    recordedFlow: Value(((json['recordedFlow'] as num?) ?? 0).toDouble()),
+    amount: Value(asDouble(json['amount'])),
+    walletDelta: Value(asDouble(json['walletDelta'])),
+    mayaWalletDelta: Value(asDouble(json['mayaWalletDelta'])),
+    onHandDelta: Value(asDouble(json['onHandDelta'])),
+    recordedFlow: Value(asDouble(json['recordedFlow'])),
     tag: Value((json['tag'] as String?) ?? ''),
     iconKey: Value((json['iconKey'] as String?) ?? ''),
     walletAccount: Value((json['walletAccount'] as String?) ?? ''),

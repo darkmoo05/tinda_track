@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../sync/engine/sync_errors.dart';
 import 'api_config.dart';
 
 class ApiClient {
@@ -32,6 +33,44 @@ class ApiClient {
 
   Future<Response> delete(String path) {
     return _dio.delete(path);
+  }
+
+  /// Fetches a sync `/pull` endpoint and returns the `data` envelope as a
+  /// `List<Map<String, dynamic>>`, throwing a [SchemaSyncError] when the
+  /// response is not the expected JSON shape (e.g. an HTML login page from
+  /// a closed Dev Tunnel, an empty 200 from a misconfigured proxy, or a
+  /// payload missing the `data` key).
+  ///
+  /// Network/server failures are re-thrown as Dio exceptions and the
+  /// retry policy handles them; only schema violations short-circuit.
+  Future<List<Map<String, dynamic>>> getJsonList(
+    String path, {
+    Map<String, dynamic>? params,
+  }) async {
+    final res = await _dio.get(path, queryParameters: params);
+    final ct = res.headers.value('content-type') ?? '';
+    if (!ct.toLowerCase().contains('application/json')) {
+      throw SchemaSyncError(
+        'GET $path returned non-JSON content-type "$ct" '
+        '(status ${res.statusCode}). The endpoint may be behind '
+        'an auth gate or proxy login page.',
+      );
+    }
+    final body = res.data;
+    if (body is! Map<String, dynamic>) {
+      throw SchemaSyncError(
+        'GET $path returned a top-level ${body.runtimeType}, expected '
+        'an object with a "data" array.',
+      );
+    }
+    final data = body['data'];
+    if (data is! List) {
+      throw SchemaSyncError(
+        'GET $path response missing "data" array '
+        '(got ${data.runtimeType}).',
+      );
+    }
+    return data.cast<Map<String, dynamic>>();
   }
 
   /// Origin of the live API server (scheme + host + port), derived from

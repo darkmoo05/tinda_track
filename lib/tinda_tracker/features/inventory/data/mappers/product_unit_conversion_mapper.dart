@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../../../../../core/database/app_database.dart';
 import '../../../../../core/domain/sync_metadata.dart';
 import '../../domain/entities/product_unit_conversion.dart';
+import '../../../../../core/sync/remote/json_coercion.dart';
 
 extension ProductUnitConversionRowMapper on ProductUnitConversionRow {
   ProductUnitConversion toDomain() => ProductUnitConversion(
@@ -58,9 +59,9 @@ ProductUnitConversionsCompanion productUnitConversionCompanionFromRemoteJson(
     ),
     productId: Value(json['productId'] as String),
     unitName: Value(json['unitName'] as String),
-    conversionFactor: Value((json['conversionFactor'] as num).toDouble()),
-    costPrice: Value((json['costPrice'] as num).toDouble()),
-    sellingPrice: Value((json['sellingPrice'] as num).toDouble()),
+    conversionFactor: Value(asDouble(json['conversionFactor'])),
+    costPrice: Value(asDouble(json['costPrice'])),
+    sellingPrice: Value(asDouble(json['sellingPrice'])),
   );
 }
 

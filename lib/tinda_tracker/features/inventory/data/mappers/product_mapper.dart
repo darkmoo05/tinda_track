@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../../../../../core/database/app_database.dart';
 import '../../../../../core/domain/sync_metadata.dart';
 import '../../domain/entities/product.dart';
+import '../../../../../core/sync/remote/json_coercion.dart';
 
 extension ProductRowMapper on ProductRow {
   Product toDomain() => Product(
@@ -82,10 +83,10 @@ ProductsCompanion productCompanionFromRemoteJson(Map<String, dynamic> json) {
     description: Value((json['description'] as String?) ?? ''),
     category: Value((json['category'] as String?) ?? 'General'),
     baseUnit: Value((json['baseUnit'] as String?) ?? 'pcs'),
-    costPrice: Value(((json['costPrice'] as num?) ?? 0).toDouble()),
-    sellingPrice: Value((json['sellingPrice'] as num).toDouble()),
-    stockInBaseUnit: Value(((json['stockInBaseUnit'] as num?) ?? 0).toDouble()),
-    reorderPoint: Value(((json['reorderPoint'] as num?) ?? 0).toInt()),
+    costPrice: Value(asDouble(json['costPrice'])),
+    sellingPrice: Value(asDouble(json['sellingPrice'])),
+    stockInBaseUnit: Value(asDouble(json['stockInBaseUnit'])),
+    reorderPoint: Value(asInt(json['reorderPoint'])),
     isActive: Value((json['isActive'] as bool?) ?? true),
     imageUrl: Value(json['imageUrl'] as String?),
     shelfLocation: Value((json['shelfLocation'] as String?) ?? 'Counter'),

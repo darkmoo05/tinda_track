@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../../../../../core/database/app_database.dart';
 import '../../../../../core/domain/sync_metadata.dart';
 import '../../domain/entities/utang_record.dart';
+import '../../../../../core/sync/remote/json_coercion.dart';
 
 extension UtangRecordRowMapper on UtangRecordRow {
   UtangRecord toDomain() => UtangRecord(
@@ -53,7 +54,7 @@ UtangRecordsCompanion utangRecordCompanionFromRemoteJson(
     ),
     customerId: Value(json['customerId'] as String),
     description: Value((json['description'] as String?) ?? ''),
-    amount: Value((json['amount'] as num).toDouble()),
+    amount: Value(asDouble(json['amount'])),
   );
 }
 

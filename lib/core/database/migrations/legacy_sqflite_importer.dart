@@ -101,7 +101,19 @@ class LegacyImporter {
       total += await _importFeeTransactions(src);
       // NOTE: legacy DB has no `transactions` table — that entity is new in
       // Drift and starts empty.
-      // NOTE: tinda_tracker (tt_*) tables are TODO — wait for Phase 4 DAOs.
+
+      // Tinda-tracker: legacy tables use the `tt_` prefix. Import order
+      // respects FK dependencies (categories/shelves → products → conversions /
+      // stock movements / sale items; customers → utang).
+      total += await _importTtProductCategories(src);
+      total += await _importTtShelfLocations(src);
+      total += await _importTtProducts(src);
+      total += await _importTtProductUnitConversions(src);
+      total += await _importTtCustomers(src);
+      total += await _importTtUtangRecords(src);
+      total += await _importTtSales(src);
+      total += await _importTtSaleItems(src);
+      total += await _importTtStockMovements(src);
     });
     return total;
   }
@@ -362,6 +374,287 @@ class LegacyImporter {
               isDirty: Value(_bool(r['is_dirty'], fallback: true)),
               createdAtMs: ts.createdAt,
               updatedAtMs: ts.updatedAt,
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  // ── Tinda-tracker importers ────────────────────────────────────────────────
+
+  /// Resolves a legacy ISO-8601 string OR ms-since-epoch timestamp into
+  /// nullable ms. Used for `expiration_date`-style optional fields.
+  int? _msOrNull(Object? v) {
+    if (v == null) return null;
+    final n = _ms(v);
+    return n == 0 ? null : n;
+  }
+
+  Future<int> _importTtProductCategories(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_product_categories');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final ts = _timestamps(r);
+      await _db
+          .into(_db.productCategories)
+          .insertOnConflictUpdate(
+            ProductCategoriesCompanion.insert(
+              id: id,
+              name: _str(r['name']),
+              description: Value(_str(r['description'])),
+              examples: Value(_str(r['examples'])),
+              isQuickAccess: Value(_bool(r['is_quick_access'])),
+              syncId: id,
+              deviceId: Value(_str(r['device_id'])),
+              isDeleted: Value(_bool(r['is_deleted'])),
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
+              createdAtMs: ts.createdAt,
+              updatedAtMs: ts.updatedAt,
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  Future<int> _importTtShelfLocations(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_shelf_locations');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final ts = _timestamps(r);
+      await _db
+          .into(_db.shelfLocations)
+          .insertOnConflictUpdate(
+            ShelfLocationsCompanion.insert(
+              id: id,
+              name: _str(r['name']),
+              description: Value(_str(r['description'])),
+              examples: Value(_str(r['examples'])),
+              imageUrl: Value(r['image_url'] as String?),
+              imageLocalPath: Value(r['image_local_path'] as String?),
+              syncId: id,
+              deviceId: Value(_str(r['device_id'])),
+              isDeleted: Value(_bool(r['is_deleted'])),
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
+              createdAtMs: ts.createdAt,
+              updatedAtMs: ts.updatedAt,
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  Future<int> _importTtProducts(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_products');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final ts = _timestamps(r);
+      // Legacy schemas vary: `base_unit` or `unit`; `stock_in_base_unit` or
+      // `stock_quantity`.
+      final baseUnit = _str(
+        r['base_unit'],
+        fallback: _str(r['unit'], fallback: 'pcs'),
+      );
+      final stock = r['stock_in_base_unit'] != null
+          ? _real(r['stock_in_base_unit'])
+          : _real(r['stock_quantity']);
+      await _db
+          .into(_db.products)
+          .insertOnConflictUpdate(
+            ProductsCompanion.insert(
+              id: id,
+              name: _str(r['name']),
+              sku: _str(r['sku']),
+              description: Value(_str(r['description'])),
+              category: Value(_str(r['category'], fallback: 'General')),
+              baseUnit: Value(baseUnit),
+              costPrice: Value(_real(r['cost_price'])),
+              sellingPrice: _real(r['selling_price']),
+              stockInBaseUnit: Value(stock),
+              reorderPoint: Value(_ms(r['reorder_point']).toInt()),
+              isActive: Value(_bool(r['is_active'], fallback: true)),
+              imageUrl: Value(r['image_url'] as String?),
+              imageLocalPath: Value(r['image_path'] as String?),
+              shelfLocation: Value(
+                _str(r['shelf_location'], fallback: 'Counter'),
+              ),
+              expirationDateMs: Value(_msOrNull(r['expiration_date'])),
+              categoryId: Value(r['category_id'] as String?),
+              shelfLocationId: Value(r['shelf_location_id'] as String?),
+              syncId: id,
+              deviceId: Value(_str(r['device_id'])),
+              isDeleted: Value(_bool(r['is_deleted'])),
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
+              createdAtMs: ts.createdAt,
+              updatedAtMs: ts.updatedAt,
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  Future<int> _importTtProductUnitConversions(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_product_unit_conversions');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final ts = _timestamps(r);
+      await _db
+          .into(_db.productUnitConversions)
+          .insertOnConflictUpdate(
+            ProductUnitConversionsCompanion.insert(
+              id: id,
+              productId: _str(r['product_id']),
+              unitName: _str(r['unit_name']),
+              conversionFactor: _real(r['conversion_factor'], fallback: 1),
+              costPrice: _real(r['cost_price']),
+              sellingPrice: _real(r['selling_price']),
+              syncId: id,
+              deviceId: Value(_str(r['device_id'])),
+              isDeleted: Value(_bool(r['is_deleted'])),
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
+              createdAtMs: ts.createdAt,
+              updatedAtMs: ts.updatedAt,
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  Future<int> _importTtCustomers(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_customers');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final ts = _timestamps(r);
+      await _db
+          .into(_db.customers)
+          .insertOnConflictUpdate(
+            CustomersCompanion.insert(
+              id: id,
+              name: _str(r['name']),
+              phone: Value(_str(r['phone'])),
+              address: Value(_str(r['address'])),
+              notes: Value(_str(r['notes'])),
+              syncId: id,
+              deviceId: Value(_str(r['device_id'])),
+              isDeleted: Value(_bool(r['is_deleted'])),
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
+              createdAtMs: ts.createdAt,
+              updatedAtMs: ts.updatedAt,
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  Future<int> _importTtUtangRecords(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_utang_records');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final ts = _timestamps(r);
+      await _db
+          .into(_db.utangRecords)
+          .insertOnConflictUpdate(
+            UtangRecordsCompanion.insert(
+              id: id,
+              customerId: _str(r['customer_id']),
+              description: Value(_str(r['description'])),
+              amount: _real(r['amount']),
+              syncId: id,
+              deviceId: Value(_str(r['device_id'])),
+              isDeleted: Value(_bool(r['is_deleted'])),
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
+              createdAtMs: ts.createdAt,
+              updatedAtMs: ts.updatedAt,
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  Future<int> _importTtSales(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_sales');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final ts = _timestamps(r);
+      await _db
+          .into(_db.sales)
+          .insertOnConflictUpdate(
+            SalesCompanion.insert(
+              id: id,
+              reference: _str(r['reference']),
+              note: Value(_str(r['note'])),
+              subtotal: _real(r['subtotal']),
+              totalAmount: _real(r['total_amount']),
+              paidAmount: _real(r['paid_amount']),
+              changeAmount: Value(_real(r['change_amount'])),
+              totalItems: _ms(r['total_items']).toInt(),
+              syncId: id,
+              deviceId: Value(_str(r['device_id'])),
+              isDeleted: Value(_bool(r['is_deleted'])),
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
+              createdAtMs: ts.createdAt,
+              updatedAtMs: ts.updatedAt,
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  Future<int> _importTtSaleItems(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_sale_items');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final created = _ms(r['created_at_ms']) != 0
+          ? _ms(r['created_at_ms'])
+          : _ms(r['created_at']);
+      await _db
+          .into(_db.saleItems)
+          .insertOnConflictUpdate(
+            SaleItemsCompanion.insert(
+              id: id,
+              saleId: _str(r['sale_id']),
+              productId: _str(r['product_id']),
+              selectedUnit: _str(r['selected_unit'], fallback: 'pcs'),
+              quantity: _real(r['quantity']),
+              unitPrice: _real(r['unit_price']),
+              computedBaseQuantity: _real(
+                r['computed_base_quantity'],
+                fallback: _real(r['quantity']),
+              ),
+              lineTotal: _real(r['line_total']),
+              createdAtMs: created == 0
+                  ? DateTime.now().millisecondsSinceEpoch
+                  : created,
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
+            ),
+          );
+    }
+    return rows.length;
+  }
+
+  Future<int> _importTtStockMovements(legacy.Database src) async {
+    final rows = await _safeQuery(src, 'tt_stock_movements');
+    for (final r in rows) {
+      final id = _syncId(r);
+      final created = _ms(r['created_at_ms']) != 0
+          ? _ms(r['created_at_ms'])
+          : _ms(r['created_at']);
+      await _db
+          .into(_db.stockMovements)
+          .insertOnConflictUpdate(
+            StockMovementsCompanion.insert(
+              id: id,
+              productId: _str(r['product_id']),
+              movementType: _str(r['movement_type'], fallback: 'ADJUSTMENT'),
+              quantity: _real(r['quantity']),
+              previousQuantity: _real(r['previous_quantity']),
+              newQuantity: _real(r['new_quantity']),
+              note: Value(_str(r['note'])),
+              reference: Value(_str(r['reference'])),
+              expirationDateMs: Value(_msOrNull(r['expiration_date'])),
+              createdAtMs: created == 0
+                  ? DateTime.now().millisecondsSinceEpoch
+                  : created,
+              isDirty: Value(_bool(r['is_dirty'], fallback: true)),
             ),
           );
     }
