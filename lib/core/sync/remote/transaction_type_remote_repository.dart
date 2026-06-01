@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../network/api_client.dart';
+import 'sync_logging.dart';
 
 class TransactionTypeRemoteRepository {
   TransactionTypeRemoteRepository._();
@@ -10,7 +11,8 @@ class TransactionTypeRemoteRepository {
     try {
       await ApiClient.instance.post('/transaction-types/push', records);
       return true;
-    } on DioException catch (_) {
+    } on DioException catch (e) {
+      logSyncFailure('/transaction-types/push', e);
       return false;
     }
   }
@@ -30,7 +32,8 @@ class TransactionTypeRemoteRepository {
       );
       final data = res.data['data'] as List<dynamic>;
       return data.cast<Map<String, dynamic>>();
-    } on DioException catch (_) {
+    } on DioException catch (e) {
+      logSyncFailure('/transaction-types/pull', e, op: 'pull');
       return [];
     }
   }

@@ -1,53 +1,77 @@
-import '../database/app_database.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../database/daos/app_meta_dao.dart';
+import '../network/api_client.dart';
+import 'sync_orchestrator.dart';
+
+/// User-configurable backend URL persisted in `app_meta`.
+///
+/// Reads/writes go through [AppMetaDao]; on save, the [ApiClient]'s Dio
+/// instance is updated in-place so the next request hits the new host
+/// without a process restart.
 class SyncConfig {
   SyncConfig._();
 
   static const String _defaultTunnelBaseUrl =
       'https://tfkdx2ql-8080.asse.devtunnels.ms/api';
 
-  // Ordered fallback targets for tunnel-based development.
-  static const List<String> fallbackBaseApiUrls = [_defaultTunnelBaseUrl];
-
+  /// Compile-time override (e.g. `--dart-define=API_BASE_URL=...`). When set,
+  /// it wins over the persisted value so CI/dev builds can pin a URL.
   static const String defaultBaseApiUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: _defaultTunnelBaseUrl,
   );
 
-  static const String _stateKey = 'api_base_url';
+  static const List<String> fallbackBaseApiUrls = [_defaultTunnelBaseUrl];
 
-  /// Returns the user-configured URL from SQLite, falling back to the default.
-  static Future<String> getBaseApiUrl() async {
-    final stored = await AppDatabase.instance.getSyncState(_stateKey);
-    if (stored != null && stored.trim().isNotEmpty) {
-      return stored.trim();
-    }
+  /// Returns the user-configured URL, falling back to the compile-time
+  /// default when unset.
+  static Future<String> getBaseApiUrl(AppMetaDao dao) async {
+    final stored = await dao.getApiBaseUrl();
+    if (stored != null && stored.trim().isNotEmpty) return stored.trim();
     return defaultBaseApiUrl;
   }
 
-  /// Persists a new base URL so the next sync uses it immediately.
-  static Future<void> setBaseApiUrl(String url) async {
-    final normalized = url.trim().replaceAll(RegExp(r'/+$'), '');
-    await AppDatabase.instance.setSyncState(_stateKey, normalized);
+  /// Persists [url] and updates the live [ApiClient.dio] base URL so the
+  /// next sync uses it immediately.
+  static Future<void> setBaseApiUrl(AppMetaDao dao, String url) async {
+    final normalized = _normalize(url);
+    if (normalized.isEmpty) return;
+    await dao.setApiBaseUrl(normalized);
+    ApiClient.instance.dio.options = ApiClient.instance.dio.options.copyWith(
+      baseUrl: normalized,
+    );
   }
 
-  /// Returns a de-duplicated, normalized probe list where [currentBaseUrl]
-  /// is tried first, followed by tunnel default and known fallbacks.
+  /// Hydrates the live Dio base URL from the persisted setting. Call once
+  /// during app startup before the first sync.
+  static Future<void> hydrate(Ref ref) async {
+    final dao = ref.read(appMetaDaoProvider);
+    final url = await getBaseApiUrl(dao);
+    ApiClient.instance.dio.options = ApiClient.instance.dio.options.copyWith(
+      baseUrl: url,
+    );
+  }
+
+  /// De-duplicated probe list — current URL first, then the compile-time
+  /// default, then known fallbacks.
   static List<String> buildProbeCandidates(String currentBaseUrl) {
     final seen = <String>{};
     final ordered = <String>[];
-
     void add(String value) {
-      final normalized = value.trim().replaceAll(RegExp(r'/+$'), '');
-      if (normalized.isEmpty) return;
-      if (seen.add(normalized)) ordered.add(normalized);
+      final n = _normalize(value);
+      if (n.isEmpty) return;
+      if (seen.add(n)) ordered.add(n);
     }
 
     add(currentBaseUrl);
     add(defaultBaseApiUrl);
-    for (final url in fallbackBaseApiUrls) {
-      add(url);
+    for (final u in fallbackBaseApiUrls) {
+      add(u);
     }
     return ordered;
   }
+
+  static String _normalize(String url) =>
+      url.trim().replaceAll(RegExp(r'/+$'), '');
 }

@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/app_theme.dart';
 import '../../../../core/sync/sync_config.dart';
-import '../../../../core/sync/sync_service.dart';
+import '../../../../core/sync/sync_orchestrator.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 
-class BackupDataScreen extends StatefulWidget {
+class BackupDataScreen extends ConsumerStatefulWidget {
   const BackupDataScreen({super.key});
 
   @override
-  State<BackupDataScreen> createState() => _BackupDataScreenState();
+  ConsumerState<BackupDataScreen> createState() => _BackupDataScreenState();
 }
 
-class _BackupDataScreenState extends State<BackupDataScreen> {
+class _BackupDataScreenState extends ConsumerState<BackupDataScreen> {
   bool _isSyncing = false;
   bool _urlLoaded = false;
   late final TextEditingController _urlController;
@@ -31,7 +32,7 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
   }
 
   Future<void> _loadUrl() async {
-    final url = await SyncConfig.getBaseApiUrl();
+    final url = await SyncConfig.getBaseApiUrl(ref.read(appMetaDaoProvider));
     if (!mounted) return;
     _urlController.text = url;
     setState(() => _urlLoaded = true);
@@ -40,7 +41,7 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
   Future<void> _saveUrl() async {
     final raw = _urlController.text.trim();
     if (raw.isEmpty) return;
-    await SyncConfig.setBaseApiUrl(raw);
+    await SyncConfig.setBaseApiUrl(ref.read(appMetaDaoProvider), raw);
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -55,15 +56,29 @@ class _BackupDataScreenState extends State<BackupDataScreen> {
 
     setState(() => _isSyncing = true);
     try {
-      final result = await SyncService.instance.syncAll();
+      final results = await ref.read(syncOrchestratorProvider).runOnce();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            context.l10n.syncCompleted(result.pushed, result.pulled),
+      final pushed = results.fold<int>(0, (a, r) => a + r.pushedCount);
+      final pulled = results.fold<int>(0, (a, r) => a + r.pulledCount);
+      Object? firstError;
+      for (final r in results) {
+        if (r.error != null) {
+          firstError = r.error;
+          break;
+        }
+      }
+      if (firstError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.syncFailed(firstError)),
+            backgroundColor: Colors.red.shade700,
           ),
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.syncCompleted(pushed, pulled))),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

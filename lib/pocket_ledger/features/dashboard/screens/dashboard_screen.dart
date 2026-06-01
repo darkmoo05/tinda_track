@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/app_theme.dart';
+import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
@@ -15,7 +17,7 @@ import '../widgets/income_architecture_card.dart';
 
 enum _DashboardActivityFilter { all, business, personal, transactions }
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({
     super.key,
     this.openDrawer,
@@ -28,12 +30,14 @@ class DashboardScreen extends StatefulWidget {
   final ValueChanged<HistoryWalletPerspective>? onWalletPerspectiveSelected;
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final DashboardRepository _dashboardRepository = DashboardRepository();
+  late final DashboardRepository _dashboardRepository = DashboardRepository(
+    database: ref.read(appDatabaseProvider),
+  );
   _DashboardActivityFilter _activityFilter = _DashboardActivityFilter.all;
   late Future<DashboardSnapshot> _dashboardFuture;
 

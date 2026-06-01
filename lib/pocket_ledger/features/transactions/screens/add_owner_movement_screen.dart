@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart' show DatabaseExecutor;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/app_meta_dao.dart';
+import '../../../../core/di/database_providers.dart';
+import '../../../../core/domain/sync_metadata.dart';
 import '../../../../core/app_theme.dart';
 import '../../../../shared/receipt_scan/receipt_draft.dart';
 import '../../../../shared/receipt_scan/receipt_scan_button.dart';
@@ -9,9 +12,13 @@ import '../../../../shared/receipt_scan/receipt_scan_service.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
 import '../../../../core/l10n/l10n_extension.dart';
+import '../domain/entities/ledger_entry.dart';
+import '../domain/entities/movement_category.dart';
 import '../logic/owner_movement_fee_logic.dart';
+import '../presentation/providers/ledger_entry_providers.dart';
+import '../presentation/providers/movement_category_providers.dart';
 
-class AddOwnerMovementScreen extends StatefulWidget {
+class AddOwnerMovementScreen extends ConsumerStatefulWidget {
   const AddOwnerMovementScreen({
     super.key,
     this.initialMovementType,
@@ -22,11 +29,13 @@ class AddOwnerMovementScreen extends StatefulWidget {
   final String? initialDestination;
 
   @override
-  State<AddOwnerMovementScreen> createState() => _AddOwnerMovementScreenState();
+  ConsumerState<AddOwnerMovementScreen> createState() =>
+      _AddOwnerMovementScreenState();
 }
 
-class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
-  final AppDatabase _database = AppDatabase.instance;
+class _AddOwnerMovementScreenState
+    extends ConsumerState<AddOwnerMovementScreen> {
+  AppDatabase get _database => ref.read(appDatabaseProvider);
   final _amountController = TextEditingController();
   final _referenceController = TextEditingController();
   final _notesController = TextEditingController();
@@ -211,9 +220,24 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     return _destinations.first;
   }
 
+  Future<List<String>> _fetchCategoryNames() async {
+    final repo = ref.read(movementCategoryRepositoryProvider);
+    final categories = await repo.watchAll().first;
+    return categories.map((c) => c.name).toList(growable: false);
+  }
+
+  MovementCategory _newCategoryEntity(String name) {
+    final now = DateTime.now();
+    return MovementCategory(
+      id: '',
+      name: name,
+      sync: SyncMetadata(syncId: '', createdAt: now, updatedAt: now),
+    );
+  }
+
   Future<void> _loadExpenseCategories({String? preferredCategory}) async {
     setState(() => _isLoadingCategories = true);
-    final categories = await _database.loadOwnerMovementCategories();
+    final categories = await _fetchCategoryNames();
     if (!mounted) {
       return;
     }
@@ -903,6 +927,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           initialValue: value,
+          isExpanded: true,
           onChanged: onChanged,
           decoration: _inputDecoration(
             hasError: hasError,
@@ -921,7 +946,12 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
             color: AppColors.onSurfaceVariant,
           ),
           items: items
-              .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+              .map(
+                (t) => DropdownMenuItem(
+                  value: t,
+                  child: Text(t, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              )
               .toList(),
         ),
       ],
@@ -1346,13 +1376,10 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               : 'cash')
         : 'cash_out';
 
-    final db = await _database.database;
     try {
-      await _database.ensureWalletSchema(db);
-      final deviceId = await _database.getOrCreateDeviceId();
+      final deviceId = await AppMetaDao(_database).getOrCreateDeviceId();
       final nowMs = now.millisecondsSinceEpoch;
       await _insertOwnerMovementEntry(
-        db,
         title: title,
         note: persistedNote,
         reference: reference,
@@ -1380,15 +1407,13 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   Future<bool> _saveRepaymentPlan(_RepaymentSavePlan plan) async {
     final now = DateTime.now();
-    final db = await _database.database;
 
     try {
-      await _database.ensureWalletSchema(db);
-      final deviceId = await _database.getOrCreateDeviceId();
+      final deviceId = await AppMetaDao(_database).getOrCreateDeviceId();
       final referenceInput = _referenceController.text.trim();
       final notes = _notesController.text.trim();
 
-      await db.transaction((txn) async {
+      await _database.transaction(() async {
         if (plan.repaymentAmount > 0) {
           final repaymentReference = referenceInput.isNotEmpty
               ? referenceInput
@@ -1400,7 +1425,6 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
                 ].join(' • ')
               : (notes.isNotEmpty ? notes : _defaultNote);
           await _insertCustomMovementRecord(
-            txn,
             movementType: 'Borrowed Funds Repayment',
             amount: plan.repaymentAmount,
             reference: repaymentReference,
@@ -1431,7 +1455,6 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
               'Created because no borrowed balance remained to repay.',
           ].join(' • ');
           await _insertCustomMovementRecord(
-            txn,
             movementType: 'Top-up',
             amount: plan.topUpAmount,
             reference: topUpReference,
@@ -1737,8 +1760,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     return result ?? false;
   }
 
-  Future<void> _insertCustomMovementRecord(
-    DatabaseExecutor executor, {
+  Future<void> _insertCustomMovementRecord({
     required String movementType,
     required double amount,
     required String reference,
@@ -1763,7 +1785,6 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         : 0.0;
 
     await _insertOwnerMovementEntry(
-      executor,
       title: title,
       note: note,
       reference: reference,
@@ -1784,8 +1805,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     );
   }
 
-  Future<void> _insertOwnerMovementEntry(
-    DatabaseExecutor executor, {
+  Future<void> _insertOwnerMovementEntry({
     required String title,
     required String note,
     required String reference,
@@ -1804,31 +1824,33 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     required DateTime now,
     required int nowMs,
   }) async {
-    await executor.insert(AppDatabase.ledgerTable, {
-      'entry_type': 'owner_movement',
-      'title': title,
-      'note': note,
-      'reference': reference,
-      'amount': amount,
-      'wallet_delta': walletDelta,
-      'maya_wallet_delta': mayaWalletDelta,
-      'on_hand_delta': onHandDelta,
-      'recorded_flow': recordedFlow,
-      'tag': tag,
-      'icon_key': iconKey,
-      'wallet_account': walletAccount,
-      'owner_scope': ownerScope,
-      'owner_movement_type': ownerMovementType,
-      'owner_category': ownerCategory,
-      'owner_party_name': null,
-      'owner_party_account': null,
-      AppDatabase.syncIdColumn: AppDatabase.generateSyncId('entry'),
-      AppDatabase.deviceIdColumn: deviceId,
-      AppDatabase.updatedAtMsColumn: nowMs,
-      AppDatabase.isDeletedColumn: 0,
-      AppDatabase.isDirtyColumn: 1,
-      'created_at': now.toIso8601String(),
-    });
+    final entry = LedgerEntry(
+      id: '',
+      entryType: 'owner_movement',
+      title: title,
+      note: note,
+      reference: reference,
+      amount: amount,
+      walletDelta: walletDelta,
+      mayaWalletDelta: mayaWalletDelta,
+      onHandDelta: onHandDelta,
+      recordedFlow: recordedFlow,
+      tag: tag,
+      iconKey: iconKey,
+      walletAccount: walletAccount,
+      ownerScope: ownerScope,
+      ownerMovementType: ownerMovementType,
+      ownerCategory: ownerCategory,
+      entryDate: now.toIso8601String(),
+      sync: SyncMetadata(
+        syncId: '',
+        deviceId: deviceId,
+        createdAt: now,
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
+        isDirty: true,
+      ),
+    );
+    await ref.read(ledgerEntryRepositoryProvider).save(entry);
   }
 
   String _buildReferenceForType(String movementType, DateTime timestamp) {
@@ -1875,21 +1897,21 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
   Future<(double outstanding, double totalExpense)>
   _loadPersonalExpenseBalance() async {
-    final db = await _database.database;
-    final result = await db.rawQuery('''
+    final result = await _database.customSelect('''
       SELECT
         COALESCE(SUM(CASE WHEN owner_movement_type IN ('Borrowed Funds', 'Personal Expense') THEN amount ELSE 0 END), 0) AS total_expense,
         COALESCE(SUM(CASE WHEN owner_movement_type IN ('Borrowed Funds Repayment', 'Personal Expense Payment') THEN amount ELSE 0 END), 0) AS total_paid
-      FROM ${AppDatabase.ledgerTable}
-      WHERE entry_type = 'owner_movement'
+      FROM ledger_entries
+      WHERE is_deleted = 0
+        AND entry_type = 'owner_movement'
         AND owner_movement_type IN ('Borrowed Funds', 'Borrowed Funds Repayment', 'Personal Expense', 'Personal Expense Payment')
-    ''');
+    ''').get();
 
     if (result.isEmpty) {
       return (0.0, 0.0);
     }
 
-    final row = result.first;
+    final row = result.first.data;
     final totalExpense = (row['total_expense'] as num?)?.toDouble() ?? 0.0;
     final totalPaid = (row['total_paid'] as num?)?.toDouble() ?? 0.0;
     final outstanding = (totalExpense - totalPaid)
@@ -1899,21 +1921,20 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   }
 
   Future<double> _loadSelectedAccountBalance() async {
-    final db = await _database.database;
-    await _database.ensureWalletSchema(db);
-    final result = await db.rawQuery('''
+    final result = await _database.customSelect('''
       SELECT
         COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
         COALESCE(SUM(maya_wallet_delta), 0) AS maya_wallet_balance,
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
-      FROM ${AppDatabase.ledgerTable}
-    ''');
+      FROM ledger_entries
+      WHERE is_deleted = 0
+    ''').get();
 
     if (result.isEmpty) {
       return 0;
     }
 
-    final row = result.first;
+    final row = result.first.data;
     final walletBalance = (row['wallet_balance'] as num?)?.toDouble() ?? 0;
     final mayaWalletBalance =
         (row['maya_wallet_balance'] as num?)?.toDouble() ?? 0;
@@ -1929,18 +1950,17 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   }
 
   Future<double> _loadOnHandCashBalance() async {
-    final db = await _database.database;
-    await _database.ensureWalletSchema(db);
-    final result = await db.rawQuery('''
+    final result = await _database.customSelect('''
       SELECT COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
-      FROM ${AppDatabase.ledgerTable}
-    ''');
+      FROM ledger_entries
+      WHERE is_deleted = 0
+    ''').get();
 
     if (result.isEmpty) {
       return 0;
     }
 
-    return (result.first['on_hand_balance'] as num?)?.toDouble() ?? 0;
+    return (result.first.data['on_hand_balance'] as num?)?.toDouble() ?? 0;
   }
 
   Future<double> _loadAvailableFeeIncomeForSelectedSource() async {
@@ -1948,33 +1968,41 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
   }
 
   Future<double> _loadAvailableFeeIncomeForSource(String source) async {
-    final db = await _database.database;
-    await _database.ensureWalletSchema(db);
     final normalizedSource = _normalizeWalletKey(source);
 
     // Source of truth: fee_transactions.fee_amount.
     // This avoids mixing principal amount into withdrawable fee earnings.
-    final feeRows = await db.query(
-      AppDatabase.feeTransactionsTable,
-      columns: [
-        'related_transaction_id',
-        'fee_amount',
-        'charge_destination',
-        'created_at',
-      ],
-      where: 'COALESCE(is_deleted, 0) = 0',
-    );
+    final feeRowsRaw = await _database.customSelect('''
+      SELECT
+        related_transaction_sync_id,
+        fee_amount,
+        charge_destination,
+        strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at
+      FROM fee_transactions
+      WHERE is_deleted = 0
+    ''').get();
+    final feeRows = feeRowsRaw
+        .map((r) => Map<String, Object?>.from(r.data))
+        .toList(growable: false);
 
-    final transactionRows = await db.query(
-      AppDatabase.ledgerTable,
-      columns: ['id', 'note', 'created_at', 'wallet_account', 'icon_key'],
-      where: 'COALESCE(is_deleted, 0) = 0 AND entry_type = ?',
-      whereArgs: ['transaction'],
-    );
-    final transactionById = <int, Map<String, Object?>>{};
+    final transactionRowsRaw = await _database.customSelect('''
+      SELECT
+        id,
+        note,
+        strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at,
+        wallet_account,
+        icon_key
+      FROM ledger_entries
+      WHERE is_deleted = 0 AND entry_type = 'transaction'
+    ''').get();
+    final transactionRows = transactionRowsRaw
+        .map((r) => Map<String, Object?>.from(r.data))
+        .toList(growable: false);
+
+    final transactionById = <String, Map<String, Object?>>{};
     for (final row in transactionRows) {
-      final id = (row['id'] as num?)?.toInt();
-      if (id == null) {
+      final id = row['id'] as String?;
+      if (id == null || id.isEmpty) {
         continue;
       }
       transactionById[id] = row;
@@ -1982,7 +2010,7 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
 
     var totalFeeIncome = 0.0;
     final feeEvents = <_FeeBalanceEvent>[];
-    final linkedTransactionIds = <int>{};
+    final linkedTransactionIds = <String>{};
 
     for (final row in feeRows) {
       final feeAmount = (row['fee_amount'] as num?)?.toDouble() ?? 0.0;
@@ -1990,16 +2018,18 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
         continue;
       }
 
-      final relatedTransactionId = (row['related_transaction_id'] as num?)
-          ?.toInt();
-      if (relatedTransactionId != null) {
+      final relatedTransactionId =
+          row['related_transaction_sync_id'] as String?;
+      if (relatedTransactionId != null && relatedTransactionId.isNotEmpty) {
         linkedTransactionIds.add(relatedTransactionId);
       }
 
       final destination = ((row['charge_destination'] as String?) ?? '').trim();
       var destinationKey = _normalizeWalletKey(destination);
 
-      if (destinationKey.isEmpty && relatedTransactionId != null) {
+      if (destinationKey.isEmpty &&
+          relatedTransactionId != null &&
+          relatedTransactionId.isNotEmpty) {
         final tx = transactionById[relatedTransactionId];
         if (tx != null) {
           final iconKey = ((tx['icon_key'] as String?) ?? '').toLowerCase();
@@ -2027,8 +2057,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     // Conservative legacy fallback: only parse explicit "Charge ..." markers
     // from transaction notes when there is no fee_transactions row.
     for (final row in transactionRows) {
-      final transactionId = (row['id'] as num?)?.toInt();
+      final transactionId = row['id'] as String?;
       if (transactionId == null ||
+          transactionId.isEmpty ||
           linkedTransactionIds.contains(transactionId)) {
         continue;
       }
@@ -2055,19 +2086,20 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       );
     }
 
-    final withdrawnRows = await db.query(
-      AppDatabase.ledgerTable,
-      columns: [
-        'owner_movement_type',
-        'wallet_account',
-        'owner_party_account',
-        'amount',
-        'note',
-        'created_at',
-      ],
-      where: 'COALESCE(is_deleted, 0) = 0 AND entry_type = ?',
-      whereArgs: ['owner_movement'],
-    );
+    final withdrawnRowsRaw = await _database.customSelect('''
+      SELECT
+        owner_movement_type,
+        wallet_account,
+        owner_party_account,
+        amount,
+        note,
+        strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at
+      FROM ledger_entries
+      WHERE is_deleted = 0 AND entry_type = 'owner_movement'
+    ''').get();
+    final withdrawnRows = withdrawnRowsRaw
+        .map((r) => Map<String, Object?>.from(r.data))
+        .toList(growable: false);
 
     var totalWithdrawn = 0.0;
     for (final row in withdrawnRows) {
@@ -2276,7 +2308,9 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
     }
 
     try {
-      await _database.insertOwnerMovementCategory(normalized);
+      await ref
+          .read(movementCategoriesNotifierProvider.notifier)
+          .save(_newCategoryEntity(normalized));
       if (!mounted) {
         return;
       }
@@ -2317,10 +2351,8 @@ class _AddOwnerMovementScreenState extends State<AddOwnerMovementScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (_) => _ManageCategoriesSheet(
-        database: _database,
-        initialCategories: _expenseCategories,
-      ),
+      builder: (_) =>
+          _ManageCategoriesSheet(initialCategories: _expenseCategories),
     );
 
     if (!mounted) {
@@ -2456,20 +2488,18 @@ class _FeeBalanceEvent {
   final bool isIncome;
 }
 
-class _ManageCategoriesSheet extends StatefulWidget {
-  const _ManageCategoriesSheet({
-    required this.database,
-    required this.initialCategories,
-  });
+class _ManageCategoriesSheet extends ConsumerStatefulWidget {
+  const _ManageCategoriesSheet({required this.initialCategories});
 
-  final AppDatabase database;
   final List<String> initialCategories;
 
   @override
-  State<_ManageCategoriesSheet> createState() => _ManageCategoriesSheetState();
+  ConsumerState<_ManageCategoriesSheet> createState() =>
+      _ManageCategoriesSheetState();
 }
 
-class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
+class _ManageCategoriesSheetState
+    extends ConsumerState<_ManageCategoriesSheet> {
   final TextEditingController _nameController = TextEditingController();
   String _editingCategory = '';
   String _searchQuery = '';
@@ -2505,7 +2535,11 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
   }
 
   Future<void> _reloadCategories({String? preferred}) async {
-    final updated = await widget.database.loadOwnerMovementCategories();
+    final entities = await ref
+        .read(movementCategoryRepositoryProvider)
+        .watchAll()
+        .first;
+    final updated = entities.map((c) => c.name).toList(growable: false);
     if (!mounted) {
       return;
     }
@@ -2544,13 +2578,31 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
 
     setState(() => _isSaving = true);
     try {
+      final repo = ref.read(movementCategoryRepositoryProvider);
+      final notifier = ref.read(movementCategoriesNotifierProvider.notifier);
       if (_isRenaming) {
-        await widget.database.updateOwnerMovementCategory(
-          previousName: _editingCategory,
-          newName: normalized,
-        );
+        final existing = await repo.watchAll().first.then((list) {
+          final target = _editingCategory.trim().toLowerCase();
+          for (final c in list) {
+            if (c.name.trim().toLowerCase() == target) {
+              return c;
+            }
+          }
+          return null;
+        });
+        if (existing == null) {
+          throw StateError('Category not found: $_editingCategory');
+        }
+        await notifier.save(existing.copyWith(name: normalized));
       } else {
-        await widget.database.insertOwnerMovementCategory(normalized);
+        final now = DateTime.now();
+        await notifier.save(
+          MovementCategory(
+            id: '',
+            name: normalized,
+            sync: SyncMetadata(syncId: '', createdAt: now, updatedAt: now),
+          ),
+        );
       }
 
       await _reloadCategories(preferred: normalized);
@@ -2616,7 +2668,23 @@ class _ManageCategoriesSheetState extends State<_ManageCategoriesSheet> {
       return;
     }
 
-    await widget.database.deleteOwnerMovementCategory(category);
+    final entities = await ref
+        .read(movementCategoryRepositoryProvider)
+        .watchAll()
+        .first;
+    final target = category.trim().toLowerCase();
+    MovementCategory? existing;
+    for (final c in entities) {
+      if (c.name.trim().toLowerCase() == target) {
+        existing = c;
+        break;
+      }
+    }
+    if (existing != null) {
+      await ref
+          .read(movementCategoriesNotifierProvider.notifier)
+          .delete(existing.id);
+    }
     await _reloadCategories();
     if (!mounted) {
       return;

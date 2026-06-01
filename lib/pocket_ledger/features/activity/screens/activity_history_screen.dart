@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' show Variable;
 import 'package:excel/excel.dart' as ex;
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
@@ -12,6 +14,7 @@ import 'dart:io';
 
 import '../../../../core/app_theme.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
@@ -20,7 +23,7 @@ import '../widgets/date_header.dart';
 
 enum HistoryWalletPerspective { gcash, maya, onHand }
 
-class ActivityHistoryScreen extends StatefulWidget {
+class ActivityHistoryScreen extends ConsumerStatefulWidget {
   const ActivityHistoryScreen({
     super.key,
     this.openDrawer,
@@ -31,12 +34,13 @@ class ActivityHistoryScreen extends StatefulWidget {
   final HistoryWalletPerspective? initialWalletPerspective;
 
   @override
-  State<ActivityHistoryScreen> createState() => _ActivityHistoryScreenState();
+  ConsumerState<ActivityHistoryScreen> createState() =>
+      _ActivityHistoryScreenState();
 }
 
-class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
+class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final AppDatabase _database = AppDatabase.instance;
+  AppDatabase get _database => ref.read(appDatabaseProvider);
   final TextEditingController _searchController = TextEditingController();
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'en_PH',
@@ -1218,12 +1222,29 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Future<void> _loadHistory() async {
-    final db = await _database.database;
     // Load ASC so we can compute accurate running (post) balances.
-    final rows = await db.query(
-      AppDatabase.ledgerTable,
-      orderBy: 'created_at ASC, id ASC',
-    );
+    final rawRows = await _database.customSelect('''
+      SELECT
+        entry_type,
+        title,
+        reference,
+        wallet_account,
+        note,
+        amount,
+        tag,
+        icon_key,
+        owner_movement_type,
+        wallet_delta,
+        maya_wallet_delta,
+        on_hand_delta,
+        strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at
+      FROM ledger_entries
+      WHERE is_deleted = 0
+      ORDER BY created_at_ms ASC, id ASC
+    ''').get();
+    final rows = rawRows
+        .map((r) => Map<String, Object?>.from(r.data))
+        .toList(growable: false);
 
     double runningGcash = 0;
     double runningMaya = 0;
@@ -1704,13 +1725,38 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       999,
     );
 
-    final db = await _database.database;
-    final rows = await db.query(
-      AppDatabase.ledgerTable,
-      where: 'created_at >= ? AND created_at <= ?',
-      whereArgs: [start.toIso8601String(), end.toIso8601String()],
-      orderBy: 'created_at ASC, id ASC',
-    );
+    final rawRows = await _database
+        .customSelect(
+          '''
+      SELECT
+        entry_type,
+        title,
+        reference,
+        wallet_account,
+        note,
+        amount,
+        tag,
+        icon_key,
+        owner_movement_type,
+        wallet_delta,
+        maya_wallet_delta,
+        on_hand_delta,
+        strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at
+      FROM ledger_entries
+      WHERE is_deleted = 0
+        AND created_at_ms >= ?
+        AND created_at_ms <= ?
+      ORDER BY created_at_ms ASC, id ASC
+      ''',
+          variables: [
+            Variable.withInt(start.millisecondsSinceEpoch),
+            Variable.withInt(end.millisecondsSinceEpoch),
+          ],
+        )
+        .get();
+    final rows = rawRows
+        .map((r) => Map<String, Object?>.from(r.data))
+        .toList(growable: false);
 
     double runningBalance = 0;
     return rows

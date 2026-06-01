@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/app_theme.dart';
 import '../data/customer_model.dart';
 import '../data/customer_repository.dart';
 
-class CustomerDetailScreen extends StatefulWidget {
+class CustomerDetailScreen extends ConsumerStatefulWidget {
   final String customerId;
 
   const CustomerDetailScreen({super.key, required this.customerId});
 
   @override
-  State<CustomerDetailScreen> createState() => _CustomerDetailScreenState();
+  ConsumerState<CustomerDetailScreen> createState() =>
+      _CustomerDetailScreenState();
 }
 
-class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
+class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   TtCustomer? _customer;
   bool _loading = true;
   final _currency = NumberFormat.currency(symbol: '₱', decimalDigits: 2);
@@ -28,9 +30,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
 
   Future<void> _load() async {
     try {
-      final customer = await CustomerRepository.instance.getCustomer(
-        widget.customerId,
-      );
+      final customer = await ref
+          .read(customerRepositoryProvider)
+          .getCustomer(widget.customerId);
       if (mounted) {
         setState(() {
           _customer = customer;
@@ -102,11 +104,13 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
               if (amount <= 0 || desc.isEmpty) return;
               Navigator.pop(context);
               try {
-                await CustomerRepository.instance.addUtang(
-                  customerId: widget.customerId,
-                  amount: amount,
-                  description: desc,
-                );
+                await ref
+                    .read(customerRepositoryProvider)
+                    .addUtang(
+                      customerId: widget.customerId,
+                      amount: amount,
+                      description: desc,
+                    );
                 _load();
               } catch (_) {}
             },
@@ -187,10 +191,12 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
               if (amount <= 0) return;
               Navigator.pop(context);
               try {
-                await CustomerRepository.instance.recordPayment(
-                  customerId: widget.customerId,
-                  amount: amount,
-                );
+                await ref
+                    .read(customerRepositoryProvider)
+                    .recordPayment(
+                      customerId: widget.customerId,
+                      amount: amount,
+                    );
                 _load();
               } catch (_) {}
             },

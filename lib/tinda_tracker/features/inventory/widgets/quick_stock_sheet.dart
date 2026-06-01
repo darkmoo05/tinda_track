@@ -73,15 +73,17 @@ class _QuickStockSheetState extends State<_QuickStockSheet> {
     setState(() => _loading = true);
     try {
       final movementType = _reasonToType(_reason);
-      await LocalInventoryRepository.instance.adjustStock(
-        productId: widget.product.id,
-        quantityDelta: total.floor(),
-        quantityDeltaBase: totalInBase,
-        movementType: movementType,
-        note: _reason == 'Restock' && _selectedRestockUnit != '__base__'
-            ? '$_reason ($_selectedRestockUnit x ${total.toStringAsFixed(2)})'
-            : _reason,
-      );
+      await widget.ref
+          .read(localInventoryRepositoryProvider)
+          .adjustStock(
+            productId: widget.product.id,
+            quantityDelta: total.floor(),
+            quantityDeltaBase: totalInBase,
+            movementType: movementType,
+            note: _reason == 'Restock' && _selectedRestockUnit != '__base__'
+                ? '$_reason ($_selectedRestockUnit x ${total.toStringAsFixed(2)})'
+                : _reason,
+          );
       widget.ref.invalidate(allProductsProvider);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {

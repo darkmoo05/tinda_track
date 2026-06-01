@@ -1,36 +1,38 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
 import '../../../../core/app_theme.dart';
+import '../../../../core/domain/sync_metadata.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
-import '../data/party_repository.dart';
+import '../domain/entities/party.dart';
+import '../presentation/providers/party_providers.dart';
 import '../widgets/search_input.dart';
 import '../widgets/party_list_item.dart';
 
-class PartyManagementScreen extends StatefulWidget {
+String _normalizeAccount(String raw) =>
+    raw.replaceAll(RegExp(r'[^0-9]'), '').trim();
+
+class PartyManagementScreen extends ConsumerStatefulWidget {
   const PartyManagementScreen({super.key, this.openDrawer});
 
   final VoidCallback? openDrawer;
 
   @override
-  State<PartyManagementScreen> createState() => _PartyManagementScreenState();
+  ConsumerState<PartyManagementScreen> createState() =>
+      _PartyManagementScreenState();
 }
 
-class _PartyManagementScreenState extends State<PartyManagementScreen> {
+class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final PartyRepository _partyRepository = PartyRepository.instance;
   Timer? _searchDebounce;
   String _searchQuery = '';
   String _currentFilter = 'all'; // 'all', 'verified'
   String _currentSort = 'newest'; // 'newest', 'oldest', 'name'
-
-  @override
-  void initState() {
-    super.initState();
-    _partyRepository.ensureLoaded();
-  }
 
   @override
   void dispose() {
@@ -65,9 +67,10 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
           const SizedBox(height: 24),
           _buildFilterAndSortRow(context),
           const SizedBox(height: 16),
-          ValueListenableBuilder<List<PartyRecord>>(
-            valueListenable: _partyRepository.parties,
-            builder: (context, parties, child) {
+          Builder(
+            builder: (context) {
+              final parties =
+                  ref.watch(partiesStreamProvider).value ?? const <Party>[];
               final filteredParties = _applyFiltersAndSearch(parties);
               final animationKey = ValueKey(
                 '${_currentFilter}_${_currentSort}_${_searchQuery.trim()}_${filteredParties.length}',
@@ -130,9 +133,10 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   }
 
   Widget _buildQuickStatsCard(BuildContext context) {
-    return ValueListenableBuilder<List<PartyRecord>>(
-      valueListenable: _partyRepository.parties,
-      builder: (context, parties, child) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final parties =
+            ref.watch(partiesStreamProvider).value ?? const <Party>[];
         final total = parties.length;
         final verified = parties.where((p) => p.isVerified).length;
         final percent = total == 0
@@ -302,7 +306,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
   }
 
   Widget _buildPartiesList(
-    List<PartyRecord> parties, {
+    List<Party> parties, {
     required bool hasActiveSearch,
   }) {
     final isCompact = MediaQuery.sizeOf(context).width < 360;
@@ -393,9 +397,9 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
     });
   }
 
-  List<PartyRecord> _applyFiltersAndSearch(List<PartyRecord> parties) {
+  List<Party> _applyFiltersAndSearch(List<Party> parties) {
     // Apply filter first
-    List<PartyRecord> filtered = List.from(parties);
+    List<Party> filtered = List.from(parties);
 
     if (_currentFilter == 'verified') {
       filtered = filtered.where((p) => p.isVerified).toList();
@@ -417,9 +421,9 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
 
     // Apply sort
     if (_currentSort == 'newest') {
-      filtered.sort((a, b) => b.id.compareTo(a.id));
+      filtered.sort((a, b) => b.sync.createdAt.compareTo(a.sync.createdAt));
     } else if (_currentSort == 'oldest') {
-      filtered.sort((a, b) => a.id.compareTo(b.id));
+      filtered.sort((a, b) => a.sync.createdAt.compareTo(b.sync.createdAt));
     } else if (_currentSort == 'name') {
       filtered.sort((a, b) => a.name.compareTo(b.name));
     }
@@ -431,20 +435,19 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _AddPartyDialog(repository: _partyRepository),
+      builder: (_) => const _AddPartyDialog(),
     );
   }
 
-  Future<void> _onEditParty(PartyRecord party) async {
+  Future<void> _onEditParty(Party party) async {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) =>
-          _EditPartyDialog(party: party, repository: _partyRepository),
+      builder: (_) => _EditPartyDialog(party: party),
     );
   }
 
-  Future<void> _onDeleteParty(PartyRecord party) async {
+  Future<void> _onDeleteParty(Party party) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -538,7 +541,7 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
     );
 
     if (confirmed != true || !mounted) return;
-    await _partyRepository.deleteParty(party.id);
+    await ref.read(partiesNotifierProvider.notifier).delete(party.id);
   }
 }
 
@@ -546,17 +549,16 @@ class _PartyManagementScreenState extends State<PartyManagementScreen> {
 // Edit Party Dialog — proper StatefulWidget so async save is safe.
 // ---------------------------------------------------------------------------
 
-class _EditPartyDialog extends StatefulWidget {
-  const _EditPartyDialog({required this.party, required this.repository});
+class _EditPartyDialog extends ConsumerStatefulWidget {
+  const _EditPartyDialog({required this.party});
 
-  final PartyRecord party;
-  final PartyRepository repository;
+  final Party party;
 
   @override
-  State<_EditPartyDialog> createState() => _EditPartyDialogState();
+  ConsumerState<_EditPartyDialog> createState() => _EditPartyDialogState();
 }
 
-class _EditPartyDialogState extends State<_EditPartyDialog> {
+class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
   late final TextEditingController _fullNameController;
   late final TextEditingController _accountController;
   String? _errorText;
@@ -594,13 +596,31 @@ class _EditPartyDialogState extends State<_EditPartyDialog> {
       _errorText = null;
     });
 
-    final bool updated;
+    final normalizedAccount = _normalizeAccount(accountNumber);
+    final parties = ref.read(partiesStreamProvider).value ?? const <Party>[];
+    final duplicate = parties.any(
+      (p) =>
+          p.id != widget.party.id &&
+          _normalizeAccount(p.accountNumber) == normalizedAccount,
+    );
+    if (duplicate) {
+      setState(() {
+        _isSaving = false;
+        _errorText =
+            'Account number may already be in use. Use a different number.';
+      });
+      return;
+    }
+
     try {
-      updated = await widget.repository.updateParty(
-        widget.party.id,
-        fullName: fullName,
-        accountNumber: accountNumber,
-      );
+      await ref
+          .read(partiesNotifierProvider.notifier)
+          .save(
+            widget.party.copyWith(
+              name: fullName,
+              accountNumber: normalizedAccount,
+            ),
+          );
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -611,16 +631,6 @@ class _EditPartyDialogState extends State<_EditPartyDialog> {
     }
 
     if (!mounted) return;
-
-    if (!updated) {
-      setState(() {
-        _isSaving = false;
-        _errorText =
-            'Account number may already be in use. Use a different number.';
-      });
-      return;
-    }
-
     Navigator.of(context).pop();
   }
 
@@ -815,16 +825,16 @@ class _EditPartyDialogState extends State<_EditPartyDialog> {
   }
 }
 
-class _AddPartyDialog extends StatefulWidget {
-  const _AddPartyDialog({required this.repository});
-
-  final PartyRepository repository;
+class _AddPartyDialog extends ConsumerStatefulWidget {
+  const _AddPartyDialog();
 
   @override
-  State<_AddPartyDialog> createState() => _AddPartyDialogState();
+  ConsumerState<_AddPartyDialog> createState() => _AddPartyDialogState();
 }
 
-class _AddPartyDialogState extends State<_AddPartyDialog> {
+class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
+  static final DateFormat _joinDateFormat = DateFormat('MMM yyyy');
+
   late final TextEditingController _fullNameController;
   late final TextEditingController _accountController;
   String? _errorText;
@@ -860,12 +870,39 @@ class _AddPartyDialogState extends State<_AddPartyDialog> {
       _errorText = null;
     });
 
-    final bool added;
+    final normalizedAccount = _normalizeAccount(accountNumber);
+    final parties = ref.read(partiesStreamProvider).value ?? const <Party>[];
+    final duplicate = parties.any(
+      (p) => _normalizeAccount(p.accountNumber) == normalizedAccount,
+    );
+    if (duplicate) {
+      setState(() {
+        _isSaving = false;
+        _errorText =
+            'Account number may already be in use. Use a different number.';
+      });
+      return;
+    }
+
+    final now = DateTime.now();
+    final newParty = Party(
+      id: '',
+      name: fullName,
+      accountNumber: normalizedAccount,
+      entityId: _buildEntityId(normalizedAccount, parties.length),
+      description: 'Newly Registered',
+      joinDate: _joinDateFormat.format(now),
+      isVerified: true,
+      sync: SyncMetadata(
+        syncId: '',
+        createdAt: now,
+        updatedAt: now,
+        isDirty: true,
+      ),
+    );
+
     try {
-      added = await widget.repository.registerParty(
-        fullName: fullName,
-        accountNumber: accountNumber,
-      );
+      await ref.read(partiesNotifierProvider.notifier).save(newParty);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -876,17 +913,16 @@ class _AddPartyDialogState extends State<_AddPartyDialog> {
     }
 
     if (!mounted) return;
-
-    if (!added) {
-      setState(() {
-        _isSaving = false;
-        _errorText =
-            'Account number may already be in use. Use a different number.';
-      });
-      return;
-    }
-
     Navigator.of(context).pop();
+  }
+
+  String _buildEntityId(String accountNumber, int currentCount) {
+    final digitsOnly = _normalizeAccount(accountNumber);
+    final suffix = digitsOnly.length >= 3
+        ? digitsOnly.substring(digitsOnly.length - 3)
+        : digitsOnly.padLeft(3, '0');
+    final sequence = (currentCount + 1).toString().padLeft(3, '0');
+    return 'FA-$suffix-$sequence';
   }
 
   @override

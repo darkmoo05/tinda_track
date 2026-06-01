@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../network/api_client.dart';
+import 'sync_logging.dart';
 
 class ChargeRemoteRepository {
   ChargeRemoteRepository._();
@@ -9,7 +10,8 @@ class ChargeRemoteRepository {
     try {
       await ApiClient.instance.post('/charges/push', records);
       return true;
-    } on DioException catch (_) {
+    } on DioException catch (e) {
+      logSyncFailure('/charges/push', e);
       return false;
     }
   }
@@ -26,7 +28,8 @@ class ChargeRemoteRepository {
       final res = await ApiClient.instance.get('/charges/pull', params: params);
       final data = res.data['data'] as List<dynamic>;
       return data.cast<Map<String, dynamic>>();
-    } on DioException catch (_) {
+    } on DioException catch (e) {
+      logSyncFailure('/charges/pull', e, op: 'pull');
       return [];
     }
   }

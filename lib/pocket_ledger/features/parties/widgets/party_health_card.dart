@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/app_theme.dart';
-import '../data/party_repository.dart';
+import '../domain/entities/party_activity.dart';
 
 class PartyHealthHero extends StatelessWidget {
   final int totalEntities;

@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/app_theme.dart';
 import '../../pos/data/pos_repository.dart';
 
-class TtDashboardScreen extends StatefulWidget {
+class TtDashboardScreen extends ConsumerStatefulWidget {
   final VoidCallback? onGoToSell;
   final VoidCallback? onGoToInventory;
 
   const TtDashboardScreen({super.key, this.onGoToSell, this.onGoToInventory});
 
   @override
-  State<TtDashboardScreen> createState() => _TtDashboardScreenState();
+  ConsumerState<TtDashboardScreen> createState() => _TtDashboardScreenState();
 }
 
-class _TtDashboardScreenState extends State<TtDashboardScreen> {
+class _TtDashboardScreenState extends ConsumerState<TtDashboardScreen> {
   late Future<DashboardStats> _statsFuture;
   final _currency = NumberFormat.currency(symbol: '₱', decimalDigits: 2);
   final _compact = NumberFormat.compactCurrency(symbol: '₱', decimalDigits: 0);
@@ -26,7 +27,7 @@ class _TtDashboardScreenState extends State<TtDashboardScreen> {
   }
 
   void _load() {
-    _statsFuture = PosRepository.instance.getDashboardStats();
+    _statsFuture = ref.read(posRepositoryProvider).getDashboardStats();
   }
 
   void _refresh() {

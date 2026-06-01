@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../core/app_theme.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../shared/widgets/top_alert.dart';
 import '../data/models/custom_shelf_location.dart';
 import '../data/models/inventory_product.dart';
@@ -119,11 +120,14 @@ class ShelfDetailScreen extends ConsumerWidget {
     if (localPath != null && File(localPath).existsSync()) {
       image = Image.file(File(localPath), fit: BoxFit.cover);
     } else if (shelf.imageUrl != null && shelf.imageUrl!.isNotEmpty) {
-      image = CachedNetworkImage(
-        imageUrl: shelf.imageUrl!,
-        fit: BoxFit.cover,
-        errorWidget: (_, _, _) => _placeholderBanner(),
-      );
+      final resolved = resolveImageUrl(shelf.imageUrl);
+      image = resolved == null
+          ? _placeholderBanner()
+          : CachedNetworkImage(
+              imageUrl: resolved,
+              fit: BoxFit.cover,
+              errorWidget: (_, _, _) => _placeholderBanner(),
+            );
     } else {
       image = _placeholderBanner();
     }
@@ -438,14 +442,20 @@ class _ProductRow extends StatelessWidget {
     if (localPath != null && File(localPath).existsSync()) {
       child = Image.file(File(localPath), fit: BoxFit.cover);
     } else if (p.imageUrl != null && p.imageUrl!.isNotEmpty) {
-      child = CachedNetworkImage(
-        imageUrl: p.imageUrl!,
-        fit: BoxFit.cover,
-        errorWidget: (_, _, _) => const Icon(
-          Icons.inventory_2_outlined,
-          color: AppColors.onSurfaceVariant,
-        ),
-      );
+      final resolved = resolveImageUrl(p.imageUrl);
+      child = resolved == null
+          ? const Icon(
+              Icons.inventory_2_outlined,
+              color: AppColors.onSurfaceVariant,
+            )
+          : CachedNetworkImage(
+              imageUrl: resolved,
+              fit: BoxFit.cover,
+              errorWidget: (_, _, _) => const Icon(
+                Icons.inventory_2_outlined,
+                color: AppColors.onSurfaceVariant,
+              ),
+            );
     } else {
       child = const Icon(
         Icons.inventory_2_outlined,

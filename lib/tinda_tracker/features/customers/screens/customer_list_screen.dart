@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/app_theme.dart';
@@ -6,14 +7,14 @@ import '../data/customer_model.dart';
 import '../data/customer_repository.dart';
 import 'customer_detail_screen.dart';
 
-class CustomerListScreen extends StatefulWidget {
+class CustomerListScreen extends ConsumerStatefulWidget {
   const CustomerListScreen({super.key});
 
   @override
-  State<CustomerListScreen> createState() => _CustomerListScreenState();
+  ConsumerState<CustomerListScreen> createState() => _CustomerListScreenState();
 }
 
-class _CustomerListScreenState extends State<CustomerListScreen> {
+class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
   List<TtCustomer> _customers = [];
   bool _loading = true;
   final _currency = NumberFormat.currency(symbol: '₱', decimalDigits: 2);
@@ -27,7 +28,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
 
   Future<void> _load() async {
     try {
-      final customers = await CustomerRepository.instance.listCustomers();
+      final customers = await ref
+          .read(customerRepositoryProvider)
+          .listCustomers();
       if (mounted) {
         setState(() {
           _customers = customers;
@@ -55,10 +58,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       builder: (_) => _AddCustomerSheet(
         onSaved: (name, phone) async {
           try {
-            await CustomerRepository.instance.createCustomer(
-              name: name,
-              phone: phone,
-            );
+            await ref
+                .read(customerRepositoryProvider)
+                .createCustomer(name: name, phone: phone);
             _load();
           } catch (_) {}
         },

@@ -1,16 +1,23 @@
-import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 
-import 'package:http/http.dart' as http;
+import 'package:drift/drift.dart' show Variable;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/app_meta_dao.dart';
+import '../../../../core/di/database_providers.dart';
 import '../../../../core/network/api_client.dart';
-import '../../../../core/sync/sync_config.dart';
 import '../../inventory/data/models/inventory_product.dart';
 import 'models/cart_item.dart';
 import 'sale_model.dart';
+
+/// Riverpod provider that hands out a singleton [PosRepository] bound to the
+/// app's Drift database. Consumers should obtain the repo via
+/// `ref.read(posRepositoryProvider)` rather than instantiating it directly.
+final posRepositoryProvider = Provider<PosRepository>((ref) {
+  return PosRepository(database: ref.watch(appDatabaseProvider));
+});
 
 class CheckoutRequest {
   final List<CartItem> items;
@@ -26,197 +33,83 @@ class CheckoutRequest {
   });
 }
 
+/// POS-domain service. Owns sale checkout, barcode lookup, and aggregate
+/// reporting against the local Drift database.
 class PosRepository {
-  PosRepository._();
-  static final PosRepository instance = PosRepository._();
+  PosRepository({required AppDatabase database})
+    : _database = database,
+      _appMeta = AppMetaDao(database);
 
+  final AppDatabase _database;
+  final AppMetaDao _appMeta;
   static const _uuid = Uuid();
-  static const _timeout = Duration(seconds: 15);
-  final _db = AppDatabase.instance;
 
-  // ─── helpers ──────────────────────────────────────────────────────────────
+  // ───── SQL helpers ─────────────────────────────────────────────────────────
+
+  /// `created_at_ms` (int) projected as an ISO-8601 string so legacy
+  /// `*.fromLocalDb` factories keep working unchanged after the Drift cutover.
+  static const String _createdAtAlias =
+      "strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') "
+      "AS created_at";
+
+  static const String _updatedAtAlias =
+      "strftime('%Y-%m-%dT%H:%M:%fZ', updated_at_ms / 1000.0, 'unixepoch') "
+      "AS updated_at";
+
+  static const String _expirationDateAlias =
+      "CASE WHEN expiration_date_ms IS NULL THEN NULL ELSE "
+      "strftime('%Y-%m-%dT%H:%M:%fZ', expiration_date_ms / 1000.0, "
+      "'unixepoch') END AS expiration_date";
+
+  /// Column list that translates the new `products` schema back to the legacy
+  /// shape consumed by [InventoryProduct.fromLocalDb].
+  static const String _productProjection =
+      'id AS sync_id, id AS server_id, name, sku, description, category, '
+      'base_unit, cost_price, selling_price, stock_in_base_unit, '
+      'reorder_point, is_active, is_deleted, image_url, '
+      'image_local_path AS image_path, shelf_location, '
+      "$_expirationDateAlias, $_createdAtAlias, $_updatedAtAlias";
+
+  static const String _saleProjection =
+      'id AS sync_id, id AS server_id, reference, note, subtotal, '
+      'total_amount, paid_amount, change_amount, total_items, '
+      "$_createdAtAlias";
+
+  Future<List<Map<String, Object?>>> _selectRows(
+    String sql, {
+    List<Variable> variables = const [],
+  }) async {
+    final result = await _database
+        .customSelect(sql, variables: variables)
+        .get();
+    return result
+        .map((row) => Map<String, Object?>.from(row.data))
+        .toList(growable: false);
+  }
+
+  // ───── helpers ─────────────────────────────────────────────────────────────
 
   String _generateReference() {
     final now = DateTime.now();
     final rand = Random().nextInt(9999).toString().padLeft(4, '0');
-    return 'TXN-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-$rand';
+    return 'TXN-${now.year}'
+        '${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}-$rand';
   }
 
-  Future<TtSale> _buildSale(Map<String, Object?> row) async {
-    final db = await _db.database;
-    final saleSyncId = row['sync_id'] as String;
-    final itemRows = await db.query(
-      AppDatabase.ttSaleItemsTable,
-      where: 'sale_sync_id = ?',
-      whereArgs: [saleSyncId],
+  Future<TtSale> _buildSale(Map<String, Object?> saleRow) async {
+    final saleId = saleRow['sync_id'] as String;
+    final itemRows = await _selectRows(
+      'SELECT si.*, si.sale_id AS sale_sync_id, '
+      'si.product_id AS product_sync_id, NULL AS product_server_id, '
+      "p.name AS product_name "
+      'FROM sale_items si '
+      'LEFT JOIN products p ON p.id = si.product_id '
+      'WHERE si.sale_id = ?',
+      variables: [Variable<String>(saleId)],
     );
     final items = itemRows.map(TtSaleItem.fromLocalDb).toList();
-    return TtSale.fromLocalDb(row, items);
-  }
-
-  // ─── public API ───────────────────────────────────────────────────────────
-
-  Future<InventoryProduct?> findProductBySku(String scannedCode) async {
-    final normalizedInput = _normalizeBarcode(scannedCode);
-    if (normalizedInput.isEmpty) return null;
-
-    final db = await _db.database;
-    final rows = await db.query(
-      AppDatabase.ttProductsTable,
-      where: 'is_deleted = 0 AND is_active = 1',
-      orderBy: 'name ASC',
-    );
-
-    InventoryProduct? bestMatch;
-    for (final row in rows) {
-      final product = InventoryProduct.fromLocalDb(row);
-      final productSku = _normalizeBarcode(product.sku);
-      if (productSku.isEmpty) continue;
-      if (_isBarcodeMatch(productSku, normalizedInput)) {
-        bestMatch = product;
-        break;
-      }
-    }
-
-    return bestMatch;
-  }
-
-  Future<TtSale> checkout(CheckoutRequest request) async {
-    if (request.items.isEmpty) {
-      throw Exception(
-        'Walang item sa checkout queue. Mag-add muna bago mag-checkout.',
-      );
-    }
-
-    if (request.paidAmount < 0) {
-      throw Exception('Hindi puwedeng negative ang amount received.');
-    }
-
-    final db = await _db.database;
-    final deviceId = request.deviceId ?? await _db.getOrCreateDeviceId();
-    final now = DateTime.now().toIso8601String();
-    final saleSyncId = _uuid.v4();
-    final reference = _generateReference();
-
-    double subtotal = 0;
-    final totalItems = request.items.length;
-    final enrichedItems = <Map<String, Object?>>[];
-
-    await db.transaction((txn) async {
-      for (final item in request.items) {
-        // Look up the product row to get sync_id / server_id
-        final productRows = await txn.query(
-          AppDatabase.ttProductsTable,
-          where: 'server_id = ? OR sync_id = ?',
-          whereArgs: [item.product.id, item.product.id],
-          limit: 1,
-        );
-        if (productRows.isEmpty) {
-          throw Exception('Product not found: ${item.product.name}');
-        }
-        final pRow = productRows.first;
-        final pSyncId = pRow['sync_id'] as String;
-        final pServerId = pRow['server_id'] as String?;
-        final baseUnit =
-            (pRow['base_unit'] as String?) ?? (pRow['unit'] as String?) ?? 'pc';
-        final selectedUnit = item.selectedUnitName;
-
-        double conversionFactor = 1;
-        if (selectedUnit.toLowerCase() != baseUnit.toLowerCase()) {
-          final conversionRows = await txn.query(
-            AppDatabase.ttProductConversionsTable,
-            where:
-                'product_id = ? AND LOWER(unit_name) = LOWER(?) AND is_deleted = 0',
-            whereArgs: [pSyncId, selectedUnit],
-            limit: 1,
-          );
-          if (conversionRows.isEmpty) {
-            throw Exception(
-              'Hindi naka-set ang unit na $selectedUnit para sa ${item.product.name}.',
-            );
-          }
-          conversionFactor = (conversionRows.first['conversion_factor'] as num)
-              .toDouble();
-        }
-
-        final computedBaseQuantity = item.quantity * conversionFactor;
-        final currentBaseStock =
-            (pRow['stock_in_base_unit'] as num?)?.toDouble() ??
-            (pRow['stock_quantity'] as num?)?.toDouble() ??
-            0;
-        if (computedBaseQuantity > currentBaseStock) {
-          throw Exception('Kulang ang stocks para sa ${item.product.name}.');
-        }
-
-        final lineTotal = item.appliedPrice * item.quantity;
-        subtotal += lineTotal;
-
-        enrichedItems.add({
-          'sale_sync_id': saleSyncId,
-          'product_sync_id': pSyncId,
-          'product_server_id': pServerId,
-          'product_name': item.product.name,
-          'selected_unit': selectedUnit,
-          'quantity': item.quantity,
-          'unit_price': item.appliedPrice,
-          'computed_base_quantity': computedBaseQuantity,
-          'line_total': lineTotal,
-        });
-
-        final newBaseStock = currentBaseStock - computedBaseQuantity;
-        await txn.update(
-          AppDatabase.ttProductsTable,
-          {
-            'stock_in_base_unit': newBaseStock,
-            'stock_quantity': max(0, newBaseStock.floor()),
-            'is_dirty': 1,
-            'updated_at': now,
-          },
-          where: 'sync_id = ?',
-          whereArgs: [pSyncId],
-        );
-      }
-
-      final totalAmount = subtotal;
-      if (request.paidAmount < totalAmount) {
-        throw Exception(
-          'Kulangan ang binayad. Paki-check ulit bago mag-checkout.',
-        );
-      }
-      final changeAmount = request.paidAmount - totalAmount;
-
-      await txn.insert(AppDatabase.ttSalesTable, {
-        'sync_id': saleSyncId,
-        'server_id': null,
-        'device_id': deviceId,
-        'reference': reference,
-        'note': request.note ?? '',
-        'subtotal': subtotal,
-        'total_amount': totalAmount,
-        'paid_amount': request.paidAmount,
-        'change_amount': changeAmount,
-        'total_items': totalItems,
-        'is_dirty': 1,
-        'created_at': now,
-      });
-
-      for (final item in enrichedItems) {
-        await txn.insert(AppDatabase.ttSaleItemsTable, item);
-      }
-    });
-
-    final totalAmount = subtotal;
-    final changeAmount = request.paidAmount - totalAmount;
-
-    final saleRows = await db.query(
-      AppDatabase.ttSalesTable,
-      where: 'sync_id = ?',
-      whereArgs: [saleSyncId],
-      limit: 1,
-    );
-    final sale = await _buildSale(saleRows.first);
-    unawaited(_pushCheckout(saleSyncId));
-    return sale;
+    return TtSale.fromLocalDb(saleRow, items);
   }
 
   String _normalizeBarcode(String value) {
@@ -233,29 +126,191 @@ class PosRepository {
     return _stripLeadingZeros(sku) == _stripLeadingZeros(scanned);
   }
 
-  Future<List<TtSale>> listSales({int? limit, String? from, String? to}) async {
-    final db = await _db.database;
-    var rows = await db.query(
-      AppDatabase.ttSalesTable,
-      orderBy: 'created_at DESC',
-      limit: limit,
+  // ───── public API ──────────────────────────────────────────────────────────
+
+  Future<InventoryProduct?> findProductBySku(String scannedCode) async {
+    final normalizedInput = _normalizeBarcode(scannedCode);
+    if (normalizedInput.isEmpty) return null;
+
+    final rows = await _selectRows(
+      'SELECT $_productProjection FROM products '
+      'WHERE COALESCE(is_deleted, 0) = 0 AND COALESCE(is_active, 1) = 1 '
+      'ORDER BY name ASC',
     );
+
+    for (final row in rows) {
+      final product = InventoryProduct.fromLocalDb(row);
+      final productSku = _normalizeBarcode(product.sku);
+      if (productSku.isEmpty) continue;
+      if (_isBarcodeMatch(productSku, normalizedInput)) {
+        return product;
+      }
+    }
+    return null;
+  }
+
+  Future<TtSale> checkout(CheckoutRequest request) async {
+    if (request.items.isEmpty) {
+      throw Exception(
+        'Walang item sa checkout queue. Mag-add muna bago mag-checkout.',
+      );
+    }
+    if (request.paidAmount < 0) {
+      throw Exception('Hindi puwedeng negative ang amount received.');
+    }
+
+    final deviceId = request.deviceId ?? await _appMeta.getOrCreateDeviceId();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final saleId = _uuid.v4();
+    final reference = _generateReference();
+
+    double subtotal = 0;
+    final totalItems = request.items.length;
+    final enrichedItems = <_EnrichedSaleItem>[];
+
+    await _database.transaction(() async {
+      for (final item in request.items) {
+        // Look up product row by canonical id.
+        final productRows = await _selectRows(
+          'SELECT id, name, base_unit, stock_in_base_unit '
+          'FROM products WHERE id = ? LIMIT 1',
+          variables: [Variable<String>(item.product.id)],
+        );
+        if (productRows.isEmpty) {
+          throw Exception('Product not found: ${item.product.name}');
+        }
+        final pRow = productRows.first;
+        final productId = pRow['id'] as String;
+        final baseUnit = (pRow['base_unit'] as String?) ?? 'pc';
+        final selectedUnit = item.selectedUnitName;
+
+        double conversionFactor = 1;
+        if (selectedUnit.toLowerCase() != baseUnit.toLowerCase()) {
+          final conversionRows = await _selectRows(
+            'SELECT conversion_factor FROM product_unit_conversions '
+            'WHERE product_id = ? AND LOWER(unit_name) = LOWER(?) '
+            'AND COALESCE(is_deleted, 0) = 0 LIMIT 1',
+            variables: [
+              Variable<String>(productId),
+              Variable<String>(selectedUnit),
+            ],
+          );
+          if (conversionRows.isEmpty) {
+            throw Exception(
+              'Hindi naka-set ang unit na $selectedUnit para sa '
+              '${item.product.name}.',
+            );
+          }
+          conversionFactor = (conversionRows.first['conversion_factor'] as num)
+              .toDouble();
+        }
+
+        final computedBaseQuantity = item.quantity * conversionFactor;
+        final currentBaseStock =
+            (pRow['stock_in_base_unit'] as num?)?.toDouble() ?? 0;
+        if (computedBaseQuantity > currentBaseStock) {
+          throw Exception('Kulang ang stocks para sa ${item.product.name}.');
+        }
+
+        final lineTotal = item.appliedPrice * item.quantity;
+        subtotal += lineTotal;
+
+        enrichedItems.add(
+          _EnrichedSaleItem(
+            productId: productId,
+            selectedUnit: selectedUnit,
+            quantity: item.quantity,
+            unitPrice: item.appliedPrice,
+            computedBaseQuantity: computedBaseQuantity,
+            lineTotal: lineTotal,
+          ),
+        );
+
+        final newBaseStock = currentBaseStock - computedBaseQuantity;
+        await _database.customStatement(
+          'UPDATE products SET stock_in_base_unit = ?, is_dirty = 1, '
+          'updated_at_ms = ? WHERE id = ?',
+          [newBaseStock, nowMs, productId],
+        );
+      }
+
+      final totalAmount = subtotal;
+      if (request.paidAmount < totalAmount) {
+        throw Exception(
+          'Kulangan ang binayad. Paki-check ulit bago mag-checkout.',
+        );
+      }
+      final changeAmount = request.paidAmount - totalAmount;
+
+      await _database.customStatement(
+        'INSERT INTO sales ('
+        'id, reference, note, subtotal, total_amount, paid_amount, '
+        'change_amount, total_items, '
+        'sync_id, device_id, is_deleted, is_dirty, '
+        'created_at_ms, updated_at_ms'
+        ') VALUES (?,?,?,?,?,?,?,?,?,?,0,1,?,?)',
+        [
+          saleId,
+          reference,
+          request.note ?? '',
+          subtotal,
+          totalAmount,
+          request.paidAmount,
+          changeAmount,
+          totalItems,
+          saleId,
+          deviceId,
+          nowMs,
+          nowMs,
+        ],
+      );
+
+      for (final item in enrichedItems) {
+        await _database.customStatement(
+          'INSERT INTO sale_items ('
+          'id, sale_id, product_id, selected_unit, quantity, unit_price, '
+          'computed_base_quantity, line_total, created_at_ms, is_dirty'
+          ') VALUES (?,?,?,?,?,?,?,?,?,1)',
+          [
+            _uuid.v4(),
+            saleId,
+            item.productId,
+            item.selectedUnit,
+            item.quantity,
+            item.unitPrice,
+            item.computedBaseQuantity,
+            item.lineTotal,
+            nowMs,
+          ],
+        );
+      }
+    });
+
+    final saleRows = await _selectRows(
+      'SELECT $_saleProjection FROM sales WHERE id = ? LIMIT 1',
+      variables: [Variable<String>(saleId)],
+    );
+    return _buildSale(saleRows.first);
+  }
+
+  Future<List<TtSale>> listSales({int? limit, String? from, String? to}) async {
+    final whereClauses = <String>['COALESCE(is_deleted, 0) = 0'];
+    final variables = <Variable>[];
     if (from != null) {
-      final fromDt = DateTime.parse(from);
-      rows = rows
-          .where(
-            (r) => DateTime.parse(r['created_at'] as String).isAfter(fromDt),
-          )
-          .toList();
+      whereClauses.add('created_at_ms > ?');
+      variables.add(Variable<int>(DateTime.parse(from).millisecondsSinceEpoch));
     }
     if (to != null) {
-      final toDt = DateTime.parse(to);
-      rows = rows
-          .where(
-            (r) => DateTime.parse(r['created_at'] as String).isBefore(toDt),
-          )
-          .toList();
+      whereClauses.add('created_at_ms < ?');
+      variables.add(Variable<int>(DateTime.parse(to).millisecondsSinceEpoch));
     }
+    final limitClause = limit == null ? '' : ' LIMIT $limit';
+    final rows = await _selectRows(
+      'SELECT $_saleProjection FROM sales '
+      'WHERE ${whereClauses.join(' AND ')} '
+      'ORDER BY created_at_ms DESC$limitClause',
+      variables: variables,
+    );
     return Future.wait(rows.map(_buildSale));
   }
 
@@ -271,61 +326,45 @@ class PosRepository {
   }
 
   Future<DashboardStats> _localDashboardStats() async {
-    final db = await _db.database;
     final today = DateTime.now();
-    final todayStart = DateTime(today.year, today.month, today.day);
+    final todayStartMs = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).millisecondsSinceEpoch;
 
-    final salesRows = await db.query(AppDatabase.ttSalesTable);
-    final todaySales = salesRows
-        .where(
-          (r) => DateTime.parse(r['created_at'] as String).isAfter(todayStart),
-        )
-        .toList();
-
-    final totalSales = todaySales.fold<double>(
-      0,
-      (s, r) => s + (r['total_amount'] as num).toDouble(),
+    final salesAgg = await _selectRows(
+      'SELECT COALESCE(SUM(total_amount), 0) AS total_sales, '
+      'COUNT(*) AS tx_count FROM sales '
+      'WHERE COALESCE(is_deleted, 0) = 0 AND created_at_ms >= ?',
+      variables: [Variable<int>(todayStartMs)],
     );
-    final transactions = todaySales.length;
+    final totalSales = (salesAgg.first['total_sales'] as num).toDouble();
+    final transactions = (salesAgg.first['tx_count'] as num).toInt();
 
-    final productRows = await db.query(
-      AppDatabase.ttProductsTable,
-      where: 'is_deleted = 0 AND is_active = 1',
+    final lowStockRows = await _selectRows(
+      'SELECT id, name, stock_in_base_unit, reorder_point FROM products '
+      'WHERE COALESCE(is_deleted, 0) = 0 AND COALESCE(is_active, 1) = 1 '
+      'AND stock_in_base_unit > 0 '
+      'AND stock_in_base_unit <= reorder_point',
     );
-    final lowStock = productRows
-        .where(
-          (r) =>
-              ((r['stock_in_base_unit'] as num?)?.toDouble() ??
-                      (r['stock_quantity'] as num?)?.toDouble() ??
-                      0) <=
-                  (r['reorder_point'] as int) &&
-              ((r['stock_in_base_unit'] as num?)?.toDouble() ??
-                      (r['stock_quantity'] as num?)?.toDouble() ??
-                      0) >
-                  0,
-        )
+    final lowStock = lowStockRows
         .map(
           (r) => LowStockProduct(
-            id: (r['server_id'] as String?) ?? r['sync_id'] as String,
+            id: r['id'] as String,
             name: r['name'] as String,
-            stockQuantity:
-                ((r['stock_in_base_unit'] as num?)?.toDouble() ??
-                        (r['stock_quantity'] as num?)?.toDouble() ??
-                        0)
-                    .floor(),
-            reorderPoint: r['reorder_point'] as int,
+            stockQuantity: ((r['stock_in_base_unit'] as num).toDouble())
+                .floor(),
+            reorderPoint: (r['reorder_point'] as num).toInt(),
           ),
         )
         .toList();
 
-    final customerRows = await db.query(
-      AppDatabase.ttCustomersTable,
-      where: 'is_deleted = 0',
+    final utangAgg = await _selectRows(
+      'SELECT COALESCE(SUM(amount), 0) AS total_utang FROM utang_records '
+      'WHERE COALESCE(is_deleted, 0) = 0',
     );
-    final totalUtang = customerRows.fold<double>(
-      0,
-      (s, r) => s + (r['balance'] as num).toDouble(),
-    );
+    final totalUtang = (utangAgg.first['total_utang'] as num).toDouble();
 
     return DashboardStats(
       today: TodayStats(
@@ -335,7 +374,7 @@ class PosRepository {
       ),
       lowStockProducts: lowStock,
       totalOutstandingUtang: totalUtang,
-      topProductsThisWeek: [],
+      topProductsThisWeek: const [],
     );
   }
 
@@ -352,7 +391,7 @@ class PosRepository {
         response.data['data'] as Map<String, dynamic>,
       );
     } catch (_) {
-      return ReportsData(
+      return const ReportsData(
         summary: ReportSummary(
           totalSales: 0,
           totalProfit: 0,
@@ -363,96 +402,24 @@ class PosRepository {
       );
     }
   }
+}
 
-  // ─── background push ──────────────────────────────────────────────────────
+class _EnrichedSaleItem {
+  final String productId;
+  final String selectedUnit;
+  final double quantity;
+  final double unitPrice;
+  final double computedBaseQuantity;
+  final double lineTotal;
 
-  Future<void> _pushCheckout(String saleSyncId) async {
-    try {
-      final db = await _db.database;
-      final saleRows = await db.query(
-        AppDatabase.ttSalesTable,
-        where: 'sync_id = ?',
-        whereArgs: [saleSyncId],
-        limit: 1,
-      );
-      if (saleRows.isEmpty) return;
-      final sale = saleRows.first;
-
-      final itemRows = await db.query(
-        AppDatabase.ttSaleItemsTable,
-        where: 'sale_sync_id = ?',
-        whereArgs: [saleSyncId],
-      );
-
-      // Refresh product_server_id in case products were pushed concurrently
-      for (final item in itemRows) {
-        if (item['product_server_id'] != null) continue;
-        final pSyncId = item['product_sync_id'] as String;
-        final pRows = await db.query(
-          AppDatabase.ttProductsTable,
-          where: 'sync_id = ?',
-          whereArgs: [pSyncId],
-          limit: 1,
-        );
-        if (pRows.isNotEmpty && pRows.first['server_id'] != null) {
-          await db.update(
-            AppDatabase.ttSaleItemsTable,
-            {'product_server_id': pRows.first['server_id']},
-            where: 'sale_sync_id = ? AND product_sync_id = ?',
-            whereArgs: [saleSyncId, pSyncId],
-          );
-        }
-      }
-
-      // Re-query after refresh
-      final refreshedItems = await db.query(
-        AppDatabase.ttSaleItemsTable,
-        where: 'sale_sync_id = ?',
-        whereArgs: [saleSyncId],
-      );
-
-      // Only push if all products have server_ids (else SyncService will retry)
-      final allHaveServerIds = refreshedItems.every(
-        (r) => r['product_server_id'] != null,
-      );
-      if (!allHaveServerIds) return;
-
-      final baseUrl = await SyncConfig.getBaseApiUrl();
-      final res = await http
-          .post(
-            Uri.parse('$baseUrl/pos/checkout'),
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'reference': sale['reference'],
-              'paidAmount': sale['paid_amount'],
-              if ((sale['note'] as String).isNotEmpty) 'note': sale['note'],
-              'deviceId': sale['device_id'],
-              'items': refreshedItems
-                  .map(
-                    (r) => {
-                      'productId': r['product_server_id'],
-                      'quantity': r['quantity'],
-                      'selectedUnit': r['selected_unit'],
-                      'unitPrice': r['unit_price'],
-                      'computedBaseQuantity': r['computed_base_quantity'],
-                    },
-                  )
-                  .toList(),
-            }),
-          )
-          .timeout(_timeout);
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final data = jsonDecode(res.body)['data'] as Map<String, dynamic>;
-        await db.update(
-          AppDatabase.ttSalesTable,
-          {'server_id': data['id'] as String, 'is_dirty': 0},
-          where: 'sync_id = ?',
-          whereArgs: [saleSyncId],
-        );
-      }
-    } catch (_) {}
-  }
+  const _EnrichedSaleItem({
+    required this.productId,
+    required this.selectedUnit,
+    required this.quantity,
+    required this.unitPrice,
+    required this.computedBaseQuantity,
+    required this.lineTotal,
+  });
 }
 
 class TodayStats {

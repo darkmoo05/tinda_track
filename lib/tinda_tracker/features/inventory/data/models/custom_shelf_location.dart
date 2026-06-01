@@ -1,11 +1,13 @@
-/// Domain model for a user-managed shelf / store location stored in [tt_shelf_locations].
-///
-/// Keeps both an `imagePath` (local file URI, survives offline) and an
-/// `imageUrl` (server URL, set after a successful multipart upload). The
-/// management UI renders `imagePath` first whenever available so freshly
-/// captured photos appear immediately regardless of sync state.
+// Domain model for a user-managed shelf / store location stored in [tt_shelf_locations].
+//
+// Keeps both an `imagePath` (local file URI, survives offline) and an
+// `imageUrl` (server URL, set after a successful multipart upload). The
+// management UI renders `imagePath` first whenever available so freshly
+// captured photos appear immediately regardless of sync state.
+import '../../../../../core/database/app_database.dart';
+
 class CustomShelfLocation {
-  final int localId;
+  final String localId;
   final String syncId;
   final String? serverId;
   final String name;
@@ -35,7 +37,7 @@ class CustomShelfLocation {
 
   factory CustomShelfLocation.fromLocalDb(Map<String, dynamic> row) {
     return CustomShelfLocation(
-      localId: row['id'] as int,
+      localId: row['id'] as String,
       syncId: row['sync_id'] as String,
       serverId: row['server_id'] as String?,
       name: row['name'] as String,
@@ -47,6 +49,24 @@ class CustomShelfLocation {
       isDirty: (row['is_dirty'] as int? ?? 1) == 1,
       createdAt: DateTime.parse(row['created_at'] as String),
       updatedAt: DateTime.parse(row['updated_at'] as String),
+    );
+  }
+
+  /// Typed Drift constructor — preferred over [fromLocalDb] for new code.
+  factory CustomShelfLocation.fromRow(ShelfLocationRow row) {
+    return CustomShelfLocation(
+      localId: row.id,
+      syncId: row.syncId,
+      serverId: row.id,
+      name: row.name,
+      description: row.description,
+      examples: row.examples,
+      imagePath: row.imageLocalPath,
+      imageUrl: row.imageUrl,
+      isDeleted: row.isDeleted,
+      isDirty: row.isDirty,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(row.createdAtMs),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs),
     );
   }
 

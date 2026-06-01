@@ -1,13 +1,87 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/app_theme.dart';
-import '../../../../core/database/app_database.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
-import '../data/charge_repository.dart';
+import '../../../../core/domain/sync_metadata.dart';
+import '../../transactions/data/fixed_transaction_type.dart';
+import '../domain/entities/charge.dart';
+import '../presentation/providers/charge_providers.dart';
 
-class ChargesScreen extends StatefulWidget {
+enum _ChargeRepoErrorCode {
+  overlapRange,
+  updateTargetMissing,
+  lowerBoundNonPositive,
+  upperBoundTooSmall,
+  chargeNegative,
+  chargeTooHigh,
+}
+
+class _ChargeRepositoryError {
+  const _ChargeRepositoryError({
+    required this.code,
+    this.maxAllowed,
+    this.upperBound,
+  });
+
+  final _ChargeRepoErrorCode code;
+  final double? maxAllowed;
+  final int? upperBound;
+}
+
+_ChargeRepositoryError? _validateBracketInput({
+  required int lowerBound,
+  required int upperBound,
+  required double chargeAmount,
+}) {
+  if (lowerBound <= 0) {
+    return const _ChargeRepositoryError(
+      code: _ChargeRepoErrorCode.lowerBoundNonPositive,
+    );
+  }
+  if (upperBound <= lowerBound) {
+    return const _ChargeRepositoryError(
+      code: _ChargeRepoErrorCode.upperBoundTooSmall,
+    );
+  }
+  if (chargeAmount < 0) {
+    return const _ChargeRepositoryError(
+      code: _ChargeRepoErrorCode.chargeNegative,
+    );
+  }
+  final maxAllowed = upperBound * 0.10;
+  if (chargeAmount > maxAllowed) {
+    return _ChargeRepositoryError(
+      code: _ChargeRepoErrorCode.chargeTooHigh,
+      maxAllowed: maxAllowed,
+      upperBound: upperBound,
+    );
+  }
+  return null;
+}
+
+bool _hasOverlap(
+  List<Charge> existing,
+  int lowerBound,
+  int upperBound, {
+  String? excludedId,
+  required String typeKey,
+}) {
+  for (final c in existing) {
+    if (c.transactionTypeKey != typeKey) continue;
+    if (excludedId != null && c.id == excludedId) continue;
+    final low = c.lowerBound;
+    final high = c.upperBound;
+    if (lowerBound <= high && upperBound >= low) {
+      return true;
+    }
+  }
+  return false;
+}
+
+class ChargesScreen extends ConsumerStatefulWidget {
   const ChargesScreen({
     super.key,
     this.openDrawer,
@@ -20,10 +94,10 @@ class ChargesScreen extends StatefulWidget {
   final String? initialTypeKey;
 
   @override
-  State<ChargesScreen> createState() => _ChargesScreenState();
+  ConsumerState<ChargesScreen> createState() => _ChargesScreenState();
 }
 
-class _ChargesScreenState extends State<ChargesScreen> {
+class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   static const List<String> _serviceOptionKeys = [
     'cashin',
     'cashout',
@@ -36,7 +110,6 @@ class _ChargesScreenState extends State<ChargesScreen> {
   final _lowerBoundController = TextEditingController();
   final _upperBoundController = TextEditingController();
   final _chargeAmountController = TextEditingController();
-  final ChargeRepository _chargeRepository = ChargeRepository.instance;
   late String _selectedTypeKey;
   bool _helpExpanded = false;
 
@@ -57,19 +130,22 @@ class _ChargesScreenState extends State<ChargesScreen> {
     }
   }
 
-  String _localizeRepoError(BuildContext context, ChargeRepositoryError error) {
+  String _localizeRepoError(
+    BuildContext context,
+    _ChargeRepositoryError error,
+  ) {
     switch (error.code) {
-      case ChargeRepoErrorCode.overlapRange:
+      case _ChargeRepoErrorCode.overlapRange:
         return context.l10n.chargeErrorOverlapRange;
-      case ChargeRepoErrorCode.updateTargetMissing:
+      case _ChargeRepoErrorCode.updateTargetMissing:
         return context.l10n.chargeErrorUpdateTargetMissing;
-      case ChargeRepoErrorCode.lowerBoundNonPositive:
+      case _ChargeRepoErrorCode.lowerBoundNonPositive:
         return context.l10n.chargeErrorLowerBoundNonPositive;
-      case ChargeRepoErrorCode.upperBoundTooSmall:
+      case _ChargeRepoErrorCode.upperBoundTooSmall:
         return context.l10n.chargeErrorUpperBoundTooSmall;
-      case ChargeRepoErrorCode.chargeNegative:
+      case _ChargeRepoErrorCode.chargeNegative:
         return context.l10n.chargeErrorNegative;
-      case ChargeRepoErrorCode.chargeTooHigh:
+      case _ChargeRepoErrorCode.chargeTooHigh:
         return context.l10n.chargeErrorTooHigh(
           (error.maxAllowed ?? 0).toStringAsFixed(2),
           (error.upperBound ?? 0).toString(),
@@ -82,7 +158,6 @@ class _ChargesScreenState extends State<ChargesScreen> {
     super.initState();
     _selectedTypeKey =
         widget.initialTypeKey ?? FixedTransactionType.all.first.key;
-    _chargeRepository.ensureLoaded();
   }
 
   @override
@@ -149,11 +224,12 @@ class _ChargesScreenState extends State<ChargesScreen> {
           const SizedBox(height: 24),
           _buildHelpSection(),
           const SizedBox(height: 24),
-          ValueListenableBuilder<List<ChargeBracketRecord>>(
-            valueListenable: _chargeRepository.brackets,
-            builder: (context, brackets, child) {
-              final filtered = brackets
-                  .where((b) => b.transactionTypeKey == _selectedTypeKey)
+          Consumer(
+            builder: (context, ref, _) {
+              final asyncCharges = ref.watch(chargesStreamProvider(null));
+              final all = asyncCharges.value ?? const <Charge>[];
+              final filtered = all
+                  .where((c) => c.transactionTypeKey == _selectedTypeKey)
                   .toList();
               return _buildActiveTiersSection(context, filtered);
             },
@@ -840,10 +916,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
     );
   }
 
-  Widget _buildActiveTiersSection(
-    BuildContext context,
-    List<ChargeBracketRecord> brackets,
-  ) {
+  Widget _buildActiveTiersSection(BuildContext context, List<Charge> brackets) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -921,11 +994,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
     );
   }
 
-  Widget _buildTierCard(
-    BuildContext context,
-    ChargeBracketRecord bracket,
-    int tierNumber,
-  ) {
+  Widget _buildTierCard(BuildContext context, Charge bracket, int tierNumber) {
     String getTierDescription() {
       if (bracket.lowerBound <= 1000 && bracket.upperBound <= 5000) {
         return context.l10n.smallTransactions;
@@ -972,7 +1041,7 @@ class _ChargesScreenState extends State<ChargesScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '₱${bracket.lowerBound} — ₱${bracket.upperBound}',
+                      '₱${bracket.lowerBound.toInt()} — ₱${bracket.upperBound.toInt()}',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -1084,22 +1153,58 @@ class _ChargesScreenState extends State<ChargesScreen> {
       return;
     }
 
-    final error = await _chargeRepository.addBracket(
+    final validationError = _validateBracketInput(
       lowerBound: lowerBound,
       upperBound: upperBound,
       chargeAmount: chargeAmount,
+    );
+    if (validationError != null) {
+      _showMessage(_localizeRepoError(context, validationError), isError: true);
+      return;
+    }
+
+    final existing =
+        ref.read(chargesStreamProvider(null)).value ?? const <Charge>[];
+    if (_hasOverlap(
+      existing,
+      lowerBound,
+      upperBound,
+      typeKey: _selectedTypeKey,
+    )) {
+      _showMessage(
+        _localizeRepoError(
+          context,
+          const _ChargeRepositoryError(code: _ChargeRepoErrorCode.overlapRange),
+        ),
+        isError: true,
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    final newCharge = Charge(
+      id: '',
+      lowerBound: lowerBound.toDouble(),
+      upperBound: upperBound.toDouble(),
+      chargeAmount: chargeAmount,
       transactionTypeKey: _selectedTypeKey,
+      sync: SyncMetadata(
+        syncId: '',
+        createdAt: now,
+        updatedAt: now,
+        isDirty: true,
+      ),
     );
 
-    if (!mounted) {
+    try {
+      await ref.read(chargesNotifierProvider.notifier).save(newCharge);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage(context.l10n.chargeInputInvalid, isError: true);
       return;
     }
 
-    if (error != null) {
-      _showMessage(_localizeRepoError(context, error), isError: true);
-      return;
-    }
-
+    if (!mounted) return;
     _lowerBoundController.clear();
     _upperBoundController.clear();
     _chargeAmountController.clear();
@@ -1116,23 +1221,20 @@ class _ChargesScreenState extends State<ChargesScreen> {
     return double.tryParse(normalized);
   }
 
-  Future<void> _editBracket(ChargeBracketRecord bracket) async {
+  Future<void> _editBracket(Charge bracket) async {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: _ChargeBracketDialog(
-            repository: _chargeRepository,
-            bracket: bracket,
-          ),
+          child: _ChargeBracketDialog(bracket: bracket),
         ),
       ),
     );
   }
 
-  Future<void> _deleteBracket(ChargeBracketRecord bracket) async {
+  Future<void> _deleteBracket(Charge bracket) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1171,8 +1273,8 @@ class _ChargesScreenState extends State<ChargesScreen> {
               const SizedBox(height: 8),
               Text(
                 context.l10n.deleteBracketMessage(
-                  bracket.lowerBound.toString(),
-                  bracket.upperBound.toString(),
+                  bracket.lowerBound.toInt().toString(),
+                  bracket.upperBound.toInt().toString(),
                 ),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
@@ -1232,7 +1334,14 @@ class _ChargesScreenState extends State<ChargesScreen> {
       return;
     }
 
-    final deleted = await _chargeRepository.deleteBracket(bracket.id);
+    final deleted = await () async {
+      try {
+        await ref.read(chargesNotifierProvider.notifier).delete(bracket.id);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }();
     if (!mounted) {
       return;
     }
@@ -1280,36 +1389,39 @@ class _ChargesScreenState extends State<ChargesScreen> {
   }
 }
 
-class _ChargeBracketDialog extends StatefulWidget {
-  const _ChargeBracketDialog({required this.repository, required this.bracket});
+class _ChargeBracketDialog extends ConsumerStatefulWidget {
+  const _ChargeBracketDialog({required this.bracket});
 
-  final ChargeRepository repository;
-  final ChargeBracketRecord bracket;
+  final Charge bracket;
 
   @override
-  State<_ChargeBracketDialog> createState() => _ChargeBracketDialogState();
+  ConsumerState<_ChargeBracketDialog> createState() =>
+      _ChargeBracketDialogState();
 }
 
-class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
+class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
   late final TextEditingController _lowerBoundController;
   late final TextEditingController _upperBoundController;
   late final TextEditingController _chargeAmountController;
   String? _errorText;
   bool _isSaving = false;
 
-  String _localizeRepoError(BuildContext context, ChargeRepositoryError error) {
+  String _localizeRepoError(
+    BuildContext context,
+    _ChargeRepositoryError error,
+  ) {
     switch (error.code) {
-      case ChargeRepoErrorCode.overlapRange:
+      case _ChargeRepoErrorCode.overlapRange:
         return context.l10n.chargeErrorOverlapRange;
-      case ChargeRepoErrorCode.updateTargetMissing:
+      case _ChargeRepoErrorCode.updateTargetMissing:
         return context.l10n.chargeErrorUpdateTargetMissing;
-      case ChargeRepoErrorCode.lowerBoundNonPositive:
+      case _ChargeRepoErrorCode.lowerBoundNonPositive:
         return context.l10n.chargeErrorLowerBoundNonPositive;
-      case ChargeRepoErrorCode.upperBoundTooSmall:
+      case _ChargeRepoErrorCode.upperBoundTooSmall:
         return context.l10n.chargeErrorUpperBoundTooSmall;
-      case ChargeRepoErrorCode.chargeNegative:
+      case _ChargeRepoErrorCode.chargeNegative:
         return context.l10n.chargeErrorNegative;
-      case ChargeRepoErrorCode.chargeTooHigh:
+      case _ChargeRepoErrorCode.chargeTooHigh:
         return context.l10n.chargeErrorTooHigh(
           (error.maxAllowed ?? 0).toStringAsFixed(2),
           (error.upperBound ?? 0).toString(),
@@ -1321,10 +1433,10 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
   void initState() {
     super.initState();
     _lowerBoundController = TextEditingController(
-      text: widget.bracket.lowerBound.toString(),
+      text: widget.bracket.lowerBound.toInt().toString(),
     );
     _upperBoundController = TextEditingController(
-      text: widget.bracket.upperBound.toString(),
+      text: widget.bracket.upperBound.toInt().toString(),
     );
     _chargeAmountController = TextEditingController(
       text: widget.bracket.chargeAmount.toStringAsFixed(2),
@@ -1356,22 +1468,60 @@ class _ChargeBracketDialogState extends State<_ChargeBracketDialog> {
       _errorText = null;
     });
 
-    final error = await widget.repository.updateBracket(
-      widget.bracket.id,
+    final validationError = _validateBracketInput(
       lowerBound: lowerBound,
       upperBound: upperBound,
       chargeAmount: chargeAmount,
     );
-
-    if (!mounted) {
+    if (validationError != null) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorText = _localizeRepoError(context, validationError);
+      });
       return;
     }
 
-    if (error != null) {
+    final existing =
+        ref.read(chargesStreamProvider(null)).value ?? const <Charge>[];
+    if (_hasOverlap(
+      existing,
+      lowerBound,
+      upperBound,
+      excludedId: widget.bracket.id,
+      typeKey: widget.bracket.transactionTypeKey,
+    )) {
+      if (!mounted) return;
       setState(() {
         _isSaving = false;
-        _errorText = _localizeRepoError(context, error);
+        _errorText = _localizeRepoError(
+          context,
+          const _ChargeRepositoryError(code: _ChargeRepoErrorCode.overlapRange),
+        );
       });
+      return;
+    }
+
+    final now = DateTime.now();
+    final updated = widget.bracket.copyWith(
+      lowerBound: lowerBound.toDouble(),
+      upperBound: upperBound.toDouble(),
+      chargeAmount: chargeAmount,
+      sync: widget.bracket.sync.copyWith(isDirty: true, updatedAt: now),
+    );
+
+    try {
+      await ref.read(chargesNotifierProvider.notifier).save(updated);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorText = context.l10n.chargeInputInvalid;
+      });
+      return;
+    }
+
+    if (!mounted) {
       return;
     }
 

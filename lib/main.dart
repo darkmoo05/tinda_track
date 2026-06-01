@@ -6,8 +6,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
-import 'core/database/app_database.dart';
-import 'core/sync/sync_service.dart';
+import 'core/database/migrations/legacy_sqflite_importer.dart';
+import 'core/di/database_providers.dart';
+import 'core/network/api_client.dart';
+import 'core/sync/sync_config.dart';
+import 'core/sync/sync_orchestrator.dart';
 import 'core/l10n/l10n_extension.dart';
 import 'core/l10n/locale_provider.dart';
 import 'shared/widgets/app_loading_modal.dart';
@@ -18,9 +21,43 @@ enum AppMode { pocketLedger, tindaTracker }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AppDatabase.instance.init();
   await LocaleProvider.instance.load();
-  runApp(const ProviderScope(child: TindaTrackApp()));
+
+  // Build a Riverpod container up-front so we can run one-time DB migrations
+  // and hydrate the API base URL before the first widget is built.
+  final container = ProviderContainer();
+  await _runStartupMigrations(container);
+
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const TindaTrackApp(),
+    ),
+  );
+}
+
+Future<void> _runStartupMigrations(ProviderContainer container) async {
+  try {
+    final db = container.read(appDatabaseProvider);
+    final appMeta = container.read(appMetaDaoProvider);
+    await LegacyImporter(db, appMeta).runIfNeeded();
+  } catch (_) {
+    // Best-effort; the importer marks `failed` so it can retry next launch.
+  }
+
+  // Hydrate the live ApiClient base URL from the persisted setting (or the
+  // compile-time default when unset) so the first sync request hits the
+  // right host.
+  try {
+    final appMeta = container.read(appMetaDaoProvider);
+    final stored = await appMeta.getApiBaseUrl();
+    final url = (stored != null && stored.trim().isNotEmpty)
+        ? stored.trim()
+        : SyncConfig.defaultBaseApiUrl;
+    ApiClient.instance.dio.options = ApiClient.instance.dio.options.copyWith(
+      baseUrl: url,
+    );
+  } catch (_) {}
 }
 
 class TindaTrackApp extends StatelessWidget {
@@ -93,14 +130,14 @@ class _FallbackCupertinoLocalizationsDelegate
   bool shouldReload(_FallbackCupertinoLocalizationsDelegate old) => false;
 }
 
-class StartupSyncGate extends StatefulWidget {
+class StartupSyncGate extends ConsumerStatefulWidget {
   const StartupSyncGate({super.key});
 
   @override
-  State<StartupSyncGate> createState() => _StartupSyncGateState();
+  ConsumerState<StartupSyncGate> createState() => _StartupSyncGateState();
 }
 
-class _StartupSyncGateState extends State<StartupSyncGate> {
+class _StartupSyncGateState extends ConsumerState<StartupSyncGate> {
   bool _ready = false;
   bool _startupTaskStarted = false;
 
@@ -123,7 +160,7 @@ class _StartupSyncGateState extends State<StartupSyncGate> {
     );
 
     try {
-      await SyncService.instance.syncAll();
+      await ref.read(syncOrchestratorProvider).runOnce();
     } catch (_) {
       // Startup should continue even if first sync attempt fails.
     } finally {
@@ -146,14 +183,15 @@ class _StartupSyncGateState extends State<StartupSyncGate> {
   }
 }
 
-class AppModeHost extends StatefulWidget {
+class AppModeHost extends ConsumerStatefulWidget {
   const AppModeHost({super.key});
 
   @override
-  State<AppModeHost> createState() => _AppModeHostState();
+  ConsumerState<AppModeHost> createState() => _AppModeHostState();
 }
 
-class _AppModeHostState extends State<AppModeHost> with WidgetsBindingObserver {
+class _AppModeHostState extends ConsumerState<AppModeHost>
+    with WidgetsBindingObserver {
   AppMode _mode = AppMode.pocketLedger;
   bool _exitSyncInFlight = false;
 
@@ -172,7 +210,7 @@ class _AppModeHostState extends State<AppModeHost> with WidgetsBindingObserver {
         return;
       }
       _exitSyncInFlight = true;
-      SyncService.instance.syncAll().whenComplete(() {
+      ref.read(syncOrchestratorProvider).runOnce().whenComplete(() {
         _exitSyncInFlight = false;
       });
       return;

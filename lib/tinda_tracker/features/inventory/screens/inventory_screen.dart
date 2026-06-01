@@ -1,10 +1,13 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../../core/app_theme.dart';
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/sync/sync_orchestrator.dart';
 import '../../../../shared/widgets/top_alert.dart';
 import '../data/local_inventory_repository.dart';
 import '../data/models/custom_shelf_location.dart';
@@ -160,8 +163,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       ),
     );
     if (confirmed == true) {
-      await LocalInventoryRepository.instance.deleteProduct(product.id);
+      await ref
+          .read(localInventoryRepositoryProvider)
+          .deleteProduct(product.id);
       ref.invalidate(allProductsProvider);
+      unawaited(ref.read(syncOrchestratorProvider).runOnce());
     }
   }
 
@@ -189,10 +195,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     );
     if (confirmed == true) {
       for (final id in filter.selectedIds) {
-        await LocalInventoryRepository.instance.deleteProduct(id);
+        await ref.read(localInventoryRepositoryProvider).deleteProduct(id);
       }
       ref.invalidate(allProductsProvider);
       ref.read(inventoryFilterProvider.notifier).toggleBulkSelectMode();
+      unawaited(ref.read(syncOrchestratorProvider).runOnce());
     }
   }
 

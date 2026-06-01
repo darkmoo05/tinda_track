@@ -1,3 +1,5 @@
+import '../../../../../core/database/app_database.dart';
+
 class ProductUnitConversion {
   final String id;
   final String syncId;
@@ -38,6 +40,19 @@ class ProductUnitConversion {
       conversionFactor: (row['conversion_factor'] as num?)?.toDouble() ?? 1,
       costPrice: (row['cost_price'] as num?)?.toDouble() ?? 0,
       sellingPrice: (row['selling_price'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  /// Typed Drift constructor — preferred over [fromLocalDb] for new code.
+  factory ProductUnitConversion.fromRow(ProductUnitConversionRow row) {
+    return ProductUnitConversion(
+      id: row.id,
+      syncId: row.syncId,
+      productId: row.productId,
+      unitName: row.unitName,
+      conversionFactor: row.conversionFactor,
+      costPrice: row.costPrice,
+      sellingPrice: row.sellingPrice,
     );
   }
 

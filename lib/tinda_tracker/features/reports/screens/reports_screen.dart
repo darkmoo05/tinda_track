@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/app_theme.dart';
@@ -7,14 +8,14 @@ import '../../pos/data/pos_repository.dart';
 
 enum _DateRange { today, week, month, custom }
 
-class ReportsScreen extends StatefulWidget {
+class ReportsScreen extends ConsumerStatefulWidget {
   const ReportsScreen({super.key});
 
   @override
-  State<ReportsScreen> createState() => _ReportsScreenState();
+  ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> {
+class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   _DateRange _range = _DateRange.week;
   DateTime? _customFrom;
   DateTime? _customTo;
@@ -30,10 +31,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   void _load() {
     final (from, to) = _resolveRange();
-    _reportFuture = PosRepository.instance.getReports(
-      from: from?.toIso8601String(),
-      to: to?.toIso8601String(),
-    );
+    _reportFuture = ref
+        .read(posRepositoryProvider)
+        .getReports(from: from?.toIso8601String(), to: to?.toIso8601String());
   }
 
   (DateTime?, DateTime?) _resolveRange() {

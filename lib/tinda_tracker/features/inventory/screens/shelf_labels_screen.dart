@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../../core/app_theme.dart';
+import '../../../../core/network/api_client.dart';
 import '../data/models/custom_shelf_location.dart';
 import '../data/shelf_code.dart';
 import '../providers/inventory_providers.dart';
@@ -205,10 +206,12 @@ class _ShelfLabelsScreenState extends ConsumerState<ShelfLabelsScreen> {
       );
     }
     if (shelf.imageUrl != null && shelf.imageUrl!.isNotEmpty) {
+      final resolved = resolveImageUrl(shelf.imageUrl);
+      if (resolved == null) return _placeholderThumb();
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
         child: Image.network(
-          shelf.imageUrl!,
+          resolved,
           width: 40,
           height: 40,
           fit: BoxFit.cover,
@@ -461,7 +464,7 @@ class _ShelfLabelsScreenState extends ConsumerState<ShelfLabelsScreen> {
           return pw.MemoryImage(await f.readAsBytes());
         }
       }
-      final url = shelf.imageUrl;
+      final url = resolveImageUrl(shelf.imageUrl);
       if (url != null && url.isNotEmpty) {
         return await networkImage(url);
       }

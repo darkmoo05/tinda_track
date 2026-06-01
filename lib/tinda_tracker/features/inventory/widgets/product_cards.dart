@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../../core/app_theme.dart';
+import '../../../../../core/network/api_client.dart';
 import '../data/models/inventory_product.dart';
 
 String _fmtQty(double v) {
@@ -435,14 +436,15 @@ class _ProductImage extends StatelessWidget {
     }
 
     // Fall back to remote URL (with persistent disk cache for offline support)
-    if (product.imageUrl != null) {
+    final resolvedUrl = resolveImageUrl(product.imageUrl);
+    if (resolvedUrl != null) {
       return SizedBox(
         width: size,
         height: size,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(large ? 0 : 10),
           child: CachedNetworkImage(
-            imageUrl: product.imageUrl!,
+            imageUrl: resolvedUrl,
             fit: BoxFit.cover,
             placeholder: (_, _) =>
                 const Center(child: CircularProgressIndicator(strokeWidth: 2)),

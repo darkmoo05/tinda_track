@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../network/api_client.dart';
+import 'sync_logging.dart';
 
 class LedgerEntryRemoteRepository {
   LedgerEntryRemoteRepository._();
@@ -10,7 +11,8 @@ class LedgerEntryRemoteRepository {
     try {
       await ApiClient.instance.post('/entries/push', records);
       return true;
-    } on DioException catch (_) {
+    } on DioException catch (e) {
+      logSyncFailure('/entries/push', e);
       return false;
     }
   }
@@ -27,7 +29,8 @@ class LedgerEntryRemoteRepository {
       final res = await ApiClient.instance.get('/entries/pull', params: params);
       final data = res.data['data'] as List<dynamic>;
       return data.cast<Map<String, dynamic>>();
-    } on DioException catch (_) {
+    } on DioException catch (e) {
+      logSyncFailure('/entries/pull', e, op: 'pull');
       return [];
     }
   }

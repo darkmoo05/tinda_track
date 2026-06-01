@@ -7,7 +7,7 @@ import '../data/models/cart_item.dart';
 final posProductsProvider = FutureProvider.autoDispose<List<InventoryProduct>>((
   ref,
 ) {
-  return LocalInventoryRepository.instance.listProducts();
+  return ref.read(localInventoryRepositoryProvider).listProducts();
 });
 
 class CartNotifier extends StateNotifier<List<CartItem>> {

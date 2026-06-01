@@ -1,18 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/app_meta_dao.dart';
+import '../../../../core/di/database_providers.dart';
 import '../../../../core/app_theme.dart';
+import '../../../../core/domain/sync_metadata.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/receipt_scan/receipt_draft.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
 import '../../../../shared/receipt_scan/receipt_scan_button.dart';
 import '../../../../shared/receipt_scan/receipt_scan_service.dart';
-import '../../charges/data/charge_repository.dart';
+import '../../charges/domain/entities/charge.dart';
+import '../../charges/presentation/providers/charge_providers.dart';
 import '../../charges/screens/charges_screen.dart';
-import '../../parties/data/party_repository.dart';
+import '../../parties/domain/entities/party.dart';
+import '../../parties/presentation/providers/party_providers.dart';
 import '../data/transaction_repository.dart';
 import '../data/transaction_models.dart';
+import '../data/fixed_transaction_type.dart';
+import '../domain/entities/fee_transaction.dart';
+import '../domain/entities/ledger_entry.dart';
+import '../presentation/providers/fee_transaction_providers.dart';
+import '../presentation/providers/ledger_entry_providers.dart';
 
 enum _ChargeHandlingMode { addOnTop, deductFromEnteredAmount }
 
@@ -20,14 +33,15 @@ enum _WalletSelection { gcash, maya }
 
 enum _FlowDirection { inflow, outflow }
 
-class AddTransactionScreen extends StatefulWidget {
+class AddTransactionScreen extends ConsumerStatefulWidget {
   const AddTransactionScreen({super.key});
 
   @override
-  State<AddTransactionScreen> createState() => _AddTransactionScreenState();
+  ConsumerState<AddTransactionScreen> createState() =>
+      _AddTransactionScreenState();
 }
 
-class _AddTransactionScreenState extends State<AddTransactionScreen> {
+class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   static const List<String> _serviceOptions = [
     'cashin',
     'cashout',
@@ -40,11 +54,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _referenceController = TextEditingController();
   final _principalController = TextEditingController();
   final _notesController = TextEditingController();
-  final PartyRepository _partyRepository = PartyRepository.instance;
-  final ChargeRepository _chargeRepository = ChargeRepository.instance;
   final TransactionRepository _transactionRepository =
       TransactionRepository.instance;
-  final AppDatabase _database = AppDatabase.instance;
+  AppDatabase get _database => ref.read(appDatabaseProvider);
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
   String? _lastScannedAccountName;
@@ -57,7 +69,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   _WalletSelection _selectedWalletSelection = _WalletSelection.gcash;
   String? _selectedServiceKey;
-  PartyRecord? _matchedParty;
+  Party? _matchedParty;
 
   _WalletSelection get _selectedWallet {
     return _selectedWalletSelection;
@@ -94,7 +106,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         : _FlowDirection.inflow;
   }
 
-  ChargeBracketRecord? get _matchedChargeBracket {
+  Charge? get _matchedChargeBracket {
     final principal = _parseAmount(_principalController.text);
     if (principal <= 0) {
       return null;
@@ -105,7 +117,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return null;
     }
 
-    for (final bracket in _chargeRepository.brackets.value) {
+    final brackets =
+        ref.read(chargesStreamProvider(null)).value ?? const <Charge>[];
+    for (final bracket in brackets) {
       if (bracket.transactionTypeKey != typeKey) continue;
       if (principal >= bracket.lowerBound && principal <= bracket.upperBound) {
         return bracket;
@@ -291,19 +305,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   @override
   void initState() {
     super.initState();
-    _partyRepository.ensureLoaded().then((_) {
-      if (!mounted) {
-        return;
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       if (_accountController.text.trim().isNotEmpty) {
         _resolvePartyFromAccount(_accountController.text);
       }
-    });
-    _chargeRepository.ensureLoaded().then((_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {});
     });
   }
 
@@ -1313,6 +1319,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     ),
                   ),
                 ),
+                selectedItemBuilder: (context) => _serviceOptions
+                    .map(
+                      (serviceKey) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _serviceLabel(serviceKey),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
                 items: _serviceOptions
                     .map((serviceKey) {
                       final selected = _selectedServiceKey == serviceKey;
@@ -1633,10 +1651,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<void> _openAccountSearchPicker() async {
-    await _partyRepository.ensureLoaded();
     if (!mounted) return;
+    final parties = ref.read(partiesStreamProvider).value ?? const <Party>[];
 
-    final selected = await showModalBottomSheet<PartyRecord>(
+    final selected = await showModalBottomSheet<Party>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surfaceContainerLowest,
@@ -1644,7 +1662,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (_) => _PartyContactPickerSheet(
-        parties: _partyRepository.parties.value,
+        parties: parties,
         initialQuery: _accountController.text.trim(),
       ),
     );
@@ -1727,7 +1745,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   Future<void> _resolvePartyFromAccount(String accountNumber) async {
     final requestedAccount = accountNumber.trim();
-    final matchedParty = await _partyRepository.findByAccount(requestedAccount);
+    final parties = ref.read(partiesStreamProvider).value ?? const <Party>[];
+    Party? matchedParty;
+    for (final p in parties) {
+      if (p.accountNumber == requestedAccount) {
+        matchedParty = p;
+        break;
+      }
+    }
     if (!mounted) {
       return;
     }
@@ -1869,11 +1894,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       ),
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    await _chargeRepository.ensureLoaded();
     if (!mounted) {
       return;
     }
@@ -2109,48 +2129,59 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final persistedNote =
         '$noteBase \u2022 $_selectedFlowLabel \u2022 Wallet ${selectedWalletDelta >= 0 ? 'increased' : 'decreased'} by \u20b1${selectedWalletDelta.abs().toStringAsFixed(2)} \u2022 On-hand ${onHandDelta >= 0 ? 'increased' : 'decreased'} by \u20b1${onHandDelta.abs().toStringAsFixed(2)}';
 
-    final db = await _database.database;
+    final db = _database;
     try {
-      await _database.ensureWalletSchema(db);
-      final deviceId = await _database.getOrCreateDeviceId();
+      final deviceId = await AppMetaDao(db).getOrCreateDeviceId();
       final nowMs = now.millisecondsSinceEpoch;
+      final entrySyncId = const Uuid().v4();
 
-      final transactionId = await db.insert(AppDatabase.ledgerTable, {
-        'entry_type': 'transaction',
-        'title': title,
-        'note': persistedNote,
-        'reference': reference,
-        'amount': totalCollected,
-        'wallet_delta': walletDelta,
-        'maya_wallet_delta': mayaWalletDelta,
-        'on_hand_delta': onHandDelta,
-        'recorded_flow': totalCollected,
-        'tag': 'Transaction',
-        'icon_key': iconKey,
-        'wallet_account': walletAccount,
-        AppDatabase.syncIdColumn: AppDatabase.generateSyncId('entry'),
-        AppDatabase.deviceIdColumn: deviceId,
-        AppDatabase.updatedAtMsColumn: nowMs,
-        AppDatabase.isDeletedColumn: 0,
-        AppDatabase.isDirtyColumn: 1,
-        'created_at': now.toIso8601String(),
+      final ledgerEntry = LedgerEntry(
+        id: entrySyncId,
+        entryType: 'transaction',
+        title: title,
+        note: persistedNote,
+        reference: reference,
+        amount: totalCollected,
+        walletDelta: walletDelta,
+        mayaWalletDelta: mayaWalletDelta,
+        onHandDelta: onHandDelta,
+        recordedFlow: totalCollected,
+        tag: 'Transaction',
+        iconKey: iconKey,
+        walletAccount: walletAccount,
+        entryDate: now.toIso8601String(),
+        sync: SyncMetadata(
+          syncId: entrySyncId,
+          deviceId: deviceId,
+          createdAt: now,
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
+          isDirty: true,
+        ),
+      );
+
+      await db.transaction(() async {
+        await ref.read(ledgerEntryRepositoryProvider).save(ledgerEntry);
+
+        // Save fee as separate record if fee exists
+        if (chargeFee > 0) {
+          final feeSyncId = const Uuid().v4();
+          final fee = FeeTransaction(
+            id: feeSyncId,
+            relatedTransactionSyncId: entrySyncId,
+            feeAmount: chargeFee,
+            feeType: title,
+            chargeDestination: chargeDestination,
+            sync: SyncMetadata(
+              syncId: feeSyncId,
+              deviceId: deviceId,
+              createdAt: now,
+              updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
+              isDirty: true,
+            ),
+          );
+          await ref.read(feeTransactionRepositoryProvider).save(fee);
+        }
       });
-
-      // Save fee as separate record if fee exists
-      if (chargeFee > 0) {
-        await db.insert(AppDatabase.feeTransactionsTable, {
-          'related_transaction_id': transactionId,
-          'fee_amount': chargeFee,
-          'fee_type': title,
-          'charge_destination': chargeDestination,
-          AppDatabase.syncIdColumn: AppDatabase.generateSyncId('fee'),
-          AppDatabase.deviceIdColumn: deviceId,
-          AppDatabase.updatedAtMsColumn: nowMs,
-          AppDatabase.isDeletedColumn: 0,
-          AppDatabase.isDirtyColumn: 1,
-          'created_at': now.toIso8601String(),
-        });
-      }
 
       return true;
     } on Exception catch (error, stackTrace) {
@@ -2325,22 +2356,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   Future<(double walletBalance, double mayaWalletBalance, double onHandBalance)>
   _loadCurrentBalances() async {
-    final db = await _database.database;
-    await _database.ensureWalletSchema(db);
-    final rows = await db.rawQuery('''
+    final rawRows = await _database.customSelect('''
       SELECT
         COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
         COALESCE(SUM(maya_wallet_delta), 0) AS maya_wallet_balance,
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
-      FROM ${AppDatabase.ledgerTable}
-      WHERE ${AppDatabase.isDeletedColumn} = 0
-    ''');
+      FROM ledger_entries
+      WHERE is_deleted = 0
+    ''').get();
 
-    if (rows.isEmpty) {
+    if (rawRows.isEmpty) {
       return (0.0, 0.0, 0.0);
     }
 
-    final row = rows.first;
+    final row = rawRows.first.data;
     final walletBalance = (row['wallet_balance'] as num?)?.toDouble() ?? 0.0;
     final mayaWalletBalance =
         (row['maya_wallet_balance'] as num?)?.toDouble() ?? 0.0;
@@ -2363,7 +2392,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       builder: (_) => _PartyRegistrationDialog(
         prefilledAccountNumber: prefilledAccountNumber,
         prefilledAccountName: prefilledAccountName,
-        repository: _partyRepository,
       ),
     );
 
@@ -2492,7 +2520,7 @@ class _PartyContactPickerSheet extends StatefulWidget {
     required this.initialQuery,
   });
 
-  final List<PartyRecord> parties;
+  final List<Party> parties;
   final String initialQuery;
 
   @override
@@ -2520,7 +2548,7 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
     super.dispose();
   }
 
-  List<PartyRecord> get _filteredParties {
+  List<Party> get _filteredParties {
     final query = _searchController.text.trim().toLowerCase();
     if (query.isEmpty) {
       return widget.parties;
@@ -2694,23 +2722,24 @@ class _PartyPickerEmptyState extends StatelessWidget {
   }
 }
 
-class _PartyRegistrationDialog extends StatefulWidget {
+class _PartyRegistrationDialog extends ConsumerStatefulWidget {
   const _PartyRegistrationDialog({
     required this.prefilledAccountNumber,
     this.prefilledAccountName,
-    required this.repository,
   });
 
   final String prefilledAccountNumber;
   final String? prefilledAccountName;
-  final PartyRepository repository;
 
   @override
-  State<_PartyRegistrationDialog> createState() =>
+  ConsumerState<_PartyRegistrationDialog> createState() =>
       _PartyRegistrationDialogState();
 }
 
-class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
+class _PartyRegistrationDialogState
+    extends ConsumerState<_PartyRegistrationDialog> {
+  static final DateFormat _joinDateFormat = DateFormat('MMM yyyy');
+
   late final TextEditingController _fullNameController;
   late final TextEditingController _accountController;
   String? _errorText;
@@ -2734,6 +2763,18 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
     super.dispose();
   }
 
+  String _normalizeAccount(String raw) =>
+      raw.replaceAll(RegExp(r'[^0-9]'), '').trim();
+
+  String _buildEntityId(String accountNumber, int currentCount) {
+    final digitsOnly = _normalizeAccount(accountNumber);
+    final suffix = digitsOnly.length >= 3
+        ? digitsOnly.substring(digitsOnly.length - 3)
+        : digitsOnly.padLeft(3, '0');
+    final sequence = (currentCount + 1).toString().padLeft(3, '0');
+    return 'FA-$suffix-$sequence';
+  }
+
   Future<void> _onRegister() async {
     final fullName = _fullNameController.text.trim();
     final accountNumber = _accountController.text.trim();
@@ -2750,12 +2791,38 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
       _errorText = null;
     });
 
-    final bool inserted;
+    final normalizedAccount = _normalizeAccount(accountNumber);
+    final parties = ref.read(partiesStreamProvider).value ?? const <Party>[];
+    final duplicate = parties.any(
+      (p) => _normalizeAccount(p.accountNumber) == normalizedAccount,
+    );
+    if (duplicate) {
+      setState(() {
+        _isSaving = false;
+        _errorText = context.l10n.accountAlreadyRegistered;
+      });
+      return;
+    }
+
+    final now = DateTime.now();
+    final newParty = Party(
+      id: '',
+      name: fullName,
+      accountNumber: normalizedAccount,
+      entityId: _buildEntityId(normalizedAccount, parties.length),
+      description: 'Newly Registered',
+      joinDate: _joinDateFormat.format(now),
+      isVerified: true,
+      sync: SyncMetadata(
+        syncId: '',
+        createdAt: now,
+        updatedAt: now,
+        isDirty: true,
+      ),
+    );
+
     try {
-      inserted = await widget.repository.registerParty(
-        fullName: fullName,
-        accountNumber: accountNumber,
-      );
+      await ref.read(partiesNotifierProvider.notifier).save(newParty);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -2766,16 +2833,7 @@ class _PartyRegistrationDialogState extends State<_PartyRegistrationDialog> {
     }
 
     if (!mounted) return;
-
-    if (!inserted) {
-      setState(() {
-        _isSaving = false;
-        _errorText = context.l10n.accountAlreadyRegistered;
-      });
-      return;
-    }
-
-    Navigator.of(context).pop(accountNumber);
+    Navigator.of(context).pop(normalizedAccount);
   }
 
   @override

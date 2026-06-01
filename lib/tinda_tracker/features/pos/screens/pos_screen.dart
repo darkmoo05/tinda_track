@@ -9,6 +9,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:vibration/vibration.dart';
 
 import '../../../../core/app_theme.dart';
+import '../../../../core/network/api_client.dart';
 import '../../inventory/data/models/inventory_product.dart';
 import '../data/models/cart_item.dart';
 import '../data/pos_repository.dart';
@@ -102,7 +103,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     _lastScannedCode = code;
     _lastScanAt = now;
 
-    final product = await PosRepository.instance.findProductBySku(code);
+    final product = await ref
+        .read(posRepositoryProvider)
+        .findProductBySku(code);
     if (product == null) {
       return _ScanAddResult(
         success: false,
@@ -271,12 +274,14 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
     try {
       setState(() => _isProcessing = true);
-      final sale = await PosRepository.instance.checkout(
-        CheckoutRequest(
-          items: List<CartItem>.from(cart),
-          paidAmount: paidAmount,
-        ),
-      );
+      final sale = await ref
+          .read(posRepositoryProvider)
+          .checkout(
+            CheckoutRequest(
+              items: List<CartItem>.from(cart),
+              paidAmount: paidAmount,
+            ),
+          );
 
       if (!mounted) return;
       ref.read(cartProvider.notifier).clear();
@@ -1029,7 +1034,8 @@ class _ProductImage extends StatelessWidget {
       if (file.existsSync()) return FileImage(file);
     }
     if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return NetworkImage(imageUrl!);
+      final resolved = resolveImageUrl(imageUrl);
+      if (resolved != null) return NetworkImage(resolved);
     }
     return null;
   }

@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/app_theme.dart';
+import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
 import '../data/dashboard_repository.dart';
 import '../data/statement_entry.dart';
 
-class PersonalExpenseStatementScreen extends StatefulWidget {
+class PersonalExpenseStatementScreen extends ConsumerStatefulWidget {
   const PersonalExpenseStatementScreen({super.key});
 
   @override
-  State<PersonalExpenseStatementScreen> createState() =>
+  ConsumerState<PersonalExpenseStatementScreen> createState() =>
       _PersonalExpenseStatementScreenState();
 }
 
 enum _RecentRange { today, sevenDays, thirtyDays }
 
 class _PersonalExpenseStatementScreenState
-    extends State<PersonalExpenseStatementScreen> {
+    extends ConsumerState<PersonalExpenseStatementScreen> {
   static final NumberFormat _currency = NumberFormat.currency(
     locale: 'en_PH',
     symbol: 'PHP ',
@@ -38,14 +40,18 @@ class _PersonalExpenseStatementScreenState
   @override
   void initState() {
     super.initState();
-    _entriesFuture = DashboardRepository().loadStatementEntries();
+    _entriesFuture = DashboardRepository(
+      database: ref.read(appDatabaseProvider),
+    ).loadStatementEntries();
     _loadLastSeen();
   }
 
   Future<void> _reload() async {
     setState(() {
       _didPersistLastSeen = false;
-      _entriesFuture = DashboardRepository().loadStatementEntries();
+      _entriesFuture = DashboardRepository(
+        database: ref.read(appDatabaseProvider),
+      ).loadStatementEntries();
     });
   }
 

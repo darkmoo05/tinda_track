@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../../../core/app_theme.dart';
-import '../../../../core/database/app_database.dart';
+import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
@@ -11,7 +12,7 @@ import '../../transactions/screens/add_owner_movement_screen.dart';
 import '../../dashboard/data/dashboard_repository.dart';
 import '../../dashboard/widgets/analytics_card.dart';
 
-class ChargesEarningsScreen extends StatefulWidget {
+class ChargesEarningsScreen extends ConsumerStatefulWidget {
   const ChargesEarningsScreen({
     super.key,
     required this.totalEarnings,
@@ -44,10 +45,11 @@ class ChargesEarningsScreen extends StatefulWidget {
   final List<ChargeTransaction> chargeTransactions;
 
   @override
-  State<ChargesEarningsScreen> createState() => _ChargesEarningsScreenState();
+  ConsumerState<ChargesEarningsScreen> createState() =>
+      _ChargesEarningsScreenState();
 }
 
-class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
+class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   static final _currency = NumberFormat.currency(
     locale: 'en_PH',
     symbol: '₱ ',
@@ -202,30 +204,10 @@ class _ChargesEarningsScreenState extends State<ChargesEarningsScreen> {
   }
 
   Future<void> _loadFeeMovements() async {
-    final db = await AppDatabase.instance.database;
-    await AppDatabase.instance.ensureWalletSchema(db);
-
-    final rows = await db.rawQuery('''
-      SELECT
-        created_at,
-        owner_movement_type,
-        wallet_account,
-        owner_party_account,
-        note,
-        amount,
-        reference
-      FROM ${AppDatabase.ledgerTable}
-      WHERE is_deleted = 0
-        AND entry_type = 'owner_movement'
-        AND owner_movement_type IN (
-          'Fee Withdrawal',
-          'Fee Transfer',
-          'Cash Transfer (On-hand to Wallet)'
-        )
-      ORDER BY created_at DESC, id DESC
-    ''');
-    final allEntries = rows
-        .map(_mapFeeMovementEntry)
+    final database = ref.read(appDatabaseProvider);
+    final result = await database.customSelect(_feeMovementsSql).get();
+    final allEntries = result
+        .map((row) => _mapFeeMovementEntry(Map<String, Object?>.from(row.data)))
         .whereType<_FeeMovementEntry>()
         .toList(growable: false);
 
@@ -1400,6 +1382,31 @@ class _FeeMovementEntry {
   final String reference;
 }
 
+/// Drift-compatible query against the new `ledger_entries` table.
+///
+/// Aliases the integer `created_at_ms` column to ISO-formatted `created_at`
+/// so the existing [_mapFeeMovementEntry] helper continues to work unchanged.
+const String _feeMovementsSql = '''
+  SELECT
+    strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch')
+      AS created_at,
+    owner_movement_type,
+    wallet_account,
+    owner_party_account,
+    note,
+    amount,
+    reference
+  FROM ledger_entries
+  WHERE is_deleted = 0
+    AND entry_type = 'owner_movement'
+    AND owner_movement_type IN (
+      'Fee Withdrawal',
+      'Fee Transfer',
+      'Cash Transfer (On-hand to Wallet)'
+    )
+  ORDER BY created_at_ms DESC, id DESC
+''';
+
 _FeeMovementEntry? _mapFeeMovementEntry(Map<String, Object?> row) {
   final movementType = (row['owner_movement_type'] as String?) ?? '';
   final createdAt =
@@ -1476,14 +1483,14 @@ class _DayGroup {
 
 // ── Full-screen fee movement log sheet ───────────────────────
 
-class _FeeMovementSheet extends StatefulWidget {
+class _FeeMovementSheet extends ConsumerStatefulWidget {
   const _FeeMovementSheet();
 
   @override
-  State<_FeeMovementSheet> createState() => _FeeMovementSheetState();
+  ConsumerState<_FeeMovementSheet> createState() => _FeeMovementSheetState();
 }
 
-class _FeeMovementSheetState extends State<_FeeMovementSheet> {
+class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
   static final _currency = NumberFormat.currency(
     locale: 'en_PH',
     symbol: '₱ ',
@@ -1504,31 +1511,14 @@ class _FeeMovementSheetState extends State<_FeeMovementSheet> {
   }
 
   Future<void> _load() async {
-    final db = await AppDatabase.instance.database;
-    await AppDatabase.instance.ensureWalletSchema(db);
-    final rows = await db.rawQuery('''
-      SELECT
-        created_at,
-        owner_movement_type,
-        wallet_account,
-        owner_party_account,
-        note,
-        amount,
-        reference
-      FROM ${AppDatabase.ledgerTable}
-      WHERE is_deleted = 0
-        AND entry_type = 'owner_movement'
-        AND owner_movement_type IN (
-          'Fee Withdrawal',
-          'Fee Transfer',
-          'Cash Transfer (On-hand to Wallet)'
-        )
-      ORDER BY created_at DESC, id DESC
-    ''');
+    final database = ref.read(appDatabaseProvider);
+    final result = await database.customSelect(_feeMovementsSql).get();
     if (!mounted) return;
     setState(() {
-      _all = rows
-          .map(_mapFeeMovementEntry)
+      _all = result
+          .map(
+            (row) => _mapFeeMovementEntry(Map<String, Object?>.from(row.data)),
+          )
           .whereType<_FeeMovementEntry>()
           .toList(growable: false);
       _isLoading = false;

@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_theme.dart';
-import '../../core/sync/sync_service.dart';
+import '../../core/sync/sync_orchestrator.dart';
+import '../../core/sync/sync_result.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
 import '../features/activity/screens/activity_history_screen.dart';
@@ -14,16 +16,16 @@ import '../features/transactions/screens/add_owner_movement_screen.dart';
 import '../../shared/widgets/app_side_drawer.dart';
 import 'pocket_ledger_drawer_config.dart';
 
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key, this.onSwitchApp});
 
   final VoidCallback? onSwitchApp;
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell>
+class _MainShellState extends ConsumerState<MainShell>
     with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
   final GlobalKey<ScaffoldState> _shellScaffoldKey = GlobalKey<ScaffoldState>();
@@ -33,7 +35,7 @@ class _MainShellState extends State<MainShell>
   int _historyViewToken = 0;
   HistoryWalletPerspective? _historyWalletPerspective;
   late final AnimationController _fabMenuController;
-  late final StreamSubscription<SyncRunResult> _syncResultsSub;
+  late final StreamSubscription<SyncResult> _syncResultsSub;
 
   @override
   void initState() {
@@ -43,11 +45,13 @@ class _MainShellState extends State<MainShell>
       duration: const Duration(milliseconds: 200),
       reverseDuration: const Duration(milliseconds: 140),
     );
-    _syncResultsSub = SyncService.instance.syncResults.listen((result) {
+    _syncResultsSub = ref.read(syncOrchestratorProvider).results.listen((
+      result,
+    ) {
       if (!mounted) {
         return;
       }
-      if (result.pushed == 0 && result.pulled == 0) {
+      if (result.pushedCount == 0 && result.pulledCount == 0) {
         return;
       }
       _handleDataChanged();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../../../core/app_theme.dart';
+import '../../../../../core/network/api_client.dart';
 import '../../../../../core/l10n/l10n_extension.dart';
+import '../../../../../core/sync/sync_orchestrator.dart';
 import '../../../../shared/widgets/top_alert.dart';
 import '../data/inventory_constants.dart';
 import '../data/local_inventory_repository.dart';
@@ -252,7 +255,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                   final cat = working[index];
                   final newPinned = !cat.isQuickAccess;
                   try {
-                    final updated = await LocalInventoryRepository.instance
+                    final updated = await ref
+                        .read(localInventoryRepositoryProvider)
                         .updateCategory(cat.localId, isQuickAccess: newPinned);
                     setSheetState(() => working[index] = updated);
                   } on QuickAccessLimitException catch (e) {
@@ -372,6 +376,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     ref.invalidate(allCategoriesProvider);
     ref.invalidate(quickAccessCategoriesProvider);
     ref.read(categoriesRefreshProvider.notifier).state++;
+    // Push the pin toggle / new category to the server right away.
+    unawaited(ref.read(syncOrchestratorProvider).runOnce());
 
     if (picked != null && mounted) setState(() => _category = picked);
   }
@@ -383,7 +389,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     setState(() => _saving = true);
 
     try {
-      final repo = LocalInventoryRepository.instance;
+      final repo = ref.read(localInventoryRepositoryProvider);
       if (_isEdit) {
         await repo.updateProduct(
           widget.existing!.id,
@@ -436,6 +442,10 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
       // Refresh the products list
       ref.invalidate(allProductsProvider);
+      // Fire-and-forget push so the new/edited product (and its conversions)
+      // hit the server immediately instead of waiting for the next app
+      // launch/exit lifecycle sync.
+      unawaited(ref.read(syncOrchestratorProvider).runOnce());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -560,13 +570,15 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                     );
                     return;
                   }
-                  await LocalInventoryRepository.instance.adjustStock(
-                    productId: existing.id,
-                    quantityDelta: qty,
-                    movementType: 'RESTOCK',
-                    note: 'Manual restock via add-product form',
-                    expirationDate: expiryDate,
-                  );
+                  await ref
+                      .read(localInventoryRepositoryProvider)
+                      .adjustStock(
+                        productId: existing.id,
+                        quantityDelta: qty,
+                        movementType: 'RESTOCK',
+                        note: 'Manual restock via add-product form',
+                        expirationDate: expiryDate,
+                      );
                   ref.invalidate(allProductsProvider);
                   if (ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
@@ -1250,7 +1262,7 @@ class _ImagePickerWidget extends StatelessWidget {
                   ),
                 )
               : Image.network(
-                  remoteUrl!,
+                  resolveImageUrl(remoteUrl) ?? remoteUrl!,
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) =>
                       const Icon(Icons.broken_image_rounded),
@@ -1811,7 +1823,7 @@ class _ImageReviewScreen extends StatelessWidget {
     final imageWidget = localFile != null
         ? Image.file(localFile!, fit: BoxFit.contain)
         : Image.network(
-            remoteUrl!,
+            resolveImageUrl(remoteUrl) ?? remoteUrl!,
             fit: BoxFit.contain,
             errorBuilder: (_, _, _) => const Icon(
               Icons.broken_image_rounded,

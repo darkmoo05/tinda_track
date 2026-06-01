@@ -1,3 +1,4 @@
+import '../../../../../core/database/app_database.dart';
 import 'product_unit_conversion.dart';
 
 /// Plain Dart model matching the backend `products` table.
@@ -145,6 +146,38 @@ class InventoryProduct {
       unitConversions: const [],
       createdAt: DateTime.parse(row['created_at'] as String),
       updatedAt: DateTime.parse(row['updated_at'] as String),
+    );
+  }
+
+  /// Typed Drift constructor — preferred over [fromLocalDb] for new code.
+  /// Pass [conversions] separately because they live in a different table
+  /// and the caller already has the typed rows in hand.
+  factory InventoryProduct.fromRow(
+    ProductRow row, {
+    List<ProductUnitConversion> conversions = const [],
+  }) {
+    return InventoryProduct(
+      id: row.id,
+      name: row.name,
+      sku: row.sku,
+      description: row.description,
+      category: row.category,
+      baseUnit: row.baseUnit,
+      costPrice: row.costPrice,
+      sellingPrice: row.sellingPrice,
+      stockInBaseUnit: row.stockInBaseUnit,
+      reorderPoint: row.reorderPoint,
+      isActive: row.isActive,
+      isDeleted: row.isDeleted,
+      imagePath: row.imageLocalPath,
+      imageUrl: row.imageUrl,
+      shelfLocation: row.shelfLocation ?? 'Counter',
+      expirationDate: row.expirationDateMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(row.expirationDateMs!),
+      unitConversions: conversions,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(row.createdAtMs),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs),
     );
   }
 

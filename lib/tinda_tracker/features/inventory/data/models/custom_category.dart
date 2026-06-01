@@ -1,11 +1,13 @@
-/// Domain model for a user-managed product category stored in [tt_product_categories].
-///
-/// `description` and `examples` populate the management UI so shopkeepers
-/// remember what each category covers.  The `isQuickAccess` flag pins the
-/// category to the dashboard chip row — the UI enforces a hard cap of 10
-/// pinned categories.
+// Domain model for a user-managed product category stored in [tt_product_categories].
+//
+// `description` and `examples` populate the management UI so shopkeepers
+// remember what each category covers.  The `isQuickAccess` flag pins the
+// category to the dashboard chip row — the UI enforces a hard cap of 10
+// pinned categories.
+import '../../../../../core/database/app_database.dart';
+
 class CustomCategory {
-  final int localId;
+  final String localId;
   final String syncId;
   final String? serverId;
   final String name;
@@ -33,7 +35,7 @@ class CustomCategory {
 
   factory CustomCategory.fromLocalDb(Map<String, dynamic> row) {
     return CustomCategory(
-      localId: row['id'] as int,
+      localId: row['id'] as String,
       syncId: row['sync_id'] as String,
       serverId: row['server_id'] as String?,
       name: row['name'] as String,
@@ -44,6 +46,25 @@ class CustomCategory {
       isDirty: (row['is_dirty'] as int? ?? 1) == 1,
       createdAt: DateTime.parse(row['created_at'] as String),
       updatedAt: DateTime.parse(row['updated_at'] as String),
+    );
+  }
+
+  /// Typed Drift constructor — preferred over [fromLocalDb] for new code.
+  /// The repository layer should pass [ProductCategoryRow] values directly
+  /// rather than synthesising maps.
+  factory CustomCategory.fromRow(ProductCategoryRow row) {
+    return CustomCategory(
+      localId: row.id,
+      syncId: row.syncId,
+      serverId: row.id,
+      name: row.name,
+      description: row.description,
+      examples: row.examples,
+      isQuickAccess: row.isQuickAccess,
+      isDeleted: row.isDeleted,
+      isDirty: row.isDirty,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(row.createdAtMs),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs),
     );
   }
 

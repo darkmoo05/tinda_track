@@ -1,93 +1,110 @@
-import 'dart:async';
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
+import 'package:drift/drift.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/app_database.dart';
-import '../../../../core/sync/sync_config.dart';
+import '../../../../core/database/daos/app_meta_dao.dart';
+import '../../../../core/database/daos/tinda_tracker/product_categories_dao.dart';
+import '../../../../core/database/daos/tinda_tracker/product_unit_conversions_dao.dart';
+import '../../../../core/database/daos/tinda_tracker/products_dao.dart';
+import '../../../../core/database/daos/tinda_tracker/shelf_locations_dao.dart';
+import '../../../../core/database/daos/tinda_tracker/stock_movements_dao.dart';
+import '../../../../core/di/database_providers.dart';
 import 'models/custom_category.dart';
 import 'models/custom_shelf_location.dart';
 import 'models/inventory_product.dart';
 import 'models/product_unit_conversion.dart';
 import 'models/stock_movement.dart';
 
-/// Thrown by [LocalInventoryRepository.createProduct] when a local product
-/// with the same SKU already exists. The UI should offer a restock flow.
-class DuplicateSkuException implements Exception {
-  final InventoryProduct existing;
-  const DuplicateSkuException(this.existing);
-}
+/// Hard cap on the number of categories that can be pinned to the dashboard
+/// chip row. Enforced by [LocalInventoryRepository] on every mutating call.
+const int maxQuickAccessCategories = 10;
 
-/// Local-first inventory repository.
+/// Riverpod provider for [LocalInventoryRepository]. Consumers should obtain
+/// the repository via `ref.read(localInventoryRepositoryProvider)`.
+final localInventoryRepositoryProvider = Provider<LocalInventoryRepository>((
+  ref,
+) {
+  return LocalInventoryRepository(database: ref.watch(appDatabaseProvider));
+});
+
+/// Sentinel used by [LocalInventoryRepository.updateProduct] (and the
+/// lookup-table updates) so callers can distinguish *omitted* from
+/// *explicitly set to null* for nullable fields.
+const Object _updateSentinel = Object();
+
+/// Inventory-domain repository: CRUD for products, categories, shelf
+/// locations, unit conversions, and stock movements against the local
+/// Drift database. Push to the server is handled by `SyncOrchestrator`
+/// via the `is_dirty` flags the DAOs set on every mutation.
 ///
-/// All writes hit SQLite immediately (is_dirty = 1), then fire a background
-/// API call. On success the server_id is stored and the row is marked clean.
-/// Reads always come from local SQLite, keeping the UI fast and offline-safe.
+/// All persistence goes through typed Drift DAOs — no raw SQL. The previous
+/// sqflite-style `customStatement`/`customSelect` helpers were removed
+/// because they bypassed the DAO contract (which auto-stamps `is_dirty=1`
+/// and `updated_at_ms=now`) and made schema typos invisible until runtime.
 class LocalInventoryRepository {
-  static LocalInventoryRepository? _instance;
-  static LocalInventoryRepository get instance =>
-      _instance ??= LocalInventoryRepository._();
-  LocalInventoryRepository._();
+  LocalInventoryRepository({required AppDatabase database})
+    : _database = database,
+      _appMeta = AppMetaDao(database),
+      _categoriesDao = ProductCategoriesDao(database),
+      _shelvesDao = ShelfLocationsDao(database),
+      _productsDao = ProductsDao(database),
+      _conversionsDao = ProductUnitConversionsDao(database),
+      _movementsDao = StockMovementsDao(database);
 
+  final AppDatabase _database;
+  final AppMetaDao _appMeta;
+  final ProductCategoriesDao _categoriesDao;
+  final ShelfLocationsDao _shelvesDao;
+  final ProductsDao _productsDao;
+  final ProductUnitConversionsDao _conversionsDao;
+  final StockMovementsDao _movementsDao;
   static const _uuid = Uuid();
-  static const _timeout = Duration(seconds: 12);
-  final _db = AppDatabase.instance;
 
-  // ─── helpers ──────────────────────────────────────────────────────────────
+  // ───── Products ───────────────────────────────────────────────────────────
 
-  Future<Map<String, Object?>?> _rowById(String id) async {
-    final db = await _db.database;
-    final rows = await db.query(
-      AppDatabase.ttProductsTable,
-      where: 'server_id = ? OR sync_id = ?',
-      whereArgs: [id, id],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : rows.first;
-  }
-
-  // ─── public API ───────────────────────────────────────────────────────────
-
+  /// Lists all non-deleted products (or all products if [includeDeleted]),
+  /// optionally filtered by case-insensitive [search] across name / sku.
   Future<List<InventoryProduct>> listProducts({
     String? search,
     bool includeDeleted = false,
   }) async {
-    final db = await _db.database;
-    var rows = await db.query(
-      AppDatabase.ttProductsTable,
-      where: includeDeleted ? null : 'is_deleted = 0',
-      orderBy: 'is_active DESC, name ASC',
-    );
-    if (search != null && search.isNotEmpty) {
-      final q = search.toLowerCase();
-      rows = rows.where((r) {
-        final name = (r['name'] as String).toLowerCase();
-        final sku = (r['sku'] as String).toLowerCase();
-        return name.contains(q) || sku.contains(q);
-      }).toList();
+    final query = _database.select(_database.products);
+    if (!includeDeleted) {
+      query.where((t) => t.isDeleted.equals(false));
     }
-    final syncIds = rows
-        .map((r) => r['sync_id'] as String)
-        .where((id) => id.isNotEmpty)
-        .toList(growable: false);
-    final conversionsBySyncId = await _loadConversionsByProductSyncIds(syncIds);
+    if (search != null && search.trim().isNotEmpty) {
+      final pattern = '%${search.trim().toLowerCase()}%';
+      query.where(
+        (t) => t.name.lower().like(pattern) | t.sku.lower().like(pattern),
+      );
+    }
+    query.orderBy([(t) => OrderingTerm.desc(t.createdAtMs)]);
+    final rows = await query.get();
+    if (rows.isEmpty) return const [];
+    final conversionsById = await _loadConversionsByProductIds(
+      rows.map((r) => r.id).toList(growable: false),
+    );
     return rows
         .map(
-          (row) => InventoryProduct.fromLocalDb(row).copyWith(
-            unitConversions:
-                conversionsBySyncId[row['sync_id'] as String] ?? const [],
+          (row) => InventoryProduct.fromRow(
+            row,
+            conversions: conversionsById[row.id] ?? const [],
           ),
         )
-        .toList();
+        .toList(growable: false);
   }
 
-  Future<InventoryProduct> getById(String id) async {
-    final row = await _rowById(id);
-    if (row == null) throw Exception('Product not found: $id');
-    return InventoryProduct.fromLocalDb(row);
+  Future<InventoryProduct?> getById(String id) async {
+    final row = await _productsDao.findById(id);
+    if (row == null) return null;
+    final conv = await _listConversionsForProductId(id);
+    return InventoryProduct.fromRow(row, conversions: conv);
   }
 
+  /// Creates a product. Throws [DuplicateSkuException] if [sku] already
+  /// exists (including soft-deleted rows — caller decides whether to
+  /// restock the existing row).
   Future<InventoryProduct> createProduct({
     required String name,
     required String sku,
@@ -106,397 +123,315 @@ class LocalInventoryRepository {
     DateTime? expirationDate,
     List<ProductUnitConversion> unitConversions = const [],
   }) async {
-    // Block duplicate SKU locally — throw so the UI can offer a restock flow.
-    final db = await _db.database;
-    final existing = await db.query(
-      AppDatabase.ttProductsTable,
-      where: 'sku = ? AND is_deleted = 0',
-      whereArgs: [sku],
-      limit: 1,
-    );
-    if (existing.isNotEmpty) {
-      throw DuplicateSkuException(InventoryProduct.fromLocalDb(existing.first));
+    final existing = await _productsDao.findBySku(sku);
+    if (existing != null) {
+      throw DuplicateSkuException(InventoryProduct.fromRow(existing));
     }
-    final syncId = _uuid.v4();
-    final deviceId = await _db.getOrCreateDeviceId();
-    final now = DateTime.now().toIso8601String();
-    final effectiveBaseUnit = (baseUnit ?? unit).trim().isEmpty
-        ? 'pcs'
-        : (baseUnit ?? unit).trim();
-    final effectiveStockInBaseUnit =
-        stockInBaseUnit ?? stockQuantity.toDouble();
+    final id = _uuid.v4();
+    final deviceId = await _appMeta.getOrCreateDeviceId();
+    final effectiveBaseUnit = baseUnit ?? unit;
+    final stockBase = stockInBaseUnit ?? stockQuantity.toDouble();
 
-    await db.insert(AppDatabase.ttProductsTable, {
-      'sync_id': syncId,
-      'server_id': null,
-      'device_id': deviceId,
-      'name': name,
-      'sku': sku,
-      'description': description,
-      'category': category,
-      'unit': effectiveBaseUnit,
-      'base_unit': effectiveBaseUnit,
-      'cost_price': costPrice,
-      'selling_price': sellingPrice,
-      'stock_quantity': stockQuantity,
-      'stock_in_base_unit': effectiveStockInBaseUnit,
-      'reorder_point': reorderPoint,
-      'is_active': isActive ? 1 : 0,
-      'is_deleted': 0,
-      'is_dirty': 1,
-      'image_path': imagePath,
-      'image_url': null,
-      'shelf_location': shelfLocation,
-      'expiration_date': expirationDate?.toIso8601String(),
-      'created_at': now,
-      'updated_at': now,
+    await _database.transaction(() async {
+      await _productsDao.upsertLocal(
+        ProductsCompanion.insert(
+          id: id,
+          syncId: id,
+          deviceId: Value(deviceId),
+          name: name,
+          sku: sku,
+          description: Value(description),
+          category: Value(category),
+          baseUnit: Value(effectiveBaseUnit),
+          costPrice: Value(costPrice),
+          sellingPrice: sellingPrice,
+          stockInBaseUnit: Value(stockBase),
+          reorderPoint: Value(reorderPoint),
+          isActive: Value(isActive),
+          imageLocalPath: Value(imagePath),
+          shelfLocation: Value(shelfLocation),
+          expirationDateMs: Value(expirationDate?.millisecondsSinceEpoch),
+          createdAtMs: 0, // upsertLocal will stamp now
+          updatedAtMs: 0,
+        ),
+      );
+      await _writeConversions(id, unitConversions, deviceId: deviceId);
     });
 
-    if (unitConversions.isNotEmpty) {
-      await _replaceProductConversions(
-        productSyncId: syncId,
-        conversions: unitConversions,
-      );
-    }
-
-    final rows = await db.query(
-      AppDatabase.ttProductsTable,
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-      limit: 1,
-    );
-    final product = InventoryProduct.fromLocalDb(
-      rows.first,
-    ).copyWith(unitConversions: unitConversions);
-    return product;
+    final saved = await getById(id);
+    return saved!;
   }
 
+  /// Patches a product. Use [_updateSentinel] semantics: pass `null` to
+  /// clear a nullable column, omit (default sentinel) to leave unchanged.
   Future<InventoryProduct> updateProduct(
     String id, {
-    String? name,
-    String? sku,
-    String? description,
-    String? category,
-    String? unit,
-    String? baseUnit,
-    double? costPrice,
-    double? sellingPrice,
-    double? stockInBaseUnit,
-    int? reorderPoint,
-    bool? isActive,
-    String? shelfLocation,
-    String? imagePath,
+    Object? name = _updateSentinel,
+    Object? sku = _updateSentinel,
+    Object? description = _updateSentinel,
+    Object? category = _updateSentinel,
+    Object? unit = _updateSentinel,
+    Object? baseUnit = _updateSentinel,
+    Object? costPrice = _updateSentinel,
+    Object? sellingPrice = _updateSentinel,
+    Object? stockInBaseUnit = _updateSentinel,
+    Object? reorderPoint = _updateSentinel,
+    Object? isActive = _updateSentinel,
+    Object? shelfLocation = _updateSentinel,
+    Object? imagePath = _updateSentinel,
     Object? expirationDate = _updateSentinel,
-    List<ProductUnitConversion>? unitConversions,
+    Object? unitConversions = _updateSentinel,
   }) async {
-    final row = await _rowById(id);
-    if (row == null) throw Exception('Product not found: $id');
-    final syncId = row['sync_id'] as String;
+    final now = DateTime.now().millisecondsSinceEpoch;
 
-    final patch = <String, Object?>{
-      'is_dirty': 1,
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-    if (name != null) {
-      patch['name'] = name;
-    }
-    if (sku != null) {
-      patch['sku'] = sku;
-    }
-    if (description != null) {
-      patch['description'] = description;
-    }
-    if (category != null) {
-      patch['category'] = category;
-    }
-    final nextBaseUnit = baseUnit ?? unit;
-    if (nextBaseUnit != null) {
-      patch['unit'] = nextBaseUnit;
-      patch['base_unit'] = nextBaseUnit;
-    }
-    if (costPrice != null) {
-      patch['cost_price'] = costPrice;
-    }
-    if (sellingPrice != null) {
-      patch['selling_price'] = sellingPrice;
-    }
-    if (stockInBaseUnit != null) {
-      patch['stock_in_base_unit'] = stockInBaseUnit;
-      patch['stock_quantity'] = stockInBaseUnit.floor();
-    }
-    if (reorderPoint != null) {
-      patch['reorder_point'] = reorderPoint;
-    }
-    if (isActive != null) {
-      patch['is_active'] = isActive ? 1 : 0;
-    }
-    if (shelfLocation != null) {
-      patch['shelf_location'] = shelfLocation;
-    }
-    if (imagePath != null) {
-      patch['image_path'] = imagePath;
-      // Clear the cached server URL so the sync service re-uploads the new file.
-      patch['image_url'] = null;
-    }
-    if (expirationDate != _updateSentinel) {
-      patch['expiration_date'] = (expirationDate as DateTime?)
-          ?.toIso8601String();
-    }
+    Value<T> v<T>(Object? raw) => identical(raw, _updateSentinel)
+        ? Value<T>.absent()
+        : Value<T>(raw as T);
 
-    final db = await _db.database;
-    await db.update(
-      AppDatabase.ttProductsTable,
-      patch,
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
+    // base_unit is the canonical column; `unit` is a legacy alias used when
+    // baseUnit is omitted.
+    final baseUnitValue = !identical(baseUnit, _updateSentinel)
+        ? Value<String>(baseUnit as String)
+        : !identical(unit, _updateSentinel)
+        ? Value<String>(unit as String)
+        : const Value<String>.absent();
+
+    final companion = ProductsCompanion(
+      name: v<String>(name),
+      sku: v<String>(sku),
+      description: v<String>(description),
+      category: v<String>(category),
+      baseUnit: baseUnitValue,
+      costPrice: v<double>(costPrice),
+      sellingPrice: v<double>(sellingPrice),
+      stockInBaseUnit: v<double>(stockInBaseUnit),
+      reorderPoint: v<int>(reorderPoint),
+      isActive: v<bool>(isActive),
+      shelfLocation: v<String?>(shelfLocation),
+      imageLocalPath: v<String?>(imagePath),
+      expirationDateMs: identical(expirationDate, _updateSentinel)
+          ? const Value<int?>.absent()
+          : Value<int?>((expirationDate as DateTime?)?.millisecondsSinceEpoch),
+      isDirty: const Value(true),
+      updatedAtMs: Value(now),
     );
-    if (unitConversions != null) {
-      await _replaceProductConversions(
-        productSyncId: syncId,
-        conversions: unitConversions,
-      );
+
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.products,
+      )..where((t) => t.id.equals(id))).write(companion);
+      if (!identical(unitConversions, _updateSentinel)) {
+        final deviceId = await _appMeta.getOrCreateDeviceId();
+        await _replaceProductConversions(
+          id,
+          unitConversions as List<ProductUnitConversion>,
+          deviceId: deviceId,
+        );
+      }
+    });
+
+    final updated = await getById(id);
+    if (updated == null) {
+      throw StateError('Product $id was deleted during update.');
     }
-    final result = await db.query(
-      AppDatabase.ttProductsTable,
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-      limit: 1,
-    );
-    final product = InventoryProduct.fromLocalDb(result.first).copyWith(
-      unitConversions:
-          unitConversions ?? await _listConversionsForProductSyncId(syncId),
-    );
-    return product;
+    return updated;
   }
 
-  Future<InventoryProduct> adjustStock({
+  /// Soft-deletes a product (sets `is_deleted=1`, `is_dirty=1`).
+  Future<void> deleteProduct(String id) => _productsDao.softDelete(id);
+
+  /// Adjusts stock for [productId] by [quantityDeltaBase] (in base units)
+  /// and writes a `stock_movements` row. [quantityDelta] is kept for
+  /// backwards compatibility with the legacy outbox payload; the canonical
+  /// truth is [quantityDeltaBase].
+  Future<void> adjustStock({
     required String productId,
-    int quantityDelta = 0,
+    required int quantityDelta,
     double? quantityDeltaBase,
-    String movementType = 'ADJUSTMENT',
+    required String movementType,
     String note = '',
     DateTime? expirationDate,
   }) async {
-    final row = await _rowById(productId);
-    if (row == null) throw Exception('Product not found: $productId');
-    final syncId = row['sync_id'] as String;
-    final serverId = row['server_id'] as String?;
     final deltaBase = quantityDeltaBase ?? quantityDelta.toDouble();
-    final currentBase =
-        (row['stock_in_base_unit'] as num?)?.toDouble() ??
-        (row['stock_quantity'] as num?)?.toDouble() ??
-        0;
-    final newBaseStock = currentBase + deltaBase;
-    final newStock = newBaseStock.floor();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final movementId = _uuid.v4();
 
-    final effectiveNote = expirationDate != null
-        ? '$note${note.isNotEmpty ? ' ' : ''}(expires: ${expirationDate.toIso8601String().split('T').first})'
-        : note;
+    await _database.transaction(() async {
+      final product = await _productsDao.findById(productId);
+      if (product == null) {
+        throw StateError('Product $productId not found.');
+      }
+      final prev = product.stockInBaseUnit;
+      final next = prev + deltaBase;
 
-    final db = await _db.database;
-    await db.update(
-      AppDatabase.ttProductsTable,
-      {
-        'stock_quantity': newStock,
-        'stock_in_base_unit': newBaseStock,
-        'is_dirty': 1,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-    );
-    final result = await db.query(
-      AppDatabase.ttProductsTable,
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-      limit: 1,
-    );
-    final product = InventoryProduct.fromLocalDb(result.first);
-
-    // If we have a server_id, fire-and-forget the adjust-stock endpoint so
-    // a proper movement record (with expirationDate) is created server-side.
-    if (serverId != null) {
-      unawaited(
-        _pushAdjustMovement(
-          serverId: serverId,
-          syncId: syncId,
-          quantityDelta: deltaBase,
-          movementType: movementType,
-          note: effectiveNote,
-          expirationDate: expirationDate,
+      await (_database.update(
+        _database.products,
+      )..where((t) => t.id.equals(productId))).write(
+        ProductsCompanion(
+          stockInBaseUnit: Value(next),
+          expirationDateMs: expirationDate == null
+              ? const Value<int?>.absent()
+              : Value<int?>(expirationDate.millisecondsSinceEpoch),
+          isDirty: const Value(true),
+          updatedAtMs: Value(now),
         ),
       );
-    }
 
-    return product;
+      await _movementsDao.insertLocal(
+        StockMovementsCompanion.insert(
+          id: movementId,
+          productId: productId,
+          movementType: movementType,
+          quantity: deltaBase,
+          previousQuantity: prev,
+          newQuantity: next,
+          note: Value(note),
+          expirationDateMs: Value(expirationDate?.millisecondsSinceEpoch),
+          createdAtMs: now,
+        ),
+      );
+    });
   }
 
-  Future<void> deleteProduct(String id) async {
-    final row = await _rowById(id);
-    if (row == null) return;
-    final syncId = row['sync_id'] as String;
-
-    final db = await _db.database;
-    await db.update(
-      AppDatabase.ttProductsTable,
-      {
-        'is_deleted': 1,
-        'is_dirty': 1,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-    );
-  }
-
-  /// Stock movements are server-computed; always fetch from API (no local cache).
+  /// Returns the stock movement history for [productId], newest first.
   Future<List<StockMovement>> getMovementsForProduct(String productId) async {
-    try {
-      final row = await _rowById(productId);
-      final apiId = (row?['server_id'] as String?) ?? productId;
-      final baseUrl = await SyncConfig.getBaseApiUrl();
-      final uri = Uri.parse('$baseUrl/inventory/products/$apiId/movements');
-      final res = await http.get(uri).timeout(_timeout);
-      if (res.statusCode < 200 || res.statusCode >= 300) return [];
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      final list = body['data'] as List<dynamic>;
-      return list
-          .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      return [];
-    }
+    final rows =
+        await (_database.select(_database.stockMovements)
+              ..where((t) => t.productId.equals(productId))
+              ..orderBy([(t) => OrderingTerm.desc(t.createdAtMs)]))
+            .get();
+    return rows
+        .map(
+          (r) => StockMovement(
+            id: r.id,
+            productId: r.productId,
+            movementType: r.movementType,
+            quantity: r.quantity.toInt(),
+            previousQuantity: r.previousQuantity.toInt(),
+            newQuantity: r.newQuantity.toInt(),
+            note: r.note,
+            reference: r.reference,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(r.createdAtMs),
+            expirationDate: r.expirationDateMs == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(r.expirationDateMs!),
+          ),
+        )
+        .toList(growable: false);
   }
 
+  /// Aggregate counts/value used by the inventory summary card.
   Future<InventorySummary> getSummary() async {
     final products = await listProducts();
     return InventorySummary(
       totalProducts: products.length,
-      totalStock: products.fold(0, (s, p) => s + p.stockQuantity),
+      totalStock: products.fold<int>(0, (s, p) => s + p.stockQuantity),
       lowStockCount: products.where((p) => p.isLowStock).length,
       outOfStockCount: products.where((p) => p.isOutOfStock).length,
       totalStockValue: products.fold<double>(0, (s, p) {
         final unit = p.costPrice > 0 ? p.costPrice : p.sellingPrice;
-        return s + unit * p.stockInBaseUnit;
+        return s + unit * p.stockQuantity;
       }),
     );
   }
 
-  // Fire-and-forget: creates a proper server-side movement record so that
-  // expiration date and movement history are preserved. Silently ignored
-  // if the server is unreachable (the stock quantity is already updated locally).
-  Future<void> _pushAdjustMovement({
-    required String serverId,
-    required String syncId,
-    required double quantityDelta,
-    required String movementType,
-    required String note,
-    DateTime? expirationDate,
-  }) async {
-    try {
-      final baseUrl = await SyncConfig.getBaseApiUrl();
-      final body = <String, dynamic>{
-        'quantityDelta': quantityDelta,
-        'movementType': movementType,
-        if (note.isNotEmpty) 'note': note,
-        if (expirationDate != null)
-          'expirationDate': expirationDate.toIso8601String(),
-      };
-      final res = await http
-          .post(
-            Uri.parse('$baseUrl/inventory/products/$serverId/adjust-stock'),
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode(body),
-          )
-          .timeout(_timeout);
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        // Server confirmed — mark row clean so syncAll() won't re-patch quantity.
-        final db = await _db.database;
-        await db.update(
-          AppDatabase.ttProductsTable,
-          {'is_dirty': 0},
-          where: 'sync_id = ?',
-          whereArgs: [syncId],
-        );
-      }
-    } catch (_) {
-      // Offline or server error — syncAll() will patch the quantity later.
-    }
-  }
+  // ───── Unit conversions ───────────────────────────────────────────────────
 
-  Future<Map<String, List<ProductUnitConversion>>>
-  _loadConversionsByProductSyncIds(List<String> productSyncIds) async {
-    if (productSyncIds.isEmpty) return const {};
-    final db = await _db.database;
-    final placeholders = List.filled(productSyncIds.length, '?').join(',');
-    final rows = await db.rawQuery(
-      'SELECT * FROM ${AppDatabase.ttProductConversionsTable} '
-      'WHERE is_deleted = 0 AND product_id IN ($placeholders) '
-      'ORDER BY conversion_factor DESC, unit_name ASC',
-      productSyncIds,
-    );
-    final map = <String, List<ProductUnitConversion>>{};
-    for (final row in rows) {
-      final syncId = (row['product_id'] as String?) ?? '';
-      if (syncId.isEmpty) continue;
-      map
-          .putIfAbsent(syncId, () => <ProductUnitConversion>[])
-          .add(ProductUnitConversion.fromLocalDb(row));
-    }
-    return map;
-  }
-
-  Future<List<ProductUnitConversion>> _listConversionsForProductSyncId(
-    String productSyncId,
+  Future<Map<String, List<ProductUnitConversion>>> _loadConversionsByProductIds(
+    List<String> productIds,
   ) async {
-    final map = await _loadConversionsByProductSyncIds([productSyncId]);
-    return map[productSyncId] ?? const [];
-  }
-
-  Future<void> _replaceProductConversions({
-    required String productSyncId,
-    required List<ProductUnitConversion> conversions,
-  }) async {
-    final db = await _db.database;
-    final now = DateTime.now().toIso8601String();
-    final batch = db.batch();
-    batch.delete(
-      AppDatabase.ttProductConversionsTable,
-      where: 'product_id = ?',
-      whereArgs: [productSyncId],
-    );
-    for (final c in conversions) {
-      final unit = c.unitName.trim();
-      if (unit.isEmpty) continue;
-      if (c.conversionFactor <= 0) continue;
-      batch.insert(AppDatabase.ttProductConversionsTable, {
-        'sync_id': c.syncId.isNotEmpty ? c.syncId : _uuid.v4(),
-        'product_id': productSyncId,
-        'unit_name': unit,
-        'conversion_factor': c.conversionFactor,
-        'cost_price': c.costPrice,
-        'selling_price': c.sellingPrice,
-        'is_deleted': 0,
-        'is_dirty': 1,
-        'created_at': now,
-        'updated_at': now,
-      });
+    if (productIds.isEmpty) return const {};
+    final rows =
+        await (_database.select(_database.productUnitConversions)..where(
+              (t) => t.isDeleted.equals(false) & t.productId.isIn(productIds),
+            ))
+            .get();
+    final out = <String, List<ProductUnitConversion>>{};
+    for (final r in rows) {
+      out
+          .putIfAbsent(r.productId, () => [])
+          .add(ProductUnitConversion.fromRow(r));
     }
-    await batch.commit(noResult: true);
+    return out;
   }
 
-  // ─── Category CRUD ────────────────────────────────────────────────────────
+  Future<List<ProductUnitConversion>> _listConversionsForProductId(
+    String productId,
+  ) async {
+    final rows = await _conversionsDao.listForProduct(productId);
+    return rows
+        .map((r) => ProductUnitConversion.fromRow(r))
+        .toList(growable: false);
+  }
+
+  Future<void> _writeConversions(
+    String productId,
+    List<ProductUnitConversion> conversions, {
+    required String deviceId,
+  }) async {
+    if (conversions.isEmpty) return;
+    for (final c in conversions) {
+      final id = c.id.isNotEmpty ? c.id : _uuid.v4();
+      await _conversionsDao.upsertLocal(
+        ProductUnitConversionsCompanion.insert(
+          id: id,
+          syncId: id,
+          deviceId: Value(deviceId),
+          productId: productId,
+          unitName: c.unitName,
+          conversionFactor: c.conversionFactor,
+          costPrice: c.costPrice,
+          sellingPrice: c.sellingPrice,
+          createdAtMs: 0,
+          updatedAtMs: 0,
+        ),
+      );
+    }
+  }
+
+  Future<void> _replaceProductConversions(
+    String productId,
+    List<ProductUnitConversion> conversions, {
+    required String deviceId,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // Soft-delete all existing rows for this product.
+    await (_database.update(_database.productUnitConversions)..where(
+          (t) => t.productId.equals(productId) & t.isDeleted.equals(false),
+        ))
+        .write(
+          ProductUnitConversionsCompanion(
+            isDeleted: const Value(true),
+            isDirty: const Value(true),
+            updatedAtMs: Value(now),
+          ),
+        );
+    await _writeConversions(productId, conversions, deviceId: deviceId);
+  }
+
+  // ───── Categories ─────────────────────────────────────────────────────────
 
   Future<List<CustomCategory>> listCategories({
     bool includeDeleted = false,
   }) async {
-    final db = await _db.database;
-    final rows = await db.query(
-      AppDatabase.ttProductCategoriesTable,
-      where: includeDeleted ? null : 'is_deleted = 0',
-      orderBy: 'name ASC',
-    );
-    return rows.map(CustomCategory.fromLocalDb).toList();
+    final query = _database.select(_database.productCategories);
+    if (!includeDeleted) query.where((t) => t.isDeleted.equals(false));
+    query.orderBy([(t) => OrderingTerm.asc(t.name)]);
+    final rows = await query.get();
+    return rows.map((r) => CustomCategory.fromRow(r)).toList(growable: false);
+  }
+
+  Future<int> countQuickAccessCategories() async {
+    final count = _database.productCategories.id.count();
+    final row =
+        await (_database.selectOnly(_database.productCategories)
+              ..addColumns([count])
+              ..where(
+                _database.productCategories.isDeleted.equals(false) &
+                    _database.productCategories.isQuickAccess.equals(true),
+              ))
+            .getSingle();
+    return row.read(count) ?? 0;
   }
 
   Future<CustomCategory> createCategory(
@@ -505,172 +440,132 @@ class LocalInventoryRepository {
     String examples = '',
     bool isQuickAccess = false,
   }) async {
-    if (isQuickAccess) {
-      await _assertCanPinAnotherQuickAccessCategory(localIdAlreadyPinned: -1);
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Category name cannot be empty.');
     }
-    await _assertCategoryNameAvailable(name, excludeLocalId: -1);
-    final db = await _db.database;
-    final syncId = _uuid.v4();
-    final now = DateTime.now().toIso8601String();
-    await db.insert(AppDatabase.ttProductCategoriesTable, {
-      'sync_id': syncId,
-      'server_id': null,
-      'name': name.trim(),
-      'description': description.trim(),
-      'examples': examples.trim(),
-      'is_quick_access': isQuickAccess ? 1 : 0,
-      'is_deleted': 0,
-      'is_dirty': 1,
-      'created_at': now,
-      'updated_at': now,
-    });
-    final rows = await db.query(
-      AppDatabase.ttProductCategoriesTable,
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-      limit: 1,
+    await _assertCategoryNameAvailable(trimmed);
+    if (isQuickAccess) {
+      await _assertCanPinAnotherQuickAccessCategory();
+    }
+    final id = _uuid.v4();
+    final deviceId = await _appMeta.getOrCreateDeviceId();
+    await _categoriesDao.upsertLocal(
+      ProductCategoriesCompanion.insert(
+        id: id,
+        syncId: id,
+        deviceId: Value(deviceId),
+        name: trimmed,
+        description: Value(description),
+        examples: Value(examples),
+        isQuickAccess: Value(isQuickAccess),
+        createdAtMs: 0,
+        updatedAtMs: 0,
+      ),
     );
-    return CustomCategory.fromLocalDb(rows.first);
+    final row = await _categoriesDao.findById(id);
+    return CustomCategory.fromRow(row!);
   }
 
-  /// Updates the editable fields of a category.
-  /// Any field left as [_updateSentinel] keeps its existing value.
-  /// Flips `is_dirty` so the row is queued for the next push.
   Future<CustomCategory> updateCategory(
-    int localId, {
+    String id, {
     Object? name = _updateSentinel,
     Object? description = _updateSentinel,
     Object? examples = _updateSentinel,
     Object? isQuickAccess = _updateSentinel,
   }) async {
-    if (isQuickAccess is bool && isQuickAccess == true) {
-      await _assertCanPinAnotherQuickAccessCategory(
-        localIdAlreadyPinned: localId,
-      );
+    var nameValue = const Value<String>.absent();
+    if (!identical(name, _updateSentinel)) {
+      final trimmed = (name as String).trim();
+      if (trimmed.isEmpty) {
+        throw ArgumentError('Category name cannot be empty.');
+      }
+      await _assertCategoryNameAvailable(trimmed, excludeId: id);
+      nameValue = Value(trimmed);
     }
-    if (name is String) {
-      await _assertCategoryNameAvailable(name, excludeLocalId: localId);
+
+    var quickAccessValue = const Value<bool>.absent();
+    if (!identical(isQuickAccess, _updateSentinel)) {
+      if (isQuickAccess == true) {
+        await _assertCanPinAnotherQuickAccessCategory(localIdAlreadyPinned: id);
+      }
+      quickAccessValue = Value(isQuickAccess as bool);
     }
-    final db = await _db.database;
-    final now = DateTime.now().toIso8601String();
-    final patch = <String, Object?>{'is_dirty': 1, 'updated_at': now};
-    if (name is String) patch['name'] = name.trim();
-    if (description is String) patch['description'] = description.trim();
-    if (examples is String) patch['examples'] = examples.trim();
-    if (isQuickAccess is bool) patch['is_quick_access'] = isQuickAccess ? 1 : 0;
-    await db.update(
-      AppDatabase.ttProductCategoriesTable,
-      patch,
-      where: 'id = ?',
-      whereArgs: [localId],
+
+    final companion = ProductCategoriesCompanion(
+      name: nameValue,
+      description: identical(description, _updateSentinel)
+          ? const Value<String>.absent()
+          : Value(description as String),
+      examples: identical(examples, _updateSentinel)
+          ? const Value<String>.absent()
+          : Value(examples as String),
+      isQuickAccess: quickAccessValue,
+      isDirty: const Value(true),
+      updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
     );
-    final rows = await db.query(
-      AppDatabase.ttProductCategoriesTable,
-      where: 'id = ?',
-      whereArgs: [localId],
-      limit: 1,
-    );
-    return CustomCategory.fromLocalDb(rows.first);
+
+    await (_database.update(
+      _database.productCategories,
+    )..where((t) => t.id.equals(id))).write(companion);
+
+    final row = await _categoriesDao.findById(id);
+    return CustomCategory.fromRow(row!);
   }
 
-  /// Count of categories currently pinned to the dashboard chip row.
-  Future<int> countQuickAccessCategories() async {
-    final db = await _db.database;
-    final rows = await db.rawQuery(
-      'SELECT COUNT(*) AS c FROM ${AppDatabase.ttProductCategoriesTable} '
-      'WHERE is_quick_access = 1 AND is_deleted = 0',
-    );
-    return (rows.first['c'] as int?) ?? 0;
-  }
+  Future<void> deleteCategory(String id) => _categoriesDao.softDelete(id);
 
-  /// Throws a [QuickAccessLimitException] if pinning another category would
-  /// push the active count over [maxQuickAccessCategories].
-  ///
-  /// Pass the [localIdAlreadyPinned] of the row being edited (or `-1` when
-  /// creating a new one) so toggling a row that's already pinned is a no-op.
-  Future<void> _assertCanPinAnotherQuickAccessCategory({
-    required int localIdAlreadyPinned,
-  }) async {
-    final db = await _db.database;
-    final rows = await db.rawQuery(
-      'SELECT COUNT(*) AS c FROM ${AppDatabase.ttProductCategoriesTable} '
-      'WHERE is_quick_access = 1 AND is_deleted = 0 AND id != ?',
-      [localIdAlreadyPinned],
-    );
-    final otherPinned = (rows.first['c'] as int?) ?? 0;
-    if (otherPinned + 1 > maxQuickAccessCategories) {
-      throw QuickAccessLimitException(
-        limit: maxQuickAccessCategories,
-        attempted: otherPinned + 1,
-      );
-    }
-  }
-
-  /// Throws a [DuplicateNameException] if another (non-deleted) category
-  /// already has the given [name] (case-insensitive). Pass the editing
-  /// row's [excludeLocalId] (or `-1` when creating) so renaming a row to
-  /// its current value is allowed.
   Future<void> _assertCategoryNameAvailable(
     String name, {
-    required int excludeLocalId,
+    String? excludeId,
   }) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return;
-    final db = await _db.database;
-    final rows = await db.rawQuery(
-      'SELECT id FROM ${AppDatabase.ttProductCategoriesTable} '
-      'WHERE is_deleted = 0 AND id != ? AND LOWER(name) = LOWER(?) LIMIT 1',
-      [excludeLocalId, trimmed],
-    );
-    if (rows.isNotEmpty) {
-      throw DuplicateNameException(name: trimmed, kind: 'category');
+    final query = _database.select(_database.productCategories)
+      ..where(
+        (t) =>
+            t.isDeleted.equals(false) &
+            t.name.lower().equals(name.toLowerCase()),
+      )
+      ..limit(1);
+    final hits = await query.get();
+    if (hits.any((r) => r.id != excludeId)) {
+      throw DuplicateNameException(kind: 'category', name: name);
     }
   }
 
-  /// Same idea as [_assertCategoryNameAvailable] but for shelf locations.
-  Future<void> _assertShelfLocationNameAvailable(
-    String name, {
-    required int excludeLocalId,
+  Future<void> _assertCanPinAnotherQuickAccessCategory({
+    String? localIdAlreadyPinned,
   }) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return;
-    final db = await _db.database;
-    final rows = await db.rawQuery(
-      'SELECT id FROM ${AppDatabase.ttShelfLocationsTable} '
-      'WHERE is_deleted = 0 AND id != ? AND LOWER(name) = LOWER(?) LIMIT 1',
-      [excludeLocalId, trimmed],
-    );
-    if (rows.isNotEmpty) {
-      throw DuplicateNameException(name: trimmed, kind: 'shelf location');
+    final count = _database.productCategories.id.count();
+    final builder = _database.selectOnly(_database.productCategories)
+      ..addColumns([count])
+      ..where(
+        _database.productCategories.isDeleted.equals(false) &
+            _database.productCategories.isQuickAccess.equals(true),
+      );
+    if (localIdAlreadyPinned != null) {
+      builder.where(
+        _database.productCategories.id.equals(localIdAlreadyPinned).not(),
+      );
+    }
+    final row = await builder.getSingle();
+    final pinned = row.read(count) ?? 0;
+    if (pinned >= maxQuickAccessCategories) {
+      throw const QuickAccessLimitException(maxQuickAccessCategories);
     }
   }
 
-  Future<void> deleteCategory(int localId) async {
-    final db = await _db.database;
-    await db.update(
-      AppDatabase.ttProductCategoriesTable,
-      {
-        'is_deleted': 1,
-        'is_dirty': 1,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [localId],
-    );
-  }
-
-  // ─── Shelf Location CRUD ──────────────────────────────────────────────────
+  // ───── Shelf locations ────────────────────────────────────────────────────
 
   Future<List<CustomShelfLocation>> listShelfLocations({
     bool includeDeleted = false,
   }) async {
-    final db = await _db.database;
-    final rows = await db.query(
-      AppDatabase.ttShelfLocationsTable,
-      where: includeDeleted ? null : 'is_deleted = 0',
-      orderBy: 'name ASC',
-    );
-    return rows.map(CustomShelfLocation.fromLocalDb).toList();
+    final query = _database.select(_database.shelfLocations);
+    if (!includeDeleted) query.where((t) => t.isDeleted.equals(false));
+    query.orderBy([(t) => OrderingTerm.asc(t.name)]);
+    final rows = await query.get();
+    return rows
+        .map((r) => CustomShelfLocation.fromRow(r))
+        .toList(growable: false);
   }
 
   Future<CustomShelfLocation> createShelfLocation(
@@ -679,136 +574,134 @@ class LocalInventoryRepository {
     String examples = '',
     String? imagePath,
   }) async {
-    await _assertShelfLocationNameAvailable(name, excludeLocalId: -1);
-    final db = await _db.database;
-    final syncId = _uuid.v4();
-    final now = DateTime.now().toIso8601String();
-    await db.insert(AppDatabase.ttShelfLocationsTable, {
-      'sync_id': syncId,
-      'server_id': null,
-      'name': name.trim(),
-      'description': description.trim(),
-      'examples': examples.trim(),
-      'image_path': imagePath,
-      'image_url': null,
-      'is_deleted': 0,
-      'is_dirty': 1,
-      'created_at': now,
-      'updated_at': now,
-    });
-    final rows = await db.query(
-      AppDatabase.ttShelfLocationsTable,
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-      limit: 1,
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Shelf location name cannot be empty.');
+    }
+    await _assertShelfLocationNameAvailable(trimmed);
+    final id = _uuid.v4();
+    final deviceId = await _appMeta.getOrCreateDeviceId();
+    await _shelvesDao.upsertLocal(
+      ShelfLocationsCompanion.insert(
+        id: id,
+        syncId: id,
+        deviceId: Value(deviceId),
+        name: trimmed,
+        description: Value(description),
+        examples: Value(examples),
+        imageLocalPath: Value(imagePath),
+        createdAtMs: 0,
+        updatedAtMs: 0,
+      ),
     );
-    return CustomShelfLocation.fromLocalDb(rows.first);
+    final row = await _shelvesDao.findById(id);
+    return CustomShelfLocation.fromRow(row!);
   }
 
-  /// Updates the editable fields of a shelf location.
-  /// Any field left as [_updateSentinel] keeps its existing value.
-  /// Passing a new [imagePath] also clears the previously cached `image_url`
-  /// so the sync worker re-uploads the fresh file.
   Future<CustomShelfLocation> updateShelfLocation(
-    int localId, {
+    String id, {
     Object? name = _updateSentinel,
     Object? description = _updateSentinel,
     Object? examples = _updateSentinel,
     Object? imagePath = _updateSentinel,
   }) async {
-    if (name is String) {
-      await _assertShelfLocationNameAvailable(name, excludeLocalId: localId);
+    var nameValue = const Value<String>.absent();
+    if (!identical(name, _updateSentinel)) {
+      final trimmed = (name as String).trim();
+      if (trimmed.isEmpty) {
+        throw ArgumentError('Shelf location name cannot be empty.');
+      }
+      await _assertShelfLocationNameAvailable(trimmed, excludeId: id);
+      nameValue = Value(trimmed);
     }
-    final db = await _db.database;
-    final now = DateTime.now().toIso8601String();
-    final patch = <String, Object?>{'is_dirty': 1, 'updated_at': now};
-    if (name is String) patch['name'] = name.trim();
-    if (description is String) patch['description'] = description.trim();
-    if (examples is String) patch['examples'] = examples.trim();
-    if (imagePath != _updateSentinel) {
-      patch['image_path'] = imagePath as String?;
-      // New file means the previous remote URL no longer matches; force a
-      // re-upload on the next sync run.
-      patch['image_url'] = null;
-    }
-    await db.update(
-      AppDatabase.ttShelfLocationsTable,
-      patch,
-      where: 'id = ?',
-      whereArgs: [localId],
+
+    final companion = ShelfLocationsCompanion(
+      name: nameValue,
+      description: identical(description, _updateSentinel)
+          ? const Value<String>.absent()
+          : Value(description as String),
+      examples: identical(examples, _updateSentinel)
+          ? const Value<String>.absent()
+          : Value(examples as String),
+      imageLocalPath: identical(imagePath, _updateSentinel)
+          ? const Value<String?>.absent()
+          : Value(imagePath as String?),
+      isDirty: const Value(true),
+      updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
     );
-    final rows = await db.query(
-      AppDatabase.ttShelfLocationsTable,
-      where: 'id = ?',
-      whereArgs: [localId],
-      limit: 1,
-    );
-    return CustomShelfLocation.fromLocalDb(rows.first);
+
+    await (_database.update(
+      _database.shelfLocations,
+    )..where((t) => t.id.equals(id))).write(companion);
+
+    final row = await _shelvesDao.findById(id);
+    return CustomShelfLocation.fromRow(row!);
   }
 
-  Future<void> deleteShelfLocation(int localId) async {
-    final db = await _db.database;
-    await db.update(
-      AppDatabase.ttShelfLocationsTable,
-      {
-        'is_deleted': 1,
-        'is_dirty': 1,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [localId],
-    );
-  }
+  Future<void> deleteShelfLocation(String id) => _shelvesDao.softDelete(id);
 
-  static const Object _updateSentinel = Object();
+  Future<void> _assertShelfLocationNameAvailable(
+    String name, {
+    String? excludeId,
+  }) async {
+    final query = _database.select(_database.shelfLocations)
+      ..where(
+        (t) =>
+            t.isDeleted.equals(false) &
+            t.name.lower().equals(name.toLowerCase()),
+      )
+      ..limit(1);
+    final hits = await query.get();
+    if (hits.any((r) => r.id != excludeId)) {
+      throw DuplicateNameException(kind: 'shelf location', name: name);
+    }
+  }
 }
 
-/// Hard cap on the number of categories that can be pinned to the dashboard
-/// chip row. Mirrors the server's enforcement in `inventory.service.ts`.
-const int maxQuickAccessCategories = 10;
+// ─────────────────────────────────────────────────────────────────────────────
+// Exceptions and aggregates
+// ─────────────────────────────────────────────────────────────────────────────
 
-/// Thrown when a user tries to save a category or shelf location whose
-/// trimmed name (case-insensitive) collides with an existing active row.
-/// UI layers catch this to surface a friendly SnackBar.
-class DuplicateNameException implements Exception {
-  const DuplicateNameException({required this.name, required this.kind});
-
-  /// The conflicting name the user attempted to save.
-  final String name;
-
-  /// Human-readable label of what kind of record clashed
-  /// (e.g. `'category'`, `'shelf location'`).
-  final String kind;
+/// Thrown by [LocalInventoryRepository.createProduct] when an existing
+/// product (including soft-deleted) already uses the same SKU. The
+/// caller can offer a restock-the-existing-row flow with [existing].
+class DuplicateSkuException implements Exception {
+  final InventoryProduct existing;
+  const DuplicateSkuException(this.existing);
 
   @override
-  String toString() => 'DuplicateNameException: $kind "$name" already exists';
+  String toString() => 'DuplicateSkuException(existing=${existing.sku})';
 }
 
-/// Thrown by [LocalInventoryRepository] when pinning another category would
-/// exceed [maxQuickAccessCategories]. UI layers catch this to surface a
-/// user-friendly SnackBar without aborting the wider transaction.
+/// Thrown when a category / shelf-location name collides with an
+/// existing non-deleted row.
+class DuplicateNameException implements Exception {
+  /// Human-readable kind, e.g. 'category' or 'shelf location'.
+  final String kind;
+  final String name;
+  const DuplicateNameException({required this.kind, required this.name});
+
+  @override
+  String toString() => 'DuplicateNameException($kind "$name")';
+}
+
+/// Thrown when pinning a category would exceed
+/// [maxQuickAccessCategories].
 class QuickAccessLimitException implements Exception {
-  const QuickAccessLimitException({
-    required this.limit,
-    required this.attempted,
-  });
   final int limit;
-  final int attempted;
+  const QuickAccessLimitException(this.limit);
 
   @override
   String toString() =>
-      'QuickAccessLimitException: $attempted exceeds limit of $limit';
+      'QuickAccessLimitException(limit=$limit) — pin one fewer to add another.';
 }
 
+/// Aggregate counts/value for the inventory dashboard summary card.
 class InventorySummary {
   final int totalProducts;
   final int totalStock;
   final int lowStockCount;
   final int outOfStockCount;
-
-  /// Total inventory value at cost (sum of `costPrice * stockQuantity` across
-  /// active products). Falls back to selling price when cost is 0 so the
-  /// dashboard tile is never blank for shop owners who skip cost entry.
   final double totalStockValue;
 
   const InventorySummary({
@@ -816,6 +709,6 @@ class InventorySummary {
     required this.totalStock,
     required this.lowStockCount,
     required this.outOfStockCount,
-    this.totalStockValue = 0,
+    required this.totalStockValue,
   });
 }

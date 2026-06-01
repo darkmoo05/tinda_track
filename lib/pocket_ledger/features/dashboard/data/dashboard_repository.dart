@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -123,8 +124,7 @@ class ChargeTransaction {
 }
 
 class DashboardRepository {
-  DashboardRepository({AppDatabase? database})
-    : _database = database ?? AppDatabase.instance;
+  DashboardRepository({required AppDatabase database}) : _database = database;
 
   final AppDatabase _database;
   final NumberFormat _currencyFormat = NumberFormat.currency(
@@ -136,14 +136,31 @@ class DashboardRepository {
   final DateFormat _chartDateFormat = DateFormat('dd MMM');
   static const double _lowBalanceRatio = 0.10;
 
+  // SQL alias used everywhere downstream: synthesize a `created_at` ISO
+  // string from the new `created_at_ms` column so this file's row-map
+  // logic can stay unchanged after the Drift migration.
+  static const String _createdAtAlias =
+      "strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at";
+
+  Future<List<Map<String, Object?>>> _selectRows(
+    String sql, {
+    List<Variable> variables = const [],
+  }) async {
+    final result = await _database
+        .customSelect(sql, variables: variables)
+        .get();
+    return result
+        .map((row) => Map<String, Object?>.from(row.data))
+        .toList(growable: false);
+  }
+
   Future<List<StatementEntry>> loadStatementEntries() async {
-    final db = await _database.database;
-    final rows = await db.query(
-      AppDatabase.ledgerTable,
-      columns: ['amount', 'created_at', 'owner_movement_type', 'note'],
-      where: "entry_type = ? AND owner_movement_type IS NOT NULL",
-      whereArgs: ['owner_movement'],
-      orderBy: 'created_at DESC, id DESC',
+    final rows = await _selectRows(
+      "SELECT amount, owner_movement_type, note, $_createdAtAlias "
+      "FROM ledger_entries "
+      "WHERE entry_type = 'owner_movement' "
+      "AND owner_movement_type IS NOT NULL "
+      "ORDER BY created_at_ms DESC, id DESC",
     );
 
     final entries = <StatementEntry>[];
@@ -188,21 +205,16 @@ class DashboardRepository {
   }
 
   Future<DashboardSnapshot> loadSnapshot() async {
-    final db = await _database.database;
-    final rows = await db.query(
-      AppDatabase.ledgerTable,
-      where: 'COALESCE(is_deleted, 0) = 0',
-      orderBy: 'created_at ASC, id ASC',
+    final rows = await _selectRows(
+      "SELECT *, $_createdAtAlias FROM ledger_entries "
+      "WHERE COALESCE(is_deleted, 0) = 0 "
+      "ORDER BY created_at_ms ASC, id ASC",
     );
-    final feeRows = await db.query(
-      AppDatabase.feeTransactionsTable,
-      columns: [
-        'related_transaction_id',
-        'fee_amount',
-        'charge_destination',
-        'created_at',
-      ],
-      where: 'COALESCE(is_deleted, 0) = 0',
+    final feeRows = await _selectRows(
+      "SELECT related_transaction_sync_id, fee_amount, charge_destination, "
+      "$_createdAtAlias "
+      "FROM fee_transactions "
+      "WHERE COALESCE(is_deleted, 0) = 0",
     );
 
     double walletBalance = 0;
@@ -236,7 +248,7 @@ class DashboardRepository {
     final walletClosingByDay = <DateTime, double>{};
     final mayaWalletClosingByDay = <DateTime, double>{};
     final cashClosingByDay = <DateTime, double>{};
-    final transactionById = <int, Map<String, Object?>>{};
+    final transactionById = <String, Map<String, Object?>>{};
     final feeIncomeEventsBySource = <String, List<_FeeLedgerEvent>>{
       'on_hand': <_FeeLedgerEvent>[],
       'gcash': <_FeeLedgerEvent>[],
@@ -342,15 +354,15 @@ class DashboardRepository {
       }
 
       if (entryType == 'transaction') {
-        final transactionId = (row['id'] as num?)?.toInt();
-        if (transactionId != null) {
-          transactionById[transactionId] = row;
+        final transactionSyncId = ((row['sync_id'] as String?) ?? '').trim();
+        if (transactionSyncId.isNotEmpty) {
+          transactionById[transactionSyncId] = row;
         }
         transactionCount++;
       }
     }
 
-    final linkedTransactionIds = <int>{};
+    final linkedTransactionIds = <String>{};
     var feeRowsProcessed = 0;
     var feeRowsInferredDestination = 0;
     var feeRowsUnknownDestination = 0;
@@ -363,17 +375,17 @@ class DashboardRepository {
       }
       feeRowsProcessed++;
 
-      final relatedTransactionId = (feeRow['related_transaction_id'] as num?)
-          ?.toInt();
-      if (relatedTransactionId != null) {
-        linkedTransactionIds.add(relatedTransactionId);
+      final relatedTransactionSyncId =
+          ((feeRow['related_transaction_sync_id'] as String?) ?? '').trim();
+      if (relatedTransactionSyncId.isNotEmpty) {
+        linkedTransactionIds.add(relatedTransactionSyncId);
       }
 
       final destinationRaw = ((feeRow['charge_destination'] as String?) ?? '')
           .trim();
       var destinationKey = _normalizeWalletKey(destinationRaw);
-      if (destinationKey.isEmpty && relatedTransactionId != null) {
-        final relatedTx = transactionById[relatedTransactionId];
+      if (destinationKey.isEmpty && relatedTransactionSyncId.isNotEmpty) {
+        final relatedTx = transactionById[relatedTransactionSyncId];
         if (relatedTx != null) {
           destinationKey = _inferFeeDestinationFromTransaction(relatedTx);
           if (destinationKey.isNotEmpty) {
@@ -385,9 +397,9 @@ class DashboardRepository {
         feeRowsUnknownDestination++;
       }
 
-      final relatedTx = relatedTransactionId == null
+      final relatedTx = relatedTransactionSyncId.isEmpty
           ? null
-          : transactionById[relatedTransactionId];
+          : transactionById[relatedTransactionSyncId];
       final createdAtRaw = (feeRow['created_at'] as String?)?.trim();
       final createdAt =
           (createdAtRaw == null || createdAtRaw.isEmpty

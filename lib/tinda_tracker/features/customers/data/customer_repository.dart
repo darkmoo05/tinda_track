@@ -1,57 +1,79 @@
-﻿import 'dart:async';
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
+﻿import 'package:drift/drift.dart' show Variable;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/app_database.dart';
-import '../../../../core/sync/sync_config.dart';
+import '../../../../core/database/daos/app_meta_dao.dart';
+import '../../../../core/di/database_providers.dart';
 import 'customer_model.dart';
 
-/// Local-first customer repository.
-///
-/// All writes hit SQLite immediately (is_dirty = 1), then a fire-and-forget
-/// background API call is made. Reads always come from local SQLite.
-class CustomerRepository {
-  CustomerRepository._();
-  static final CustomerRepository instance = CustomerRepository._();
+/// Riverpod provider for the local-first customer repository.
+final customerRepositoryProvider = Provider<CustomerRepository>((ref) {
+  return CustomerRepository(database: ref.watch(appDatabaseProvider));
+});
 
+/// Local-first customer repository (Drift-backed). Background push is handled
+/// by `SyncOrchestrator` via `is_dirty` flags — this layer only writes to
+/// SQLite.
+class CustomerRepository {
+  CustomerRepository({required AppDatabase database})
+    : _database = database,
+      _appMeta = AppMetaDao(database);
+
+  final AppDatabase _database;
+  final AppMetaDao _appMeta;
   static const _uuid = Uuid();
-  static const _timeout = Duration(seconds: 12);
-  final _db = AppDatabase.instance;
+
+  static const String _createdAtAlias =
+      "strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') "
+      "AS created_at";
+
+  Future<List<Map<String, Object?>>> _selectRows(
+    String sql, {
+    List<Variable> variables = const [],
+  }) async {
+    final result = await _database
+        .customSelect(sql, variables: variables)
+        .get();
+    return result
+        .map((row) => Map<String, Object?>.from(row.data))
+        .toList(growable: false);
+  }
 
   Future<Map<String, Object?>?> _customerRowById(String id) async {
-    final db = await _db.database;
-    final rows = await db.query(
-      AppDatabase.ttCustomersTable,
-      where: 'server_id = ? OR sync_id = ?',
-      whereArgs: [id, id],
-      limit: 1,
+    final rows = await _selectRows(
+      'SELECT id, id AS sync_id, id AS server_id, name, phone, address, notes '
+      'FROM customers WHERE id = ? LIMIT 1',
+      variables: [Variable<String>(id)],
     );
     return rows.isEmpty ? null : rows.first;
   }
 
   Future<TtCustomer> _buildCustomer(Map<String, Object?> row) async {
-    final db = await _db.database;
-    final syncId = row['sync_id'] as String;
-    final customerId = (row['server_id'] as String?) ?? syncId;
-    final utangRows = await db.query(
-      AppDatabase.ttUtangRecordsTable,
-      where: 'customer_sync_id = ? AND is_deleted = 0',
-      whereArgs: [syncId],
-      orderBy: 'created_at ASC',
+    final customerId = row['id'] as String;
+    final utangRows = await _selectRows(
+      'SELECT id, id AS sync_id, id AS server_id, description, amount, '
+      "$_createdAtAlias "
+      'FROM utang_records WHERE customer_id = ? '
+      'AND COALESCE(is_deleted, 0) = 0 '
+      'ORDER BY created_at_ms ASC',
+      variables: [Variable<String>(customerId)],
     );
-    final records =
-        utangRows.map((r) => TtUtangRecord.fromLocalDb(r, customerId)).toList();
-    return TtCustomer.fromLocalDb(row, records);
+    final records = utangRows
+        .map((r) => TtUtangRecord.fromLocalDb(r, customerId))
+        .toList();
+    // Customers table no longer carries a `balance` column; derive it from
+    // utang records and inject for the legacy fromLocalDb factory.
+    final balance = records.fold<double>(0, (sum, r) => sum + r.amount);
+    final rowWithBalance = <String, Object?>{...row, 'balance': balance};
+    return TtCustomer.fromLocalDb(rowWithBalance, records);
   }
 
   Future<List<TtCustomer>> listCustomers() async {
-    final db = await _db.database;
-    final rows = await db.query(
-      AppDatabase.ttCustomersTable,
-      where: 'is_deleted = 0',
-      orderBy: 'name ASC',
+    final rows = await _selectRows(
+      'SELECT id, id AS sync_id, id AS server_id, name, phone, address, notes '
+      'FROM customers WHERE COALESCE(is_deleted, 0) = 0 '
+      'ORDER BY name ASC',
     );
     return Future.wait(rows.map(_buildCustomer));
   }
@@ -68,35 +90,31 @@ class CustomerRepository {
     String? address,
     String? notes,
   }) async {
-    final db = await _db.database;
-    final syncId = _uuid.v4();
-    final deviceId = await _db.getOrCreateDeviceId();
-    final now = DateTime.now().toIso8601String();
+    final id = _uuid.v4();
+    final deviceId = await _appMeta.getOrCreateDeviceId();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    await db.insert(AppDatabase.ttCustomersTable, {
-      'sync_id': syncId,
-      'server_id': null,
-      'device_id': deviceId,
-      'name': name,
-      'phone': phone ?? '',
-      'address': address ?? '',
-      'notes': notes ?? '',
-      'balance': 0.0,
-      'is_deleted': 0,
-      'is_dirty': 1,
-      'created_at': now,
-      'updated_at': now,
-    });
-
-    final rows = await db.query(
-      AppDatabase.ttCustomersTable,
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-      limit: 1,
+    await _database.customStatement(
+      'INSERT INTO customers ('
+      'id, name, phone, address, notes, '
+      'sync_id, device_id, is_deleted, is_dirty, '
+      'created_at_ms, updated_at_ms'
+      ') VALUES (?,?,?,?,?,?,?,0,1,?,?)',
+      [
+        id,
+        name,
+        phone ?? '',
+        address ?? '',
+        notes ?? '',
+        id,
+        deviceId,
+        nowMs,
+        nowMs,
+      ],
     );
-    final customer = await _buildCustomer(rows.first);
-    unawaited(_pushCreateCustomer(syncId));
-    return customer;
+
+    final row = await _customerRowById(id);
+    return _buildCustomer(row!);
   }
 
   Future<TtUtangRecord> addUtang({
@@ -106,51 +124,51 @@ class CustomerRepository {
   }) async {
     final row = await _customerRowById(customerId);
     if (row == null) throw Exception('Customer not found: $customerId');
-    final customerSyncId = row['sync_id'] as String;
-    final exposedCustomerId = (row['server_id'] as String?) ?? customerSyncId;
+    final canonicalCustomerId = row['id'] as String;
 
-    final db = await _db.database;
-    final syncId = _uuid.v4();
-    final deviceId = await _db.getOrCreateDeviceId();
-    final now = DateTime.now().toIso8601String();
+    final id = _uuid.v4();
+    final deviceId = await _appMeta.getOrCreateDeviceId();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    await db.insert(AppDatabase.ttUtangRecordsTable, {
-      'sync_id': syncId,
-      'server_id': null,
-      'customer_sync_id': customerSyncId,
-      'device_id': deviceId,
-      'description': description,
-      'amount': amount,
-      'is_deleted': 0,
-      'is_dirty': 1,
-      'created_at': now,
+    await _database.transaction(() async {
+      await _database.customStatement(
+        'INSERT INTO utang_records ('
+        'id, customer_id, description, amount, '
+        'sync_id, device_id, is_deleted, is_dirty, '
+        'created_at_ms, updated_at_ms'
+        ') VALUES (?,?,?,?,?,?,0,1,?,?)',
+        [
+          id,
+          canonicalCustomerId,
+          description,
+          amount,
+          id,
+          deviceId,
+          nowMs,
+          nowMs,
+        ],
+      );
+      // Touch the customer so it gets re-pushed by sync (balance is derived).
+      await _database.customStatement(
+        'UPDATE customers SET is_dirty = 1, updated_at_ms = ? WHERE id = ?',
+        [nowMs, canonicalCustomerId],
+      );
     });
 
-    final newBalance = (row['balance'] as num).toDouble() + amount;
-    await db.update(
-      AppDatabase.ttCustomersTable,
-      {'balance': newBalance, 'is_dirty': 1, 'updated_at': now},
-      where: 'sync_id = ?',
-      whereArgs: [customerSyncId],
+    final newUtangRows = await _selectRows(
+      'SELECT id, id AS sync_id, id AS server_id, description, amount, '
+      "$_createdAtAlias "
+      'FROM utang_records WHERE id = ? LIMIT 1',
+      variables: [Variable<String>(id)],
     );
-
-    final utangRow = await db.query(
-      AppDatabase.ttUtangRecordsTable,
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
-      limit: 1,
-    );
-    final record = TtUtangRecord.fromLocalDb(utangRow.first, exposedCustomerId);
-    unawaited(
-        _pushUtang(customerSyncId, syncId, amount, description, isPayment: false));
-    return record;
+    return TtUtangRecord.fromLocalDb(newUtangRows.first, canonicalCustomerId);
   }
 
   Future<TtUtangRecord> recordPayment({
     required String customerId,
     required double amount,
     String? note,
-  }) async {
+  }) {
     return addUtang(
       customerId: customerId,
       amount: -amount.abs(),
@@ -161,125 +179,12 @@ class CustomerRepository {
   Future<void> deleteCustomer(String id) async {
     final row = await _customerRowById(id);
     if (row == null) return;
-    final syncId = row['sync_id'] as String;
-    final serverId = row['server_id'] as String?;
-
-    final db = await _db.database;
-    await db.update(
-      AppDatabase.ttCustomersTable,
-      {
-        'is_deleted': 1,
-        'is_dirty': 1,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'sync_id = ?',
-      whereArgs: [syncId],
+    final canonicalId = row['id'] as String;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await _database.customStatement(
+      'UPDATE customers SET is_deleted = 1, is_dirty = 1, updated_at_ms = ? '
+      'WHERE id = ?',
+      [nowMs, canonicalId],
     );
-    if (serverId != null) unawaited(_pushDeleteCustomer(serverId, syncId));
-  }
-
-  Future<void> _pushCreateCustomer(String syncId) async {
-    try {
-      final db = await _db.database;
-      final rows = await db.query(
-        AppDatabase.ttCustomersTable,
-        where: 'sync_id = ?',
-        whereArgs: [syncId],
-        limit: 1,
-      );
-      if (rows.isEmpty) return;
-      final row = rows.first;
-
-      final baseUrl = await SyncConfig.getBaseApiUrl();
-      final res = await http
-          .post(
-            Uri.parse('$baseUrl/customers'),
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'name': row['name'],
-              if ((row['phone'] as String).isNotEmpty) 'phone': row['phone'],
-              if ((row['address'] as String).isNotEmpty)
-                'address': row['address'],
-              if ((row['notes'] as String).isNotEmpty) 'notes': row['notes'],
-            }),
-          )
-          .timeout(_timeout);
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final data = jsonDecode(res.body)['data'] as Map<String, dynamic>;
-        await db.update(
-          AppDatabase.ttCustomersTable,
-          {'server_id': data['id'] as String, 'is_dirty': 0},
-          where: 'sync_id = ?',
-          whereArgs: [syncId],
-        );
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _pushUtang(
-    String customerSyncId,
-    String utangSyncId,
-    double amount,
-    String description, {
-    required bool isPayment,
-  }) async {
-    try {
-      final db = await _db.database;
-      final customerRows = await db.query(
-        AppDatabase.ttCustomersTable,
-        where: 'sync_id = ?',
-        whereArgs: [customerSyncId],
-        limit: 1,
-      );
-      if (customerRows.isEmpty) return;
-      final serverId = customerRows.first['server_id'] as String?;
-      if (serverId == null) return;
-
-      final baseUrl = await SyncConfig.getBaseApiUrl();
-      final path = isPayment
-          ? '$baseUrl/customers/$serverId/payment'
-          : '$baseUrl/customers/$serverId/utang';
-
-      final res = await http
-          .post(
-            Uri.parse(path),
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'amount': amount.abs(),
-              if (description.isNotEmpty) 'description': description,
-              if (isPayment && description.isNotEmpty) 'note': description,
-            }),
-          )
-          .timeout(_timeout);
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final data = jsonDecode(res.body)['data'] as Map<String, dynamic>;
-        await db.update(
-          AppDatabase.ttUtangRecordsTable,
-          {'server_id': data['id'] as String?, 'is_dirty': 0},
-          where: 'sync_id = ?',
-          whereArgs: [utangSyncId],
-        );
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _pushDeleteCustomer(String serverId, String syncId) async {
-    try {
-      final baseUrl = await SyncConfig.getBaseApiUrl();
-      final res = await http
-          .delete(Uri.parse('$baseUrl/customers/$serverId'))
-          .timeout(_timeout);
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final db = await _db.database;
-        await db.update(
-          AppDatabase.ttCustomersTable,
-          {'is_dirty': 0},
-          where: 'sync_id = ?',
-          whereArgs: [syncId],
-        );
-      }
-    } catch (_) {}
   }
 }

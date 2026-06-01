@@ -124,7 +124,7 @@ final allProductsProvider = FutureProvider.autoDispose<List<InventoryProduct>>((
   ref,
 ) {
   ref.watch(inventoryRefreshProvider);
-  return LocalInventoryRepository.instance.listProducts();
+  return ref.read(localInventoryRepositoryProvider).listProducts();
 });
 
 final filteredProductsProvider =
@@ -187,9 +187,9 @@ final inventorySummaryProvider =
 
 final stockMovementsProvider = FutureProvider.autoDispose
     .family<List<StockMovement>, String>((ref, productId) {
-      return LocalInventoryRepository.instance.getMovementsForProduct(
-        productId,
-      );
+      return ref
+          .read(localInventoryRepositoryProvider)
+          .getMovementsForProduct(productId);
     });
 
 /// Returns the products currently assigned to [shelfName] (matched by
@@ -217,13 +217,13 @@ final allCategoriesProvider = FutureProvider.autoDispose<List<CustomCategory>>((
   ref,
 ) {
   ref.watch(categoriesRefreshProvider);
-  return LocalInventoryRepository.instance.listCategories();
+  return ref.read(localInventoryRepositoryProvider).listCategories();
 });
 
 final allShelfLocationsProvider =
     FutureProvider.autoDispose<List<CustomShelfLocation>>((ref) {
       ref.watch(shelfLocationsRefreshProvider);
-      return LocalInventoryRepository.instance.listShelfLocations();
+      return ref.read(localInventoryRepositoryProvider).listShelfLocations();
     });
 
 /// Categories pinned to the dashboard chip row. Hard-capped at

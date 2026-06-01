@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../../core/app_theme.dart';
+import '../../../../../core/network/api_client.dart';
+import '../../../../../core/sync/sync_orchestrator.dart';
 import '../../../../shared/widgets/top_alert.dart';
 import '../data/local_inventory_repository.dart';
 import '../data/models/custom_category.dart';
@@ -75,6 +78,10 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
       ref.invalidate(allShelfLocationsProvider);
       ref.read(shelfLocationsRefreshProvider.notifier).state++;
     }
+    // Fire-and-forget push to the server. Without this, the new/changed row
+    // sits on the device with is_dirty=1 until the next app launch / exit
+    // lifecycle sync — leaving other devices unaware until then.
+    unawaited(ref.read(syncOrchestratorProvider).runOnce());
   }
 
   Future<void> _add() async {
@@ -83,9 +90,11 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
     setState(() => _adding = true);
     try {
       if (widget.isCategory) {
-        await LocalInventoryRepository.instance.createCategory(name);
+        await ref.read(localInventoryRepositoryProvider).createCategory(name);
       } else {
-        await LocalInventoryRepository.instance.createShelfLocation(name);
+        await ref
+            .read(localInventoryRepositoryProvider)
+            .createShelfLocation(name);
       }
       _newNameCtrl.clear();
       _invalidate();
@@ -369,7 +378,7 @@ class _ManageLookupSheetState extends ConsumerState<_ManageLookupSheet> {
 // Per-row editors
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CategoryTile extends StatefulWidget {
+class _CategoryTile extends ConsumerStatefulWidget {
   final CustomCategory category;
   // [err] is non-null when the underlying mutation threw — typically a
   // [QuickAccessLimitException]. Always called so the host can refresh.
@@ -377,10 +386,10 @@ class _CategoryTile extends StatefulWidget {
   const _CategoryTile({required this.category, required this.onChanged});
 
   @override
-  State<_CategoryTile> createState() => _CategoryTileState();
+  ConsumerState<_CategoryTile> createState() => _CategoryTileState();
 }
 
-class _CategoryTileState extends State<_CategoryTile> {
+class _CategoryTileState extends ConsumerState<_CategoryTile> {
   late final TextEditingController _name;
   late final TextEditingController _desc;
   late final TextEditingController _examples;
@@ -408,13 +417,15 @@ class _CategoryTileState extends State<_CategoryTile> {
   Future<void> _save({bool? quickOverride}) async {
     setState(() => _busy = true);
     try {
-      await LocalInventoryRepository.instance.updateCategory(
-        widget.category.localId,
-        name: _name.text.trim(),
-        description: _desc.text.trim(),
-        examples: _examples.text.trim(),
-        isQuickAccess: quickOverride ?? _quick,
-      );
+      await ref
+          .read(localInventoryRepositoryProvider)
+          .updateCategory(
+            widget.category.localId,
+            name: _name.text.trim(),
+            description: _desc.text.trim(),
+            examples: _examples.text.trim(),
+            isQuickAccess: quickOverride ?? _quick,
+          );
       widget.onChanged(null);
     } on Object catch (e) {
       // Roll back UI state for the failed toggle so the checkbox reflects
@@ -431,9 +442,9 @@ class _CategoryTileState extends State<_CategoryTile> {
   Future<void> _delete() async {
     final ok = await _confirmDelete(context, widget.category.name);
     if (ok != true) return;
-    await LocalInventoryRepository.instance.deleteCategory(
-      widget.category.localId,
-    );
+    await ref
+        .read(localInventoryRepositoryProvider)
+        .deleteCategory(widget.category.localId);
     widget.onChanged(null);
   }
 
@@ -628,16 +639,16 @@ class _CategoryTileState extends State<_CategoryTile> {
   }
 }
 
-class _ShelfLocationTile extends StatefulWidget {
+class _ShelfLocationTile extends ConsumerStatefulWidget {
   final CustomShelfLocation location;
   final void Function(Object? err) onChanged;
   const _ShelfLocationTile({required this.location, required this.onChanged});
 
   @override
-  State<_ShelfLocationTile> createState() => _ShelfLocationTileState();
+  ConsumerState<_ShelfLocationTile> createState() => _ShelfLocationTileState();
 }
 
-class _ShelfLocationTileState extends State<_ShelfLocationTile> {
+class _ShelfLocationTileState extends ConsumerState<_ShelfLocationTile> {
   late final TextEditingController _name;
   late final TextEditingController _desc;
   late final TextEditingController _examples;
@@ -691,10 +702,9 @@ class _ShelfLocationTileState extends State<_ShelfLocationTile> {
       _imageUrl = null; // force re-upload by the sync worker
       _imageVersion++;
     });
-    await LocalInventoryRepository.instance.updateShelfLocation(
-      widget.location.localId,
-      imagePath: file.path,
-    );
+    await ref
+        .read(localInventoryRepositoryProvider)
+        .updateShelfLocation(widget.location.localId, imagePath: file.path);
     widget.onChanged(null);
   }
 
@@ -736,10 +746,9 @@ class _ShelfLocationTileState extends State<_ShelfLocationTile> {
       _imageUrl = null;
       _imageVersion++;
     });
-    await LocalInventoryRepository.instance.updateShelfLocation(
-      widget.location.localId,
-      imagePath: null,
-    );
+    await ref
+        .read(localInventoryRepositoryProvider)
+        .updateShelfLocation(widget.location.localId, imagePath: null);
     widget.onChanged(null);
   }
 
@@ -810,12 +819,14 @@ class _ShelfLocationTileState extends State<_ShelfLocationTile> {
   Future<void> _save() async {
     setState(() => _busy = true);
     try {
-      await LocalInventoryRepository.instance.updateShelfLocation(
-        widget.location.localId,
-        name: _name.text.trim(),
-        description: _desc.text.trim(),
-        examples: _examples.text.trim(),
-      );
+      await ref
+          .read(localInventoryRepositoryProvider)
+          .updateShelfLocation(
+            widget.location.localId,
+            name: _name.text.trim(),
+            description: _desc.text.trim(),
+            examples: _examples.text.trim(),
+          );
       widget.onChanged(null);
     } on Object catch (e) {
       widget.onChanged(e);
@@ -827,9 +838,9 @@ class _ShelfLocationTileState extends State<_ShelfLocationTile> {
   Future<void> _delete() async {
     final ok = await _confirmDelete(context, widget.location.name);
     if (ok != true) return;
-    await LocalInventoryRepository.instance.deleteShelfLocation(
-      widget.location.localId,
-    );
+    await ref
+        .read(localInventoryRepositoryProvider)
+        .deleteShelfLocation(widget.location.localId);
     widget.onChanged(null);
   }
 
@@ -933,11 +944,16 @@ class _ShelfLocationTileState extends State<_ShelfLocationTile> {
         fit: BoxFit.cover,
       );
     } else if (_imageUrl != null && _imageUrl!.isNotEmpty) {
-      child = Image.network(
-        _imageUrl!,
-        key: ValueKey('shelf-${widget.location.syncId}-net-$_imageVersion'),
-        fit: BoxFit.cover,
-      );
+      final resolved = resolveImageUrl(_imageUrl);
+      child = resolved == null
+          ? const Icon(Icons.image_outlined, color: AppColors.onSurfaceVariant)
+          : Image.network(
+              resolved,
+              key: ValueKey(
+                'shelf-${widget.location.syncId}-net-$_imageVersion',
+              ),
+              fit: BoxFit.cover,
+            );
     } else {
       child = const Icon(
         Icons.image_outlined,
