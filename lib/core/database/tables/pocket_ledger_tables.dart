@@ -101,6 +101,7 @@ class MovementCategories extends Table with SyncedRow {
 // `transactionId` is the FK to `transactions.id` (nullable, set-null on delete).
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('LedgerEntryRow')
+@TableIndex(name: 'ledger_entries_transaction_id_idx', columns: {#transactionId})
 class LedgerEntries extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get transactionId => text().nullable()();

@@ -14520,6 +14520,38 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $UtangRecordsTable utangRecords = $UtangRecordsTable(this);
   late final $SalesTable sales = $SalesTable(this);
   late final $SaleItemsTable saleItems = $SaleItemsTable(this);
+  late final Index ledgerEntriesTransactionIdIdx = Index(
+    'ledger_entries_transaction_id_idx',
+    'CREATE INDEX ledger_entries_transaction_id_idx ON ledger_entries (transaction_id)',
+  );
+  late final Index productsCategoryIdIdx = Index(
+    'products_category_id_idx',
+    'CREATE INDEX products_category_id_idx ON products (category_id)',
+  );
+  late final Index productsShelfLocationIdIdx = Index(
+    'products_shelf_location_id_idx',
+    'CREATE INDEX products_shelf_location_id_idx ON products (shelf_location_id)',
+  );
+  late final Index productUnitConversionsProductIdIdx = Index(
+    'product_unit_conversions_product_id_idx',
+    'CREATE INDEX product_unit_conversions_product_id_idx ON product_unit_conversions (product_id)',
+  );
+  late final Index stockMovementsProductIdIdx = Index(
+    'stock_movements_product_id_idx',
+    'CREATE INDEX stock_movements_product_id_idx ON stock_movements (product_id)',
+  );
+  late final Index utangRecordsCustomerIdIdx = Index(
+    'utang_records_customer_id_idx',
+    'CREATE INDEX utang_records_customer_id_idx ON utang_records (customer_id)',
+  );
+  late final Index saleItemsSaleIdIdx = Index(
+    'sale_items_sale_id_idx',
+    'CREATE INDEX sale_items_sale_id_idx ON sale_items (sale_id)',
+  );
+  late final Index saleItemsProductIdIdx = Index(
+    'sale_items_product_id_idx',
+    'CREATE INDEX sale_items_product_id_idx ON sale_items (product_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -14543,6 +14575,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     utangRecords,
     sales,
     saleItems,
+    ledgerEntriesTransactionIdIdx,
+    productsCategoryIdIdx,
+    productsShelfLocationIdIdx,
+    productUnitConversionsProductIdIdx,
+    stockMovementsProductIdIdx,
+    utangRecordsCustomerIdIdx,
+    saleItemsSaleIdIdx,
+    saleItemsProductIdIdx,
   ];
 }
 

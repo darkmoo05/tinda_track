@@ -7,8 +7,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
-// import 'core/database/migrations/legacy_sqflite_importer.dart';
-// import 'core/di/database_providers.dart';
+import 'core/database/migrations/legacy_sqflite_importer.dart';
+import 'core/database/providers/database_providers.dart';
 import 'core/network/api_client.dart';
 import 'core/sync/sync_config.dart';
 import 'core/sync/sync_orchestrator.dart';
@@ -38,8 +38,6 @@ Future<void> main() async {
 }
 
 Future<void> _runStartupMigrations(ProviderContainer container) async {
-  // Legacy sqflite importer bypassed post migration
-  /*
   try {
     final db = container.read(appDatabaseProvider);
     final appMeta = container.read(appMetaDaoProvider);
@@ -55,7 +53,6 @@ Future<void> _runStartupMigrations(ProviderContainer container) async {
       stackTrace: st,
     );
   }
-  */
 
   // Hydrate the live ApiClient base URL from the persisted setting (or the
   // compile-time default when unset) so the first sync request hits the

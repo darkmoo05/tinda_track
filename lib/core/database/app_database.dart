@@ -1,4 +1,6 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
+import 'package:drift_dev/api/migrations_native.dart'; // ignore: depend_on_referenced_packages
 
 import 'connection/native.dart';
 import 'tables/pocket_ledger_tables.dart';
@@ -58,6 +60,9 @@ class AppDatabase extends _$AppDatabase {
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
+      if (kDebugMode) {
+        await validateDatabaseSchema();
+      }
     },
   );
 

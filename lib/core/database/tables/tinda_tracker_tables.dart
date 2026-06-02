@@ -58,6 +58,8 @@ class ShelfLocations extends Table with SyncedRow {
 // with the FK relations by the repository layer.
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('ProductRow')
+@TableIndex(name: 'products_category_id_idx', columns: {#categoryId})
+@TableIndex(name: 'products_shelf_location_id_idx', columns: {#shelfLocationId})
 class Products extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -98,6 +100,7 @@ class Products extends Table with SyncedRow {
 // repository rounds to 2dp on write.
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('ProductUnitConversionRow')
+@TableIndex(name: 'product_unit_conversions_product_id_idx', columns: {#productId})
 class ProductUnitConversions extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get productId => text().references(Products, #id)();
@@ -121,6 +124,7 @@ class ProductUnitConversions extends Table with SyncedRow {
 // in a tiny outbox approach (`is_dirty` only).
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('StockMovementRow')
+@TableIndex(name: 'stock_movements_product_id_idx', columns: {#productId})
 class StockMovements extends Table {
   TextColumn get id => text()();
   TextColumn get productId => text().references(Products, #id)();
@@ -160,6 +164,7 @@ class Customers extends Table with SyncedRow {
 }
 
 @DataClassName('UtangRecordRow')
+@TableIndex(name: 'utang_records_customer_id_idx', columns: {#customerId})
 class UtangRecords extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get customerId => text().references(Customers, #id)();
@@ -200,6 +205,8 @@ class Sales extends Table with SyncedRow {
 }
 
 @DataClassName('SaleItemRow')
+@TableIndex(name: 'sale_items_sale_id_idx', columns: {#saleId})
+@TableIndex(name: 'sale_items_product_id_idx', columns: {#productId})
 class SaleItems extends Table {
   TextColumn get id => text()();
   TextColumn get saleId => text().references(Sales, #id)();
