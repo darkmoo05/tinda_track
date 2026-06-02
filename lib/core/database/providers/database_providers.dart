@@ -21,6 +21,7 @@ import '../daos/pocket_ledger/movement_categories_dao.dart';
 import '../daos/pocket_ledger/parties_dao.dart';
 import '../daos/pocket_ledger/transaction_types_dao.dart';
 import '../daos/pocket_ledger/transactions_dao.dart';
+import '../daos/pocket_ledger_dao.dart';
 import '../daos/sync_state_dao.dart';
 import '../daos/tinda_tracker/customers_dao.dart';
 import '../daos/tinda_tracker/product_categories_dao.dart';
@@ -31,6 +32,7 @@ import '../daos/tinda_tracker/sales_dao.dart';
 import '../daos/tinda_tracker/shelf_locations_dao.dart';
 import '../daos/tinda_tracker/stock_movements_dao.dart';
 import '../daos/tinda_tracker/utang_records_dao.dart';
+import '../daos/tinda_tracker_dao.dart';
 
 // ── Database ─────────────────────────────────────────────────────────────────
 
@@ -102,4 +104,18 @@ final salesDaoProvider = Provider<SalesDao>(
 );
 final saleItemsDaoProvider = Provider<SaleItemsDao>(
   (ref) => SaleItemsDao(ref.watch(appDatabaseProvider)),
+);
+
+// ── Grouped facade DAOs (preferred for new code) ─────────────────────────────
+//
+// New repositories should depend on these grouped facades instead of injecting
+// 5-7 per-table DAOs individually. The per-table providers above remain so
+// existing code keeps working — both layers share the same AppDatabase
+// instance, so there is no double-bookkeeping.
+
+final pocketLedgerDaoProvider = Provider<PocketLedgerDao>(
+  (ref) => PocketLedgerDao(ref.watch(appDatabaseProvider)),
+);
+final tindaTrackerDaoProvider = Provider<TindaTrackerDao>(
+  (ref) => TindaTrackerDao(ref.watch(appDatabaseProvider)),
 );

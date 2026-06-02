@@ -38,10 +38,10 @@ const Object _updateSentinel = Object();
 /// Drift database. Push to the server is handled by `SyncOrchestrator`
 /// via the `is_dirty` flags the DAOs set on every mutation.
 ///
-/// All persistence goes through typed Drift DAOs — no raw SQL. The previous
-/// sqflite-style `customStatement`/`customSelect` helpers were removed
-/// because they bypassed the DAO contract (which auto-stamps `is_dirty=1`
-/// and `updated_at_ms=now`) and made schema typos invisible until runtime.
+/// All persistence goes through typed Drift DAOs — no raw SQL. Mutations
+/// are funnelled through the DAO contract so `is_dirty=1` and
+/// `updated_at_ms=now` are stamped automatically and schema typos are caught
+/// at compile time.
 class LocalInventoryRepository {
   LocalInventoryRepository({required AppDatabase database})
     : _database = database,

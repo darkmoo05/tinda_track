@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../app_database.dart';
+import '../../lww.dart';
 import '../../tables/pocket_ledger_tables.dart';
 
 part 'fee_transactions_dao.g.dart';
@@ -80,8 +81,11 @@ class FeeTransactionsDao extends DatabaseAccessor<AppDatabase>
     final syncId = remote.syncId.value;
     final existing = await findBySyncId(syncId);
     if (existing != null &&
-        existing.updatedAtMs > remote.updatedAtMs.value &&
-        existing.isDirty) {
+        Lww.localShouldKeep(
+          localUpdatedAtMs: existing.updatedAtMs,
+          localIsDirty: existing.isDirty,
+          remoteUpdatedAtMs: remote.updatedAtMs.value,
+        )) {
       return false;
     }
     await into(

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../app_database.dart';
+import '../../lww.dart';
 import '../../tables/tinda_tracker_tables.dart';
 
 part 'products_dao.g.dart';
@@ -92,8 +93,11 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   Future<bool> upsertFromRemote(ProductsCompanion remote) async {
     final existing = await findBySyncId(remote.syncId.value);
     if (existing != null &&
-        existing.updatedAtMs > remote.updatedAtMs.value &&
-        existing.isDirty) {
+        Lww.localShouldKeep(
+          localUpdatedAtMs: existing.updatedAtMs,
+          localIsDirty: existing.isDirty,
+          remoteUpdatedAtMs: remote.updatedAtMs.value,
+        )) {
       return false;
     }
     var preserved = existing != null && !remote.imageLocalPath.present

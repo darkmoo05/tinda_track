@@ -101,7 +101,17 @@ class EntitySync<TRow> {
         rethrow;
       }
     });
-    if (!ok) return 0;
+    // BUG-6 fix: a `false` return is not silent success. The transport call
+    // succeeded but the batch was rejected (e.g. server returned 207 with
+    // per-row errors, or our remote wrapper translated a 4xx into `false`).
+    // Rows stay dirty (we never call `markClean`); throwing here lets the
+    // engine record the module-level push as failed so the UI surfaces it.
+    if (!ok) {
+      throw PushRejectedError(
+        'pushRemote returned false for $entityKey ($route, '
+        '${dirty.length} rows)',
+      );
+    }
     await markClean(dirty.map(_syncIdOf));
     if (postPushHook != null) await postPushHook!(dirty);
     return dirty.length;
@@ -121,10 +131,21 @@ class EntitySync<TRow> {
       }
     });
     var conflicts = 0;
+    var maxServerUpdatedAt = 0;
     for (final json in records) {
       try {
         final applied = await applyRemote(json);
         if (!applied) conflicts++;
+        // BUG-2 fix: track the highest server `updated_at_ms` we actually saw
+        // in this pull so the engine can advance the cursor based on what
+        // the server returned — not on the local max, which would jump past
+        // unseen rows when an entity's pull errored out earlier.
+        final v = json['updated_at_ms'] ?? json['updatedAtMs'];
+        if (v is int && v > maxServerUpdatedAt) {
+          maxServerUpdatedAt = v;
+        } else if (v is num && v.toInt() > maxServerUpdatedAt) {
+          maxServerUpdatedAt = v.toInt();
+        }
       } catch (e) {
         // Per-record failures must not abort the whole pull — log and skip.
         legacy_log.logSyncFailure(
@@ -134,12 +155,25 @@ class EntitySync<TRow> {
         );
       }
     }
-    return EntityPullOutcome(pulled: records.length, conflicts: conflicts);
+    return EntityPullOutcome(
+      pulled: records.length,
+      conflicts: conflicts,
+      maxServerUpdatedAtMs: maxServerUpdatedAt,
+    );
   }
 }
 
 class EntityPullOutcome {
-  const EntityPullOutcome({required this.pulled, required this.conflicts});
+  const EntityPullOutcome({
+    required this.pulled,
+    required this.conflicts,
+    this.maxServerUpdatedAtMs = 0,
+  });
   final int pulled;
   final int conflicts;
+
+  /// Highest `updated_at_ms` observed in the pulled record set. Zero when no
+  /// rows were returned. Used by [SyncEngine] to advance the per-module
+  /// pull cursor safely (only past rows we actually received).
+  final int maxServerUpdatedAtMs;
 }

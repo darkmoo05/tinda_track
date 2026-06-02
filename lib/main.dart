@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -41,8 +42,16 @@ Future<void> _runStartupMigrations(ProviderContainer container) async {
     final db = container.read(appDatabaseProvider);
     final appMeta = container.read(appMetaDaoProvider);
     await LegacyImporter(db, appMeta).runIfNeeded();
-  } catch (_) {
-    // Best-effort; the importer marks `failed` so it can retry next launch.
+  } catch (e, st) {
+    // BUG-13 fix: the importer marks `failed` so it retries next launch, but
+    // we MUST leave a developer-log breadcrumb — a silent `catch (_) {}`
+    // made stuck migrations impossible to diagnose in the field.
+    developer.log(
+      'Legacy import failed during startup; will retry next launch.',
+      name: 'startup.legacy_import',
+      error: e,
+      stackTrace: st,
+    );
   }
 
   // Hydrate the live ApiClient base URL from the persisted setting (or the
@@ -57,7 +66,15 @@ Future<void> _runStartupMigrations(ProviderContainer container) async {
     ApiClient.instance.dio.options = ApiClient.instance.dio.options.copyWith(
       baseUrl: url,
     );
-  } catch (_) {}
+  } catch (e, st) {
+    developer.log(
+      'Failed to hydrate ApiClient base URL; falling back to compile-time '
+      'default (${SyncConfig.defaultBaseApiUrl}).',
+      name: 'startup.api_base_url',
+      error: e,
+      stackTrace: st,
+    );
+  }
 }
 
 class TindaTrackApp extends StatelessWidget {

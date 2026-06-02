@@ -68,3 +68,14 @@ class SchemaSyncError extends SyncError {
   @override
   bool get isTransient => false;
 }
+
+/// The remote endpoint accepted the request but reported the batch as not
+/// applied (returned `false`/non-2xx-but-handled). Terminal for this run —
+/// rows stay dirty and will be retried on the next sync cycle, but the
+/// engine must record this as a failure so the UI surfaces it.
+class PushRejectedError extends SyncError {
+  const PushRejectedError(super.message, {super.cause})
+    : super(statusCode: null);
+  @override
+  bool get isTransient => false;
+}

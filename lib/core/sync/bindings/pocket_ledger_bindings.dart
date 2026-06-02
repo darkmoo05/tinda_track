@@ -1,3 +1,9 @@
+import '../../../pocket_ledger/features/charges/data/mappers/charge_mapper.dart';
+import '../../../pocket_ledger/features/parties/data/mappers/party_mapper.dart';
+import '../../../pocket_ledger/features/transactions/data/mappers/fee_transaction_mapper.dart';
+import '../../../pocket_ledger/features/transactions/data/mappers/ledger_entry_mapper.dart';
+import '../../../pocket_ledger/features/transactions/data/mappers/movement_category_mapper.dart';
+import '../../../pocket_ledger/features/transactions/data/mappers/transaction_type_mapper.dart';
 import '../../database/app_database.dart';
 import '../../database/daos/pocket_ledger/charges_dao.dart';
 import '../../database/daos/pocket_ledger/fee_transactions_dao.dart';
@@ -5,29 +11,30 @@ import '../../database/daos/pocket_ledger/ledger_entries_dao.dart';
 import '../../database/daos/pocket_ledger/movement_categories_dao.dart';
 import '../../database/daos/pocket_ledger/parties_dao.dart';
 import '../../database/daos/pocket_ledger/transaction_types_dao.dart';
-import '../../../pocket_ledger/features/charges/data/mappers/charge_mapper.dart';
-import '../../../pocket_ledger/features/parties/data/mappers/party_mapper.dart';
-import '../../../pocket_ledger/features/transactions/data/mappers/fee_transaction_mapper.dart';
-import '../../../pocket_ledger/features/transactions/data/mappers/ledger_entry_mapper.dart';
-import '../../../pocket_ledger/features/transactions/data/mappers/movement_category_mapper.dart';
-import '../../../pocket_ledger/features/transactions/data/mappers/transaction_type_mapper.dart';
+import '../../database/daos/pocket_ledger_dao.dart';
+import '../engine/entity_sync.dart';
+import '../engine/sync_module.dart';
 import '../remote/charge_remote_repository.dart';
 import '../remote/fee_transaction_remote_repository.dart';
 import '../remote/ledger_entry_remote_repository.dart';
 import '../remote/movement_category_remote_repository.dart';
 import '../remote/party_remote_repository.dart';
 import '../remote/transaction_type_remote_repository.dart';
-import '../engine/entity_sync.dart';
-import '../engine/sync_module.dart';
 
 /// Builds the `pocket_ledger` [SyncModule]. Pure factory — no state.
-SyncModule buildPocketLedgerModule(AppDatabase db) {
-  final charges = ChargesDao(db);
-  final parties = PartiesDao(db);
-  final txTypes = TransactionTypesDao(db);
-  final movementCats = MovementCategoriesDao(db);
-  final ledgerEntries = LedgerEntriesDao(db);
-  final feeTx = FeeTransactionsDao(db);
+///
+/// BUG-16 fix: takes the already-constructed [PocketLedgerDao] facade
+/// (built by the riverpod provider against the same [AppDatabase]
+/// instance) instead of constructing fresh per-table DAOs locally. This
+/// removes the silent duplication where every sync run produced a second
+/// set of DAO objects parallel to the ones in `database_providers.dart`.
+SyncModule buildPocketLedgerModule(PocketLedgerDao dao) {
+  final ChargesDao charges = dao.charges;
+  final PartiesDao parties = dao.parties;
+  final TransactionTypesDao txTypes = dao.transactionTypes;
+  final MovementCategoriesDao movementCats = dao.movementCategories;
+  final LedgerEntriesDao ledgerEntries = dao.ledgerEntries;
+  final FeeTransactionsDao feeTx = dao.feeTransactions;
 
   return SyncModule(
     key: 'pocket_ledger',

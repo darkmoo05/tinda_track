@@ -32,7 +32,11 @@ class SyncEngine {
   final RetryPolicy _retry;
 
   /// Re-entrancy guard so concurrent UI taps coalesce into one in-flight run.
-  bool _isSyncing = false;
+  /// BUG-7 fix: the previous `bool _isSyncing` check-then-set was not atomic;
+  /// two near-simultaneous callers could both pass the guard before either
+  /// set the flag. Storing the in-flight Future means concurrent callers
+  /// await the same run instead of racing.
+  Future<List<SyncResult>>? _inFlight;
 
   final StreamController<SyncResult> _resultsController =
       StreamController<SyncResult>.broadcast();
@@ -47,14 +51,12 @@ class SyncEngine {
   void dispose() => _resultsController.close();
 
   /// Runs every module once, coalescing concurrent callers.
-  Future<List<SyncResult>> runOnce() async {
-    if (_isSyncing) return const <SyncResult>[];
-    _isSyncing = true;
-    try {
-      return await syncAll();
-    } finally {
-      _isSyncing = false;
-    }
+  Future<List<SyncResult>> runOnce() {
+    final existing = _inFlight;
+    if (existing != null) return existing;
+    final run = syncAll().whenComplete(() => _inFlight = null);
+    _inFlight = run;
+    return run;
   }
 
   Future<List<SyncResult>> syncAll() async {
@@ -92,9 +94,13 @@ class SyncEngine {
         sinceMs: sinceMs,
       );
 
-      // 3) Advance cursor to the new local high-water mark (safe: monotonic
-      //    and never moves backwards — `setLastPulledAt` is guarded).
-      final newCursor = await module.maxUpdatedAt();
+      // 3) Advance cursor using the server timestamps we actually received.
+      //    BUG-2 fix: previously this used the local table max(updated_at),
+      //    which advanced past rows that were never pulled when an entity
+      //    errored mid-batch — those rows would then be skipped forever.
+      //    `maxServerUpdatedAtMs` is monotonic and only reflects records we
+      //    successfully received; setLastPulledAt guards against regression.
+      final newCursor = pullOutcome.maxServerUpdatedAtMs;
       if (newCursor > sinceMs) {
         await _syncState.setLastPulledAt(moduleKey, newCursor);
       }

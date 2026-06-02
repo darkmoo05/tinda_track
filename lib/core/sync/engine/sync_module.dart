@@ -23,7 +23,9 @@ class SyncModule {
     return counts.fold<int>(0, (a, b) => a + b);
   }
 
-  /// Pulls every entity's deltas since [sinceMs]. Returns aggregate counts.
+  /// Pulls every entity's deltas since [sinceMs]. Returns aggregate counts
+  /// plus the highest server `updated_at_ms` observed across every entity
+  /// (`maxServerUpdatedAtMs`) so the engine can advance its cursor safely.
   Future<EntityPullOutcome> pull({
     required RetryPolicy retry,
     required String deviceId,
@@ -37,11 +39,19 @@ class SyncModule {
     );
     var pulled = 0;
     var conflicts = 0;
+    var maxServer = 0;
     for (final o in outcomes) {
       pulled += o.pulled;
       conflicts += o.conflicts;
+      if (o.maxServerUpdatedAtMs > maxServer) {
+        maxServer = o.maxServerUpdatedAtMs;
+      }
     }
-    return EntityPullOutcome(pulled: pulled, conflicts: conflicts);
+    return EntityPullOutcome(
+      pulled: pulled,
+      conflicts: conflicts,
+      maxServerUpdatedAtMs: maxServer,
+    );
   }
 
   /// Highest `updated_at_ms` across all entities — the post-pull cursor.

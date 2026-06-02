@@ -1,3 +1,11 @@
+import '../../../tinda_tracker/features/customers/data/mappers/customer_mapper.dart';
+import '../../../tinda_tracker/features/customers/data/mappers/utang_record_mapper.dart';
+import '../../../tinda_tracker/features/inventory/data/mappers/product_category_mapper.dart';
+import '../../../tinda_tracker/features/inventory/data/mappers/product_mapper.dart';
+import '../../../tinda_tracker/features/inventory/data/mappers/product_unit_conversion_mapper.dart';
+import '../../../tinda_tracker/features/inventory/data/mappers/shelf_location_mapper.dart';
+import '../../../tinda_tracker/features/pos/data/mappers/sale_item_mapper.dart';
+import '../../../tinda_tracker/features/pos/data/mappers/sale_mapper.dart';
 import '../../database/app_database.dart';
 import '../../database/daos/tinda_tracker/customers_dao.dart';
 import '../../database/daos/tinda_tracker/product_categories_dao.dart';
@@ -7,16 +15,10 @@ import '../../database/daos/tinda_tracker/sale_items_dao.dart';
 import '../../database/daos/tinda_tracker/sales_dao.dart';
 import '../../database/daos/tinda_tracker/shelf_locations_dao.dart';
 import '../../database/daos/tinda_tracker/utang_records_dao.dart';
-import '../../../tinda_tracker/features/customers/data/mappers/customer_mapper.dart';
-import '../../../tinda_tracker/features/customers/data/mappers/utang_record_mapper.dart';
-import '../../../tinda_tracker/features/inventory/data/mappers/product_category_mapper.dart';
-import '../../../tinda_tracker/features/inventory/data/mappers/product_mapper.dart';
-import '../../../tinda_tracker/features/inventory/data/mappers/product_unit_conversion_mapper.dart';
-import '../../../tinda_tracker/features/inventory/data/mappers/shelf_location_mapper.dart';
-import '../../../tinda_tracker/features/pos/data/mappers/sale_item_mapper.dart';
-import '../../../tinda_tracker/features/pos/data/mappers/sale_mapper.dart';
+import '../../database/daos/tinda_tracker_dao.dart';
 import '../engine/entity_sync.dart';
 import '../engine/retry_policy.dart';
+import '../engine/sync_errors.dart';
 import '../engine/sync_module.dart';
 import '../remote/customer_remote_repository.dart';
 import '../remote/product_category_remote_repository.dart';
@@ -35,15 +37,16 @@ import '../remote/utang_record_remote_repository.dart';
 /// * **SaleItems** never sync standalone — embedded above.
 /// * **StockMovements** never sync — they're derived server-side and the
 ///   local table is an outbox for offline replay only.
-SyncModule buildTindaTrackerModule(AppDatabase db) {
-  final categories = ProductCategoriesDao(db);
-  final shelves = ShelfLocationsDao(db);
-  final products = ProductsDao(db);
-  final conversions = ProductUnitConversionsDao(db);
-  final customers = CustomersDao(db);
-  final utang = UtangRecordsDao(db);
-  final sales = SalesDao(db);
-  final saleItems = SaleItemsDao(db);
+SyncModule buildTindaTrackerModule(TindaTrackerDao dao) {
+  final AppDatabase db = dao.database;
+  final ProductCategoriesDao categories = dao.productCategories;
+  final ShelfLocationsDao shelves = dao.shelfLocations;
+  final ProductsDao products = dao.products;
+  final ProductUnitConversionsDao conversions = dao.productUnitConversions;
+  final CustomersDao customers = dao.customers;
+  final UtangRecordsDao utang = dao.utangRecords;
+  final SalesDao sales = dao.sales;
+  final SaleItemsDao saleItems = dao.saleItems;
 
   return SyncModule(
     key: 'tinda_tracker',
@@ -184,31 +187,54 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
 
   @override
   Future<int> push(RetryPolicy retry) async {
-    final dirty = await _sales.pendingPush();
-    if (dirty.isEmpty) return 0;
-
-    final payload = <Map<String, dynamic>>[];
-    for (final row in dirty) {
-      final items = await _saleItems.listForSale(row.id);
-      final sale = row.toDomain(
-        items: items.map((i) => i.toDomain()).toList(growable: false),
+    // BUG-3 fix: read dirty sales and their line items inside one Drift
+    // transaction so the (sale, items) snapshot is consistent even if the
+    // POS commits a new sale concurrently.
+    final assembled = await _db.transaction(() async {
+      final dirty = await _sales.pendingPush();
+      if (dirty.isEmpty) {
+        return (
+          payload: const <Map<String, dynamic>>[],
+          saleSyncIds: const <String>[],
+          itemIds: const <String>[],
+        );
+      }
+      final payload = <Map<String, dynamic>>[];
+      final itemIds = <String>[];
+      for (final row in dirty) {
+        final items = await _saleItems.listForSale(row.id);
+        itemIds.addAll(items.map((i) => i.id));
+        final sale = row.toDomain(
+          items: items.map((i) => i.toDomain()).toList(growable: false),
+        );
+        payload.add(saleToRemoteJson(sale));
+      }
+      return (
+        payload: payload,
+        saleSyncIds: dirty.map((r) => r.syncId).toList(growable: false),
+        itemIds: itemIds,
       );
-      payload.add(saleToRemoteJson(sale));
-    }
+    });
+
+    if (assembled.payload.isEmpty) return 0;
 
     final ok = await retry.run(
-      () => SaleRemoteRepository.instance.push(payload),
+      () => SaleRemoteRepository.instance.push(assembled.payload),
     );
-    if (!ok) return 0;
-
-    await _sales.markClean(dirty.map((r) => r.syncId));
-    final allItemIds = <String>[];
-    for (final row in dirty) {
-      final items = await _saleItems.listForSale(row.id);
-      allItemIds.addAll(items.map((i) => i.id));
+    if (!ok) {
+      // BUG-6 parity: surface the failure so the engine records it.
+      throw PushRejectedError(
+        'pushRemote returned false for sales '
+        '(${assembled.payload.length} sale(s))',
+      );
     }
-    await _saleItems.markClean(allItemIds);
-    return dirty.length;
+
+    // Mark sales and their line items clean atomically.
+    await _db.transaction(() async {
+      await _sales.markClean(assembled.saleSyncIds);
+      await _saleItems.markClean(assembled.itemIds);
+    });
+    return assembled.payload.length;
   }
 
   @override
@@ -222,23 +248,69 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
           SaleRemoteRepository.instance.pull(deviceId: deviceId, since: since),
     );
     var conflicts = 0;
+    var maxServer = 0;
     for (final json in records) {
-      final saleId = json['id'] as String;
+      final saleId = json['id'] as String?;
+      if (saleId == null || saleId.isEmpty) {
+        // Malformed payload — skip rather than crash.
+        continue;
+      }
       final saleCompanion = saleCompanionFromRemoteJson(json);
       final itemCompanions = saleItemCompanionsFromRemoteJson(json);
+
+      // BUG-4 fix: guard companion ids before reading `.value`. Drop any
+      // items whose id is absent so `markClean` cannot throw.
+      final cleanableItemIds = <String>[
+        for (final c in itemCompanions)
+          if (c.id.present) c.id.value,
+      ];
+
       final applied = await _db.transaction(() async {
         final accepted = await _sales.upsertFromRemote(saleCompanion);
-        if (accepted) {
-          await _saleItems.deleteForSale(saleId);
-          for (final item in itemCompanions) {
-            await _saleItems.insertLocal(item);
+        if (!accepted) return false;
+
+        // BUG-9 fix: do NOT blindly wipe local items — a user may have added
+        // items offline that haven't been pushed yet. Keep any local row
+        // that is still dirty, replace everything else with the server copy.
+        final localItems = await _saleItems.listForSale(saleId);
+        final dirtyLocalIds = {
+          for (final it in localItems)
+            if (it.isDirty) it.id,
+        };
+        for (final it in localItems) {
+          if (!dirtyLocalIds.contains(it.id)) {
+            // Hard-delete the acknowledged-clean local row; the server copy
+            // (if any) is reinserted below.
+            await (_db.delete(
+              _db.saleItems,
+            )..where((t) => t.id.equals(it.id))).go();
           }
-          await _saleItems.markClean(itemCompanions.map((c) => c.id.value));
         }
-        return accepted;
+        for (final item in itemCompanions) {
+          if (item.id.present && dirtyLocalIds.contains(item.id.value)) {
+            // Keep the dirty local edit; skip the server copy until our
+            // next push cycle reconciles it.
+            continue;
+          }
+          await _saleItems.insertLocal(item);
+        }
+        await _saleItems.markClean(cleanableItemIds);
+        return true;
       });
       if (!applied) conflicts++;
+
+      // Track server cursor (BUG-2 parity).
+      final v = json['updated_at_ms'] ?? json['updatedAtMs'];
+      if (v is int && v > maxServer) {
+        maxServer = v;
+      } else if (v is num && v.toInt() > maxServer) {
+        maxServer = v.toInt();
+      }
     }
-    return EntityPullOutcome(pulled: records.length, conflicts: conflicts);
+    return EntityPullOutcome(
+      pulled: records.length,
+      conflicts: conflicts,
+      maxServerUpdatedAtMs: maxServer,
+    );
   }
 }

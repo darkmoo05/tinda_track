@@ -91,30 +91,41 @@ class LegacyImporter {
   // ── Import driver ──────────────────────────────────────────────────────────
 
   Future<int> _import(legacy.Database src) async {
+    // BUG-8 fix: each table runs in its own Drift transaction instead of
+    // sharing one mega-transaction. The original design wrapped every
+    // importer in a single `_db.transaction(...)`, which forced sqlite to
+    // hold the entire row set (potentially tens of thousands of rows for
+    // sale_items / stock_movements on long-running shops) in the WAL until
+    // commit. Splitting them keeps WAL pressure bounded and lets a partial
+    // failure resume on the next launch without redoing everything.
     var total = 0;
-    await _db.transaction(() async {
-      total += await _importTransactionTypes(src);
-      total += await _importMovementCategories(src);
-      total += await _importParties(src);
-      total += await _importCharges(src);
-      total += await _importLedgerEntries(src);
-      total += await _importFeeTransactions(src);
-      // NOTE: legacy DB has no `transactions` table — that entity is new in
-      // Drift and starts empty.
+    Future<void> step(Future<int> Function() body) async {
+      await _db.transaction(() async {
+        total += await body();
+      });
+    }
 
-      // Tinda-tracker: legacy tables use the `tt_` prefix. Import order
-      // respects FK dependencies (categories/shelves → products → conversions /
-      // stock movements / sale items; customers → utang).
-      total += await _importTtProductCategories(src);
-      total += await _importTtShelfLocations(src);
-      total += await _importTtProducts(src);
-      total += await _importTtProductUnitConversions(src);
-      total += await _importTtCustomers(src);
-      total += await _importTtUtangRecords(src);
-      total += await _importTtSales(src);
-      total += await _importTtSaleItems(src);
-      total += await _importTtStockMovements(src);
-    });
+    await step(() => _importTransactionTypes(src));
+    await step(() => _importMovementCategories(src));
+    await step(() => _importParties(src));
+    await step(() => _importCharges(src));
+    await step(() => _importLedgerEntries(src));
+    await step(() => _importFeeTransactions(src));
+    // NOTE: legacy DB has no `transactions` table — that entity is new in
+    // Drift and starts empty.
+
+    // Tinda-tracker: legacy tables use the `tt_` prefix. Import order
+    // respects FK dependencies (categories/shelves → products → conversions /
+    // stock movements / sale items; customers → utang).
+    await step(() => _importTtProductCategories(src));
+    await step(() => _importTtShelfLocations(src));
+    await step(() => _importTtProducts(src));
+    await step(() => _importTtProductUnitConversions(src));
+    await step(() => _importTtCustomers(src));
+    await step(() => _importTtUtangRecords(src));
+    await step(() => _importTtSales(src));
+    await step(() => _importTtSaleItems(src));
+    await step(() => _importTtStockMovements(src));
     return total;
   }
 
@@ -340,25 +351,31 @@ class LegacyImporter {
     final rows = await _safeQuery(src, 'fee_transactions');
     // Legacy used INTEGER `related_transaction_id` (the ledger row's PK). The
     // new schema stores `related_transaction_sync_id` (TEXT). We can't resolve
-    // the FK without the original ledger row's sync_id, so we look it up
-    // inline. If the parent row was never assigned a sync_id, leave null.
-    Future<String?> resolveSyncId(int? legacyId) async {
-      if (legacyId == null) return null;
-      final res = await src.rawQuery(
-        'SELECT sync_id FROM ledger_entries WHERE id = ? LIMIT 1',
-        [legacyId],
-      );
-      if (res.isEmpty) return null;
-      final v = res.first['sync_id'] as String?;
-      return (v != null && v.isNotEmpty) ? v : null;
-    }
+    // the FK without the original ledger row's sync_id.
+    //
+    // BUG-8 fix: build a single `legacyId → syncId` map up front in ONE
+    // query instead of issuing one `rawQuery` per fee row (the old code
+    // was O(N) round-trips through the legacy sqflite connection — the
+    // worst-case cost on a busy ledger).
+    final ledgerRows = await src.rawQuery(
+      'SELECT id, sync_id FROM ledger_entries WHERE sync_id IS NOT NULL '
+      "AND sync_id != ''",
+    );
+    final ledgerSyncIdByLegacyId = <int, String>{
+      for (final lr in ledgerRows)
+        if (lr['id'] is int &&
+            lr['sync_id'] is String &&
+            (lr['sync_id'] as String).isNotEmpty)
+          lr['id']! as int: lr['sync_id']! as String,
+    };
 
     for (final r in rows) {
       final id = _syncId(r);
       final ts = _timestamps(r);
-      final relatedSyncId = await resolveSyncId(
-        r['related_transaction_id'] as int?,
-      );
+      final legacyRelatedId = r['related_transaction_id'] as int?;
+      final relatedSyncId = legacyRelatedId == null
+          ? null
+          : ledgerSyncIdByLegacyId[legacyRelatedId];
       await _db
           .into(_db.feeTransactions)
           .insertOnConflictUpdate(

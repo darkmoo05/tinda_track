@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../app_database.dart';
+import '../../lww.dart';
 import '../../tables/pocket_ledger_tables.dart';
 
 part 'movement_categories_dao.g.dart';
@@ -61,8 +62,11 @@ class MovementCategoriesDao extends DatabaseAccessor<AppDatabase>
   Future<bool> upsertFromRemote(MovementCategoriesCompanion remote) async {
     final existing = await findBySyncId(remote.syncId.value);
     if (existing != null &&
-        existing.updatedAtMs > remote.updatedAtMs.value &&
-        existing.isDirty) {
+        Lww.localShouldKeep(
+          localUpdatedAtMs: existing.updatedAtMs,
+          localIsDirty: existing.isDirty,
+          remoteUpdatedAtMs: remote.updatedAtMs.value,
+        )) {
       return false;
     }
     await into(

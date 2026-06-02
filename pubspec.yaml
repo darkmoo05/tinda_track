@@ -79,6 +79,13 @@ dependencies:
   audioplayers: ^6.6.0
   vibration: ^3.1.8
 
+  # ── Navigation (Phase 3: GoRouter + Shell routes) ────────────────────────
+  go_router: ^14.6.2
+
+  # ── Functional helpers used in domain layer (Either/Failure) ─────────────
+  # Lightweight; no full fpdart needed.
+  equatable: ^2.0.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

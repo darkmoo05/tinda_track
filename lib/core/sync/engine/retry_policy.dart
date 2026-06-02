@@ -53,7 +53,11 @@ class RetryPolicy {
 
   static bool _defaultRetryWhen(Object error) {
     if (error is SyncError) return error.isTransient;
-    // Unknown error: retry once-ish to be safe (Dio quirks etc.).
-    return true;
+    // BUG-5 fix: previously this returned `true` for any unknown error,
+    // which silently retried programming bugs (NoSuchMethodError, mapper
+    // typos, etc.) 3x with backoff before surfacing. Unknown failures are
+    // now treated as terminal so they fail fast and bubble up to the
+    // engine's catch-and-record path on the very first attempt.
+    return false;
   }
 }

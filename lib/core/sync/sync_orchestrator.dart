@@ -35,12 +35,18 @@ final syncStateDaoProvider = databaseSyncStateDaoProvider;
 final appMetaDaoProvider = databaseAppMetaDaoProvider;
 
 final syncEngineProvider = Provider<SyncEngine>((ref) {
-  final db = ref.watch(appDatabaseProvider);
   final engine = SyncEngine(
     syncStateDao: ref.watch(syncStateDaoProvider),
     appMetaDao: ref.watch(appMetaDaoProvider),
     retryPolicy: const RetryPolicy(),
-    modules: [buildPocketLedgerModule(db), buildTindaTrackerModule(db)],
+    modules: [
+      // BUG-16 fix: pass the singleton grouped-DAO facades so the bindings
+      // do not silently construct a parallel set of per-table DAOs against
+      // the same AppDatabase. Every cache and stream now has exactly one
+      // source of truth.
+      buildPocketLedgerModule(ref.watch(pocketLedgerDaoProvider)),
+      buildTindaTrackerModule(ref.watch(tindaTrackerDaoProvider)),
+    ],
   );
   ref.onDispose(engine.dispose);
   return engine;

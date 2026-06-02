@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../app_database.dart';
+import '../../lww.dart';
 import '../../tables/tinda_tracker_tables.dart';
 
 part 'product_unit_conversions_dao.g.dart';
@@ -76,8 +77,11 @@ class ProductUnitConversionsDao extends DatabaseAccessor<AppDatabase>
   Future<bool> upsertFromRemote(ProductUnitConversionsCompanion remote) async {
     final existing = await findBySyncId(remote.syncId.value);
     if (existing != null &&
-        existing.updatedAtMs > remote.updatedAtMs.value &&
-        existing.isDirty) {
+        Lww.localShouldKeep(
+          localUpdatedAtMs: existing.updatedAtMs,
+          localIsDirty: existing.isDirty,
+          remoteUpdatedAtMs: remote.updatedAtMs.value,
+        )) {
       return false;
     }
     final patched = (existing != null && existing.id != remote.id.value)
