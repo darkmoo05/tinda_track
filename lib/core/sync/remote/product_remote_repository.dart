@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import '../../network/api_client.dart';
 
 class ProductRemoteRepository {
@@ -21,10 +22,28 @@ class ProductRemoteRepository {
   }
 
   Future<String?> uploadImage(String id, File file) async {
+    File fileToUpload = file;
+    final targetPath = '${file.parent.path}/compressed_${id}_${DateTime.now().millisecondsSinceEpoch}.webp';
+    try {
+      final compressedXFile = await FlutterImageCompress.compressAndGetFile(
+        file.absolute.path,
+        targetPath,
+        quality: 80,
+        format: CompressFormat.webp,
+        minWidth: 1024,
+        minHeight: 1024,
+      );
+      if (compressedXFile != null) {
+        fileToUpload = File(compressedXFile.path);
+      }
+    } catch (_) {
+      // Fall back to original file if compression fails (e.g. invalid format)
+    }
+
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(
-        file.path,
-        filename: file.path.split('/').last,
+        fileToUpload.path,
+        filename: fileToUpload.path.split(Platform.pathSeparator).last,
       ),
     });
     final response = await ApiClient.instance.dio.patch(

@@ -93,6 +93,44 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> _checkAndWipeDatabaseOnUserMismatch(String newUsername) async {
+    try {
+      final lastUser = await _repository.getLastUsername();
+      if (lastUser != null && lastUser.trim().toLowerCase() != newUsername.trim().toLowerCase()) {
+        developer.log(
+          'Username mismatch detected ($lastUser vs $newUsername). Wiping local database.',
+          name: 'auth.user_mismatch',
+        );
+        // 1. Close database
+        final db = ref.read(appDatabaseProvider);
+        await db.close();
+
+        // 2. Delete database files
+        final file = await resolveDatabaseFile();
+        if (await file.exists()) {
+          await file.delete();
+        }
+        final walFile = File('${file.path}-wal');
+        if (await walFile.exists()) {
+          await walFile.delete();
+        }
+        final shmFile = File('${file.path}-shm');
+        if (await shmFile.exists()) {
+          await shmFile.delete();
+        }
+
+        // 3. Invalidate database provider
+        ref.invalidate(appDatabaseProvider);
+      }
+    } catch (e) {
+      developer.log(
+        'Error wiping database on cross-user login',
+        name: 'auth.user_mismatch',
+        error: e,
+      );
+    }
+  }
+
   Future<bool> login(String username, String password) async {
     state = const AuthState.loading();
     try {
@@ -100,6 +138,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = res['user'] as Map<String, dynamic>?;
       final name = user?['username'] as String? ?? username;
       final role = user?['role'] as String? ?? 'OWNER';
+
+      await _checkAndWipeDatabaseOnUserMismatch(name);
+      await _repository.saveLastUsername(name);
+
       state = AuthState.authenticated(username: name, role: role);
       return true;
     } catch (e) {

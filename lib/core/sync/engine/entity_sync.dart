@@ -2,6 +2,19 @@ import '../remote/sync_logging.dart' as legacy_log;
 import 'retry_policy.dart';
 import 'sync_errors.dart';
 
+/// Container for push data and post-acknowledgment cleaning callback.
+class EntityPushPayload {
+  final String entityKey;
+  final List<Map<String, dynamic>> records;
+  final Future<void> Function() onAck;
+
+  const EntityPushPayload({
+    required this.entityKey,
+    required this.records,
+    required this.onAck,
+  });
+}
+
 /// Declarative description of how one synced entity (table) talks to its
 /// backend counterpart. The generic [TRow] is the Drift row class (e.g.
 /// `ChargeRow`); we deliberately stay row-typed instead of leaking
@@ -86,6 +99,52 @@ class EntitySync<TRow> {
   /// (e.g. Sales → SaleItems): receives the rows the server just acked
   /// so the caller can mark their children clean too.
   final Future<void> Function(List<TRow> acked)? postPushHook;
+
+  /// Builds the push payload and schedules post-push cleaning callback.
+  Future<EntityPushPayload?> preparePush() async {
+    final dirty = await pendingPush();
+    if (dirty.isEmpty) return null;
+    final payload = dirty.map(toRemoteJson).toList(growable: false);
+    return EntityPushPayload(
+      entityKey: entityKey,
+      records: payload,
+      onAck: () async {
+        await markClean(dirty.map(_syncIdOf));
+        if (postPushHook != null) {
+          await postPushHook!(dirty);
+        }
+      },
+    );
+  }
+
+  /// Reconciles pulled server records locally via last-write-wins rules.
+  Future<EntityPullOutcome> processPull(List<Map<String, dynamic>> records) async {
+    var conflicts = 0;
+    var maxServerUpdatedAt = 0;
+    for (final json in records) {
+      try {
+        final applied = await applyRemote(json);
+        if (!applied) conflicts++;
+        final v = json['updated_at_ms'] ?? json['updatedAtMs'];
+        if (v is int && v > maxServerUpdatedAt) {
+          maxServerUpdatedAt = v;
+        } else if (v is num && v.toInt() > maxServerUpdatedAt) {
+          maxServerUpdatedAt = v.toInt();
+        }
+      } catch (e) {
+        legacy_log.logSyncFailure(
+          '$route/pull[record]',
+          SchemaSyncError('apply failed for $entityKey: $e', cause: e),
+          op: 'pull',
+        );
+      }
+    }
+    return EntityPullOutcome(
+      pulled: records.length,
+      conflicts: conflicts,
+      maxServerUpdatedAtMs: maxServerUpdatedAt,
+    );
+  }
 
   // ── Drivers ────────────────────────────────────────────────────────────────
 

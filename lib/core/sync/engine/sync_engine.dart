@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:math';
 
 import '../../database/daos/app_meta_dao.dart';
 import '../../database/daos/sync_state_dao.dart';
+import '../remote/unified_sync_repository.dart';
 import '../sync_result.dart';
 import 'retry_policy.dart';
 import 'sync_module.dart';
@@ -12,9 +14,8 @@ import 'sync_module.dart';
 /// backwards compatibility) and calls [runOnce] / [syncAll] / per-module
 /// helpers.
 ///
-/// The engine is intentionally **module-agnostic**: it knows how to drive a
-/// list of [SyncModule]s but never references any specific entity. New
-/// entities are added by editing a bindings file, never by editing here.
+/// The engine consolidates all modules into a single HTTP request calling
+/// `/sync` to reduce read/write costs and bypass throttler limits.
 class SyncEngine {
   SyncEngine({
     required SyncStateDao syncStateDao,
@@ -32,10 +33,6 @@ class SyncEngine {
   final RetryPolicy _retry;
 
   /// Re-entrancy guard so concurrent UI taps coalesce into one in-flight run.
-  /// BUG-7 fix: the previous `bool _isSyncing` check-then-set was not atomic;
-  /// two near-simultaneous callers could both pass the guard before either
-  /// set the flag. Storing the in-flight Future means concurrent callers
-  /// await the same run instead of racing.
   Future<List<SyncResult>>? _inFlight;
 
   final StreamController<SyncResult> _resultsController =
@@ -50,6 +47,14 @@ class SyncEngine {
 
   void dispose() => _resultsController.close();
 
+  /// Total number of locally-dirty rows across all registered modules.
+  Future<int> getPendingPushCount() async {
+    final counts = await Future.wait(
+      _modules.values.map((m) => m.pendingCount()),
+    );
+    return counts.fold<int>(0, (a, b) => a + b);
+  }
+
   /// Runs every module once, coalescing concurrent callers.
   Future<List<SyncResult>> runOnce() {
     final existing = _inFlight;
@@ -59,89 +64,166 @@ class SyncEngine {
     return run;
   }
 
+  /// Helper to convert snake_case (client) to camelCase (server DTO keys)
+  String _snakeToCamel(String snake) {
+    final parts = snake.split('_');
+    if (parts.length == 1) return snake;
+    return parts[0] + parts.skip(1).map((p) => p[0].toUpperCase() + p.substring(1)).join();
+  }
+
+  /// Execute unified sync for all registered modules in exactly 1 API call.
   Future<List<SyncResult>> syncAll() async {
+    final startedAt = DateTime.now();
     final out = <SyncResult>[];
-    for (final key in _modules.keys) {
-      out.add(await syncModule(key));
+
+    try {
+      final deviceId = await _appMeta.getOrCreateDeviceId();
+      
+      // 1) Read latest pull cursors for all modules
+      final pocketState = await _syncState.read('pocket_ledger');
+      final tindaState = await _syncState.read('tinda_tracker');
+      
+      final pocketCursor = pocketState?.lastPulledAtMs ?? 0;
+      final tindaCursor = tindaState?.lastPulledAtMs ?? 0;
+
+      // Safe minimum cursor so we don't miss updates from either app segment
+      final lastSync = (pocketCursor == 0 || tindaCursor == 0)
+          ? 0
+          : min(pocketCursor, tindaCursor);
+
+      // 2) Gather all dirty payloads from all modules
+      final pushData = <String, List<Map<String, dynamic>>>{};
+      final ackCallbacks = <Future<void> Function()>[];
+      final modulePushedCounts = <String, int>{};
+
+      for (final entry in _modules.entries) {
+        final moduleKey = entry.key;
+        final module = entry.value;
+        var pushedCount = 0;
+
+        for (final entity in module.entities) {
+          final payload = await entity.preparePush();
+          if (payload != null && payload.records.isNotEmpty) {
+            final serverKey = _snakeToCamel(payload.entityKey);
+            pushData[serverKey] = payload.records;
+            ackCallbacks.add(payload.onAck);
+            pushedCount += payload.records.length;
+          }
+        }
+        modulePushedCounts[moduleKey] = pushedCount;
+      }
+
+      // 3) Call NestJS /sync API endpoint within the retry policy
+      final response = await _retry.run(() => UnifiedSyncRepository.instance.sync(
+            deviceId: deviceId,
+            lastSync: lastSync,
+            pushData: pushData,
+          ));
+
+      // 4) Clean local dirty flags since the server accepted the push batch
+      for (final ack in ackCallbacks) {
+        await ack();
+      }
+
+      // 5) Process pulling data inside Drift transactions
+      final pullObj = response['pull'] as Map<String, dynamic>? ?? {};
+      final serverTimestamp = response['timestamp'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+
+      for (final entry in _modules.entries) {
+        final moduleKey = entry.key;
+        final module = entry.value;
+
+        var pulledCount = 0;
+        var conflicts = 0;
+        var maxServerUpdatedAt = 0;
+
+        final dbAction = () async {
+          for (final entity in module.entities) {
+            final serverKey = _snakeToCamel(entity.entityKey);
+            final recordsJson = pullObj[serverKey];
+            if (recordsJson is List) {
+              final records = recordsJson.cast<Map<String, dynamic>>();
+              final outcome = await entity.processPull(records);
+              pulledCount += outcome.pulled;
+              conflicts += outcome.conflicts;
+              if (outcome.maxServerUpdatedAtMs > maxServerUpdatedAt) {
+                maxServerUpdatedAt = outcome.maxServerUpdatedAtMs;
+              }
+            }
+          }
+        };
+
+        if (module.runInTransaction != null) {
+          await module.runInTransaction!(dbAction);
+        } else {
+          await dbAction();
+        }
+
+        // Advance cursor to serverTimestamp safely
+        final newCursor = serverTimestamp;
+        final sinceMs = moduleKey == 'pocket_ledger' ? pocketCursor : tindaCursor;
+        if (newCursor > sinceMs) {
+          await _syncState.setLastPulledAt(moduleKey, newCursor);
+        }
+
+        final pending = await module.pendingCount();
+        await _syncState.recordPush(
+          moduleKey: moduleKey,
+          success: true,
+          pendingCount: pending,
+        );
+
+        final result = SyncResult(
+          moduleKey: moduleKey,
+          pulledCount: pulledCount,
+          pushedCount: modulePushedCounts[moduleKey] ?? 0,
+          conflictsResolved: conflicts,
+          startedAt: startedAt,
+          finishedAt: DateTime.now(),
+        );
+        _log(moduleKey, result);
+        _publish(result);
+        out.add(result);
+      }
+      return out;
+    } catch (error, stack) {
+      for (final moduleKey in _modules.keys) {
+        await _syncState.recordPush(
+          moduleKey: moduleKey,
+          success: false,
+          error: error.toString(),
+        );
+        final result = SyncResult(
+          moduleKey: moduleKey,
+          pulledCount: 0,
+          pushedCount: 0,
+          conflictsResolved: 0,
+          error: error,
+          startedAt: startedAt,
+          finishedAt: DateTime.now(),
+        );
+        _log(moduleKey, result, stack: stack);
+        _publish(result);
+        out.add(result);
+      }
+      return out;
     }
-    return out;
   }
 
   /// Runs sync for a specific module by key. Returns `SyncResult.failed`
-  /// for unknown keys so callers can defensively iterate without crashing.
+  /// for unknown keys. Binds directly to the unified execution model.
   Future<SyncResult> syncModule(String moduleKey) async {
-    final module = _modules[moduleKey];
-    if (module == null) {
+    if (!_modules.containsKey(moduleKey)) {
       return SyncResult.failed(
         moduleKey,
         StateError('Unknown sync module: $moduleKey'),
       );
     }
-
-    final startedAt = DateTime.now();
-    try {
-      final deviceId = await _appMeta.getOrCreateDeviceId();
-      final state = await _syncState.read(moduleKey);
-      final sinceMs = state?.lastPulledAtMs ?? 0;
-
-      // 1) Push first so the server incorporates local edits before we pull.
-      final pushedCount = await module.push(_retry);
-
-      // 2) Pull deltas since the per-module cursor.
-      final pullOutcome = await module.pull(
-        retry: _retry,
-        deviceId: deviceId,
-        sinceMs: sinceMs,
-      );
-
-      // 3) Advance cursor using the server timestamps we actually received.
-      //    BUG-2 fix: previously this used the local table max(updated_at),
-      //    which advanced past rows that were never pulled when an entity
-      //    errored mid-batch — those rows would then be skipped forever.
-      //    `maxServerUpdatedAtMs` is monotonic and only reflects records we
-      //    successfully received; setLastPulledAt guards against regression.
-      final newCursor = pullOutcome.maxServerUpdatedAtMs;
-      if (newCursor > sinceMs) {
-        await _syncState.setLastPulledAt(moduleKey, newCursor);
-      }
-
-      final pending = await module.pendingCount();
-      await _syncState.recordPush(
-        moduleKey: moduleKey,
-        success: true,
-        pendingCount: pending,
-      );
-
-      final result = SyncResult(
-        moduleKey: moduleKey,
-        pulledCount: pullOutcome.pulled,
-        pushedCount: pushedCount,
-        conflictsResolved: pullOutcome.conflicts,
-        startedAt: startedAt,
-        finishedAt: DateTime.now(),
-      );
-      _log(moduleKey, result);
-      _publish(result);
-      return result;
-    } catch (error, stack) {
-      await _syncState.recordPush(
-        moduleKey: moduleKey,
-        success: false,
-        error: error.toString(),
-      );
-      final result = SyncResult(
-        moduleKey: moduleKey,
-        pulledCount: 0,
-        pushedCount: 0,
-        conflictsResolved: 0,
-        error: error,
-        startedAt: startedAt,
-        finishedAt: DateTime.now(),
-      );
-      _log(moduleKey, result, stack: stack);
-      _publish(result);
-      return result;
-    }
+    final results = await runOnce();
+    return results.firstWhere(
+      (r) => r.moduleKey == moduleKey,
+      orElse: () => SyncResult.failed(moduleKey, StateError('Module not found')),
+    );
   }
 
   void _publish(SyncResult result) {

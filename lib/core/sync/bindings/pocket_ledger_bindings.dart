@@ -3,6 +3,7 @@ import '../../../pocket_ledger/features/parties/data/mappers/party_mapper.dart';
 import '../../../pocket_ledger/features/transactions/data/mappers/fee_transaction_mapper.dart';
 import '../../../pocket_ledger/features/transactions/data/mappers/ledger_entry_mapper.dart';
 import '../../../pocket_ledger/features/transactions/data/mappers/movement_category_mapper.dart';
+import '../../../pocket_ledger/features/transactions/data/mappers/transaction_mapper.dart';
 import '../../../pocket_ledger/features/transactions/data/mappers/transaction_type_mapper.dart';
 import '../../database/app_database.dart';
 import '../../database/daos/pocket_ledger/charges_dao.dart';
@@ -11,6 +12,7 @@ import '../../database/daos/pocket_ledger/ledger_entries_dao.dart';
 import '../../database/daos/pocket_ledger/movement_categories_dao.dart';
 import '../../database/daos/pocket_ledger/parties_dao.dart';
 import '../../database/daos/pocket_ledger/transaction_types_dao.dart';
+import '../../database/daos/pocket_ledger/transactions_dao.dart';
 import '../../database/daos/pocket_ledger_dao.dart';
 import '../engine/entity_sync.dart';
 import '../engine/sync_module.dart';
@@ -19,6 +21,7 @@ import '../remote/fee_transaction_remote_repository.dart';
 import '../remote/ledger_entry_remote_repository.dart';
 import '../remote/movement_category_remote_repository.dart';
 import '../remote/party_remote_repository.dart';
+import '../remote/transaction_remote_repository.dart';
 import '../remote/transaction_type_remote_repository.dart';
 
 /// Builds the `pocket_ledger` [SyncModule]. Pure factory — no state.
@@ -35,6 +38,7 @@ SyncModule buildPocketLedgerModule(PocketLedgerDao dao) {
   final MovementCategoriesDao movementCats = dao.movementCategories;
   final LedgerEntriesDao ledgerEntries = dao.ledgerEntries;
   final FeeTransactionsDao feeTx = dao.feeTransactions;
+  final TransactionsDao transactions = dao.transactions;
 
   return SyncModule(
     key: 'pocket_ledger',
@@ -119,6 +123,24 @@ SyncModule buildPocketLedgerModule(PocketLedgerDao dao) {
         pullRemote: ({required deviceId, since}) => LedgerEntryRemoteRepository
             .instance
             .pull(deviceId: deviceId, since: since),
+      ),
+      EntitySync<TransactionRow>(
+        entityKey: 'transactions',
+        route: '/transactions',
+        pendingPush: transactions.pendingPush,
+        markClean: transactions.markClean,
+        maxUpdatedAt: transactions.maxUpdatedAt,
+        toRemoteJson: (row) => transactionToRemoteJson(row.toDomain()),
+        applyRemote: (json) => transactions.upsertFromRemote(
+          transactionCompanionFromRemoteJson(json),
+        ),
+        pushRemote: (payload) =>
+            TransactionRemoteRepository.instance.push(payload),
+        pullRemote: ({required deviceId, since}) =>
+            TransactionRemoteRepository.instance.pull(
+              deviceId: deviceId,
+              since: since,
+            ),
       ),
       EntitySync<FeeTransactionRow>(
         entityKey: 'fee_transactions',

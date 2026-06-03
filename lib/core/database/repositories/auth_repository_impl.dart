@@ -92,5 +92,17 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> saveToken(String token) async {
     await _secureStorage.write(key: _tokenKey, value: token);
   }
+
+  static const _lastUsernameKey = 'last_logged_in_username';
+
+  @override
+  Future<String?> getLastUsername() async {
+    return await _secureStorage.read(key: _lastUsernameKey);
+  }
+
+  @override
+  Future<void> saveLastUsername(String username) async {
+    await _secureStorage.write(key: _lastUsernameKey, value: username);
+  }
 }
 

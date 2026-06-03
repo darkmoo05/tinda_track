@@ -5,4 +5,6 @@ abstract class AuthRepository {
   Future<String?> getAccessToken();
   Future<bool> hasValidToken();
   Future<void> saveToken(String token);
+  Future<String?> getLastUsername();
+  Future<void> saveLastUsername(String username);
 }

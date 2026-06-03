@@ -225,20 +225,12 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
   static Future<bool> _unusedPush(List<Map<String, dynamic>> _) async => true;
 
   @override
-  Future<int> push(RetryPolicy retry) async {
-    // BUG-3 fix: read dirty sales and their line items inside one Drift
-    // transaction so the (sale, items) snapshot is consistent even if the
-    // POS commits a new sale concurrently.
+  Future<EntityPushPayload?> preparePush() async {
     final assembled = await _db.transaction(() async {
       final dirty = await _sales.pendingPush();
-      if (dirty.isEmpty) {
-        return (
-          payload: const <Map<String, dynamic>>[],
-          saleSyncIds: const <String>[],
-          itemIds: const <String>[],
-        );
-      }
+      if (dirty.isEmpty) return null;
       final payload = <Map<String, dynamic>>[];
+      final saleSyncIds = <String>[];
       final itemIds = <String>[];
       for (final row in dirty) {
         final items = await _saleItems.listForSale(row.id);
@@ -247,58 +239,41 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
           items: items.map((i) => i.toDomain()).toList(growable: false),
         );
         payload.add(saleToRemoteJson(sale));
+        saleSyncIds.add(row.syncId);
       }
-      return (
+      return _AssembledSales(
         payload: payload,
-        saleSyncIds: dirty.map((r) => r.syncId).toList(growable: false),
+        saleSyncIds: saleSyncIds,
         itemIds: itemIds,
       );
     });
 
-    if (assembled.payload.isEmpty) return 0;
+    if (assembled == null) return null;
 
-    final ok = await retry.run(
-      () => SaleRemoteRepository.instance.push(assembled.payload),
+    return EntityPushPayload(
+      entityKey: entityKey,
+      records: assembled.payload,
+      onAck: () async {
+        await _db.transaction(() async {
+          await _sales.markClean(assembled.saleSyncIds);
+          await _saleItems.markClean(assembled.itemIds);
+        });
+      },
     );
-    if (!ok) {
-      // BUG-6 parity: surface the failure so the engine records it.
-      throw PushRejectedError(
-        'pushRemote returned false for sales '
-        '(${assembled.payload.length} sale(s))',
-      );
-    }
-
-    // Mark sales and their line items clean atomically.
-    await _db.transaction(() async {
-      await _sales.markClean(assembled.saleSyncIds);
-      await _saleItems.markClean(assembled.itemIds);
-    });
-    return assembled.payload.length;
   }
 
   @override
-  Future<EntityPullOutcome> pull({
-    required RetryPolicy retry,
-    required String deviceId,
-    int? since,
-  }) async {
-    final records = await retry.run(
-      () =>
-          SaleRemoteRepository.instance.pull(deviceId: deviceId, since: since),
-    );
+  Future<EntityPullOutcome> processPull(List<Map<String, dynamic>> records) async {
     var conflicts = 0;
     var maxServer = 0;
     for (final json in records) {
       final saleId = json['id'] as String?;
       if (saleId == null || saleId.isEmpty) {
-        // Malformed payload — skip rather than crash.
         continue;
       }
       final saleCompanion = saleCompanionFromRemoteJson(json);
       final itemCompanions = saleItemCompanionsFromRemoteJson(json);
 
-      // BUG-4 fix: guard companion ids before reading `.value`. Drop any
-      // items whose id is absent so `markClean` cannot throw.
       final cleanableItemIds = <String>[
         for (final c in itemCompanions)
           if (c.id.present) c.id.value,
@@ -308,9 +283,6 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
         final accepted = await _sales.upsertFromRemote(saleCompanion);
         if (!accepted) return false;
 
-        // BUG-9 fix: do NOT blindly wipe local items — a user may have added
-        // items offline that haven't been pushed yet. Keep any local row
-        // that is still dirty, replace everything else with the server copy.
         final localItems = await _saleItems.listForSale(saleId);
         final dirtyLocalIds = {
           for (final it in localItems)
@@ -318,8 +290,6 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
         };
         for (final it in localItems) {
           if (!dirtyLocalIds.contains(it.id)) {
-            // Hard-delete the acknowledged-clean local row; the server copy
-            // (if any) is reinserted below.
             await (_db.delete(
               _db.saleItems,
             )..where((t) => t.id.equals(it.id))).go();
@@ -327,8 +297,6 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
         }
         for (final item in itemCompanions) {
           if (item.id.present && dirtyLocalIds.contains(item.id.value)) {
-            // Keep the dirty local edit; skip the server copy until our
-            // next push cycle reconciles it.
             continue;
           }
           await _saleItems.insertLocal(item);
@@ -338,7 +306,6 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
       });
       if (!applied) conflicts++;
 
-      // Track server cursor (BUG-2 parity).
       final v = json['updated_at_ms'] ?? json['updatedAtMs'];
       if (v is int && v > maxServer) {
         maxServer = v;
@@ -352,4 +319,42 @@ class _SalesEntitySync extends EntitySync<SaleRow> {
       maxServerUpdatedAtMs: maxServer,
     );
   }
+
+  @override
+  Future<int> push(RetryPolicy retry) async {
+    final payload = await preparePush();
+    if (payload == null) return 0;
+    final ok = await retry.run(
+      () => SaleRemoteRepository.instance.push(payload.records),
+    );
+    if (!ok) {
+      throw PushRejectedError('pushRemote returned false for sales');
+    }
+    await payload.onAck();
+    return payload.records.length;
+  }
+
+  @override
+  Future<EntityPullOutcome> pull({
+    required RetryPolicy retry,
+    required String deviceId,
+    int? since,
+  }) async {
+    final records = await retry.run(
+      () => SaleRemoteRepository.instance.pull(deviceId: deviceId, since: since),
+    );
+    return processPull(records);
+  }
 }
+
+class _AssembledSales {
+  final List<Map<String, dynamic>> payload;
+  final List<String> saleSyncIds;
+  final List<String> itemIds;
+  _AssembledSales({
+    required this.payload,
+    required this.saleSyncIds,
+    required this.itemIds,
+  });
+}
+
