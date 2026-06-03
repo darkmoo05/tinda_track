@@ -983,7 +983,6 @@ class _LookupCard extends StatelessWidget {
   final bool expanded;
   final VoidCallback onTapHeader;
   final VoidCallback onDelete;
-  final Widget? trailingToggle;
   final Widget child;
 
   const _LookupCard({
@@ -994,7 +993,6 @@ class _LookupCard extends StatelessWidget {
     required this.onTapHeader,
     required this.onDelete,
     required this.child,
-    this.trailingToggle,
   });
 
   @override
@@ -1041,7 +1039,6 @@ class _LookupCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  ...?trailingToggle == null ? null : [trailingToggle!],
                   IconButton(
                     icon: Icon(
                       expanded

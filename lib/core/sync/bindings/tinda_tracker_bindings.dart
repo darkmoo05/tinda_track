@@ -52,6 +52,7 @@ SyncModule buildTindaTrackerModule(TindaTrackerDao dao) {
 
   return SyncModule(
     key: 'tinda_tracker',
+    runInTransaction: dao.database.transaction,
     entities: [
       EntitySync<ProductCategoryRow>(
         entityKey: 'product_categories',

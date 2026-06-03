@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
 import 'core/database/migrations/legacy_sqflite_importer.dart';
@@ -13,6 +14,7 @@ import 'core/database/providers/database_providers.dart';
 import 'core/database/providers/auth_providers.dart';
 import 'shared/screens/login_screen.dart';
 import 'core/network/api_client.dart';
+import 'core/sync/background_sync_manager.dart';
 import 'core/sync/sync_config.dart';
 import 'core/sync/sync_orchestrator.dart';
 import 'core/l10n/l10n_extension.dart';
@@ -38,27 +40,48 @@ void _enforceImmersiveMode() {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Immersive mode: set as early as possible, before first frame ──────────
-  _enforceImmersiveMode();
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = const String.fromEnvironment('SENTRY_DSN');
+      options.tracesSampleRate = 1.0;
+    },
+    appRunner: () async {
+      // ── Immersive mode: set as early as possible, before first frame ──────────
+      _enforceImmersiveMode();
 
-  // Lock to portrait (remove if you support landscape)
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+      // Initialize background sync task scheduling
+      try {
+        await BackgroundSyncManager.initialize();
+        await BackgroundSyncManager.registerPeriodicSync();
+      } catch (e, st) {
+        developer.log(
+          'Failed to initialize background sync manager',
+          name: 'startup.background_sync',
+          error: e,
+          stackTrace: st,
+        );
+      }
 
-  await LocaleProvider.instance.load();
+      // Lock to portrait (remove if you support landscape)
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
 
-  // Build a Riverpod container up-front so we can run one-time DB migrations
-  // and hydrate the API base URL before the first widget is built.
-  final container = ProviderContainer();
-  await _runStartupMigrations(container);
+      await LocaleProvider.instance.load();
 
-  runApp(
-    UncontrolledProviderScope(
-      container: container,
-      child: const TindaTrackApp(),
-    ),
+      // Build a Riverpod container up-front so we can run one-time DB migrations
+      // and hydrate the API base URL before the first widget is built.
+      final container = ProviderContainer();
+      await _runStartupMigrations(container);
+
+      runApp(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TindaTrackApp(),
+        ),
+      );
+    },
   );
 }
 

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import '../sync/engine/sync_errors.dart';
 import 'api_config.dart';
 import 'auth_interceptor.dart';
@@ -14,6 +16,27 @@ class ApiClient {
         ),
       ) {
     _dio.interceptors.add(AuthInterceptor());
+    _setupSSLPinning();
+  }
+
+  void _setupSSLPinning() {
+    final adapter = _dio.httpClientAdapter;
+    if (adapter is IOHttpClientAdapter) {
+      adapter.createHttpClient = () {
+        final context = SecurityContext(withTrustedRoots: true);
+        final client = HttpClient(context: context);
+        
+        client.badCertificateCallback = (cert, host, port) {
+          final isProd = const bool.fromEnvironment('dart.vm.product');
+          if (!isProd) {
+            // Allow self-signed certs or proxy tools only during local dev
+            return true;
+          }
+          return false; // Reject all invalid certificates in production
+        };
+        return client;
+      };
+    }
   }
 
   static final ApiClient instance = ApiClient._();

@@ -62,14 +62,6 @@ String _pluralizeUnit(String unitName, double qty) {
   return (qty: top.qty, unitName: top.unit);
 }
 
-String _stockDisplay(InventoryProduct p) {
-  final base = '${_fmtQty(p.stockInBaseUnit)} ${p.baseUnit}';
-  final best = _bestPackEquivalent(p);
-  if (best == null) return base;
-  final packLabel = _pluralizeUnit(best.unitName, best.qty);
-  return '$base (or ${_fmtQty(best.qty)} $packLabel)';
-}
-
 String _baseStockDisplay(InventoryProduct p) {
   return '${_fmtQty(p.stockInBaseUnit)} ${p.baseUnit}';
 }

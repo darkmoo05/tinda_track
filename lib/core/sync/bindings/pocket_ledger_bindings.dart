@@ -38,6 +38,7 @@ SyncModule buildPocketLedgerModule(PocketLedgerDao dao) {
 
   return SyncModule(
     key: 'pocket_ledger',
+    runInTransaction: dao.database.transaction,
     entities: [
       EntitySync<ChargeRow>(
         entityKey: 'charges',

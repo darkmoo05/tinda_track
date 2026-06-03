@@ -7,7 +7,11 @@ import 'retry_policy.dart';
 /// A module is the smallest unit the [SyncEngine] schedules — it has one
 /// `last_pulled_at_ms` cursor in `sync_state` and one row of UI status.
 class SyncModule {
-  SyncModule({required this.key, required this.entities});
+  SyncModule({
+    required this.key,
+    required this.entities,
+    this.runInTransaction,
+  });
 
   /// Stable module key matching the row in `sync_state`
   /// (e.g. `'pocket_ledger'`).
@@ -16,6 +20,9 @@ class SyncModule {
   /// Order matters only for logging — every entity runs concurrently in
   /// both push and pull.
   final List<EntitySync<dynamic>> entities;
+
+  /// Optional runner to execute local sync operations within a single database transaction.
+  final Future<dynamic> Function(Future<dynamic> Function() action)? runInTransaction;
 
   /// Pushes every entity's dirty rows. Returns total rows acked.
   Future<int> push(RetryPolicy retry) async {
@@ -35,6 +42,15 @@ class SyncModule {
     required int sinceMs,
   }) async {
     final since = sinceMs == 0 ? null : sinceMs;
+
+    if (runInTransaction != null) {
+      final result = await runInTransaction!(() => _pullAll(retry, deviceId, since));
+      return result as EntityPullOutcome;
+    }
+    return _pullAll(retry, deviceId, since);
+  }
+
+  Future<EntityPullOutcome> _pullAll(RetryPolicy retry, String deviceId, int? since) async {
     final outcomes = <EntityPullOutcome>[];
     for (final e in entities) {
       outcomes.add(await e.pull(retry: retry, deviceId: deviceId, since: since));
