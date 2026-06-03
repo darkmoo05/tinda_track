@@ -1,0 +1,11 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'products_dao.dart';
+
+// ignore_for_file: type=lint
+mixin _$ProductsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $ProductCategoriesTable get productCategories =>
+      attachedDatabase.productCategories;
+  $ShelfLocationsTable get shelfLocations => attachedDatabase.shelfLocations;
+  $ProductsTable get products => attachedDatabase.products;
+}

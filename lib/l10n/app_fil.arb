@@ -479,5 +479,90 @@
     "placeholders": {
       "amount": { "type": "String" }
     }
+  },
+
+  "inventory": "Imbentaryo",
+  "addProduct": "Magdagdag ng Produkto",
+  "editProduct": "I-edit ang Produkto",
+  "updateProduct": "I-update ang Produkto",
+  "products": "Produkto",
+  "totalStock": "Total Stock",
+  "lowStock": "Low Stock",
+  "outOfStock": "Ubos",
+  "noProducts": "Wala pang produkto.",
+  "searchProductHint": "Maghanap ng pangalan o barcode...",
+  "archiveProductTitle": "I-archive ang Produkto?",
+  "archiveProductMessage": "Ang \"{name}\" ay itatago sa listahan. Maaari itong ibalik mamaya.",
+  "@archiveProductMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "archiveBulkTitle": "I-archive ang {count} produkto?",
+  "@archiveBulkTitle": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "archive": "I-archive",
+  "archiveProduct": "I-archive ang Produkto",
+  "no": "Huwag",
+  "selectMultiple": "Pumili ng marami",
+  "nSelected": "{count} napili",
+  "@nSelected": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "nProducts": "{count} produkto",
+  "@nProducts": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "adjustStock": "Ayusin ang Stock",
+  "stockHistory": "Kasaysayan ng Stock",
+  "stock": "Stock",
+  "currentStockLabel": "Kasalukuyang Stock",
+  "lowStockAlertStat": "Low Stock Alert",
+  "noStockHistory": "Wala pang kasaysayan ng stock.",
+  "productInformation": "Impormasyon ng Produkto",
+  "productName": "Pangalan ng Produkto *",
+  "nameRequired": "Kailangan ang pangalan",
+  "skuBarcode": "SKU / Barcode *",
+  "skuRequired": "Kailangan ang SKU/barcode",
+  "scanBarcode": "I-scan ang Barcode",
+  "descriptionOptional": "Paglalarawan (opsyonal)",
+  "category": "Kategorya",
+  "unitLabel": "Unit",
+  "pricing": "Presyo",
+  "costPrice": "Halaga ng Bili (Cost)",
+  "sellingPrice": "Presyo ng Benta *",
+  "fieldRequired": "Kailangan",
+  "numbersOnly": "Numero lang",
+  "initialStock": "Initial Stock",
+  "useAdjustStockToChange": "Gamitin ang Ayusin Stock para magbago",
+  "lowStockAlert": "Low Stock Alert",
+  "activeLabel": "Aktibo",
+  "activeHelperText": "Lalabas sa listahan at POS",
+  "productAdded": "Naidagdag ang produkto!",
+  "productUpdated": "Na-update ang produkto!",
+  "filters": "Mga Filter",
+  "clearAll": "I-clear lahat",
+  "stockAlerts": "Alerto ng Stock",
+  "lowStockOnly": "Low Stock lamang",
+  "outOfStockOnly": "Ubos na Stock lamang",
+  "noChange": "Walang pagbabago.",
+  "quickAdjust": "Mabilis na pagbabago",
+  "reason": "Dahilan",
+  "saveStock": "I-save ang Stock",
+  "manualAmount": "Manual na bilang (+ o -)",
+  "resetBtn": "I-reset",
+  "categoryAndUnit": "Kategorya: {category}  |  {unit}",
+  "@categoryAndUnit": {
+    "placeholders": {
+      "category": { "type": "String" },
+      "unit": { "type": "String" }
+    }
   }
 }

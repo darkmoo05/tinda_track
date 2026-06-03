@@ -1,19 +1,128 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
-import 'core/data/app_database.dart';
-import 'core/data/sync_service.dart';
-import 'core/l10n_extension.dart';
-import 'core/locale_provider.dart';
-import 'features/main_shell.dart';
+import 'core/database/migrations/legacy_sqflite_importer.dart';
+import 'core/database/providers/database_providers.dart';
+import 'core/database/providers/auth_providers.dart';
+import 'shared/screens/login_screen.dart';
+import 'core/network/api_client.dart';
+import 'core/sync/background_sync_manager.dart';
+import 'core/sync/sync_config.dart';
+import 'core/sync/sync_orchestrator.dart';
+import 'core/l10n/l10n_extension.dart';
+import 'core/l10n/locale_provider.dart';
+import 'shared/widgets/app_loading_modal.dart';
+import 'pocket_ledger/app/main_shell.dart';
+import 'tinda_tracker/app/tinda_tracker_shell.dart';
+
+enum AppMode { pocketLedger, tindaTracker }
+
+/// Applies sticky immersive full-screen mode (hides nav bar + status bar).
+/// Call this from any lifecycle point where you want to (re-)enforce immersive.
+/// Android will auto-restore nav bars on swipe; calling this re-hides them.
+void _enforceImmersiveMode() {
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.immersiveSticky,
+    // immersiveSticky: nav/status bars are hidden by default.
+    // A swipe from the edge reveals them transiently — they fade back
+    // automatically without triggering any layout shift in Flutter.
+  );
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AppDatabase.instance.init();
-  await LocaleProvider.instance.load();
-  runApp(const TindaTrackApp());
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = const String.fromEnvironment('SENTRY_DSN');
+      options.tracesSampleRate = 1.0;
+    },
+    appRunner: () async {
+      // ── Immersive mode: set as early as possible, before first frame ──────────
+      _enforceImmersiveMode();
+
+      // Initialize background sync task scheduling
+      try {
+        await BackgroundSyncManager.initialize();
+        await BackgroundSyncManager.registerPeriodicSync();
+      } catch (e, st) {
+        developer.log(
+          'Failed to initialize background sync manager',
+          name: 'startup.background_sync',
+          error: e,
+          stackTrace: st,
+        );
+      }
+
+      // Lock to portrait (remove if you support landscape)
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+
+      await LocaleProvider.instance.load();
+
+      // Build a Riverpod container up-front so we can run one-time DB migrations
+      // and hydrate the API base URL before the first widget is built.
+      final container = ProviderContainer();
+      await _runStartupMigrations(container);
+
+      runApp(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TindaTrackApp(),
+        ),
+      );
+    },
+  );
+}
+
+Future<void> _runStartupMigrations(ProviderContainer container) async {
+  try {
+    final db = container.read(appDatabaseProvider);
+    final appMeta = container.read(appMetaDaoProvider);
+    await LegacyImporter(db, appMeta).runIfNeeded();
+  } catch (e, st) {
+    // BUG-13 fix: the importer marks `failed` so it retries next launch, but
+    // we MUST leave a developer-log breadcrumb — a silent `catch (_) {}`
+    // made stuck migrations impossible to diagnose in the field.
+    developer.log(
+      'Legacy import failed during startup; will retry next launch.',
+      name: 'startup.legacy_import',
+      error: e,
+      stackTrace: st,
+    );
+  }
+
+  // Hydrate the live ApiClient base URL from the persisted setting (or the
+  // compile-time default when unset) so the first sync request hits the
+  // right host.
+  try {
+    final appMeta = container.read(appMetaDaoProvider);
+    final stored = await appMeta.getApiBaseUrl();
+    final url = (stored != null && stored.trim().isNotEmpty)
+        ? stored.trim()
+        : SyncConfig.defaultBaseApiUrl;
+    ApiClient.instance.dio.options = ApiClient.instance.dio.options.copyWith(
+      baseUrl: url,
+    );
+  } catch (e, st) {
+    developer.log(
+      'Failed to hydrate ApiClient base URL; falling back to compile-time '
+      'default (${SyncConfig.defaultBaseApiUrl}).',
+      name: 'startup.api_base_url',
+      error: e,
+      stackTrace: st,
+    );
+  }
 }
 
 class TindaTrackApp extends StatelessWidget {
@@ -38,7 +147,7 @@ class TindaTrackApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
           ],
           supportedLocales: const [Locale('en'), Locale('fil'), Locale('ceb')],
-          home: const StartupSyncGate(),
+          home: const AuthGate(),
         );
       },
     ); //yes von
@@ -86,105 +195,139 @@ class _FallbackCupertinoLocalizationsDelegate
   bool shouldReload(_FallbackCupertinoLocalizationsDelegate old) => false;
 }
 
-class StartupSyncGate extends StatefulWidget {
+class StartupSyncGate extends ConsumerStatefulWidget {
   const StartupSyncGate({super.key});
 
   @override
-  State<StartupSyncGate> createState() => _StartupSyncGateState();
+  ConsumerState<StartupSyncGate> createState() => _StartupSyncGateState();
 }
 
-class _StartupSyncGateState extends State<StartupSyncGate> {
-  late final Future<SyncRunResult> _startupSync;
+class _StartupSyncGateState extends ConsumerState<StartupSyncGate> {
+  bool _ready = false;
+  bool _startupTaskStarted = false;
 
   @override
   void initState() {
     super.initState();
-    _startupSync = _runStartupSync();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _runStartupSync());
   }
 
-  Future<SyncRunResult> _runStartupSync() async {
+  Future<void> _runStartupSync() async {
+    if (_startupTaskStarted || !mounted) {
+      return;
+    }
+    _startupTaskStarted = true;
+
+    final loading = showAppLoadingModal(
+      context,
+      message: 'Syncing startup data...',
+      caption: 'Please wait while we fetch your latest records.',
+    );
+
     try {
-      return await SyncService.instance.syncAll();
+      await ref.read(syncOrchestratorProvider).runOnce();
     } catch (_) {
-      return const SyncRunResult(pushed: 0, pulled: 0);
+      // Startup should continue even if first sync attempt fails.
+    } finally {
+      if (!mounted) {
+        return;
+      }
+      loading.close();
+      setState(() {
+        _ready = true;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<SyncRunResult>(
-      future: _startupSync,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const _StartupLoadingScreen();
-        }
-
-        return const MainShell();
-      },
-    );
+    if (!_ready) {
+      return const Scaffold(body: SizedBox.expand());
+    }
+    return const AppModeHost();
   }
 }
 
-class _StartupLoadingScreen extends StatelessWidget {
-  const _StartupLoadingScreen();
+class AppModeHost extends ConsumerStatefulWidget {
+  const AppModeHost({super.key});
+
+  @override
+  ConsumerState<AppModeHost> createState() => _AppModeHostState();
+}
+
+class _AppModeHostState extends ConsumerState<AppModeHost>
+    with WidgetsBindingObserver {
+  AppMode _mode = AppMode.pocketLedger;
+  bool _exitSyncInFlight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Run one best-effort sync when the app is backgrounded/exiting.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      if (_exitSyncInFlight) {
+        return;
+      }
+      _exitSyncInFlight = true;
+      ref.read(syncOrchestratorProvider).runOnce().whenComplete(() {
+        _exitSyncInFlight = false;
+      });
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed) {
+      _exitSyncInFlight = false;
+      // ── Re-enforce immersive mode when app comes back to foreground ───────
+      // Android resets system UI flags when the app is paused. This call
+      // restores sticky immersive mode reliably on every resume event,
+      // including after the user navigates home and returns.
+      _enforceImmersiveMode();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  void _switchTo(AppMode mode) => setState(() => _mode = mode);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.primary, AppColors.primaryContainer],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Icon centered in expanded space
-              Expanded(
-                child: Center(
-                  child: Image.asset(
-                    'tinda_tract_icon.png',
-                    width: 140,
-                    height: 140,
-                  ),
-                ),
-              ),
-              // Spinner + label pinned to bottom
-              Padding(
-                padding: const EdgeInsets.only(bottom: 48),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.onPrimary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      context.l10n.syncingData,
-                      style: TextStyle(
-                        color: AppColors.onPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+    return switch (_mode) {
+      AppMode.pocketLedger => MainShell(
+        onSwitchApp: () => _switchTo(AppMode.tindaTracker),
       ),
-    );
+      AppMode.tindaTracker => TindaTrackerShell(
+        onSwitchApp: () => _switchTo(AppMode.pocketLedger),
+      ),
+    };
+  }
+}
+
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    return switch (authState.status) {
+      AuthStatus.initial || AuthStatus.loading => const Scaffold(
+          backgroundColor: Color(0xFF0F0F12),
+          body: Center(
+            child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+          ),
+        ),
+      AuthStatus.authenticated => const StartupSyncGate(),
+      AuthStatus.unauthenticated || AuthStatus.error => const LoginScreen(),
+    };
   }
 }

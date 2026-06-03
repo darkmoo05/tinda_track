@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -426,10 +425,12 @@ class ReceiptScanService {
 
   ReceiptWalletSelection? _detectWalletSelection(String text) {
     final lower = text.toLowerCase();
-    if (lower.contains('maya') || lower.contains('paymaya'))
+    if (lower.contains('maya') || lower.contains('paymaya')) {
       return ReceiptWalletSelection.maya;
-    if (lower.contains('gcash') || lower.contains('g-cash'))
+    }
+    if (lower.contains('gcash') || lower.contains('g-cash')) {
       return ReceiptWalletSelection.gcash;
+    }
     if (lower.contains('shopeepay') ||
         lower.contains('shopee pay') ||
         lower.contains('seabank')) {
@@ -474,8 +475,9 @@ class ReceiptScanService {
     );
     for (final m in simpleMinusPattern.allMatches(flat)) {
       final parsed = _parseAmountToken(m.group(1));
-      if (_isPlausibleScannedAmount(parsed))
+      if (_isPlausibleScannedAmount(parsed)) {
         candidates.add((value: parsed!, score: 13));
+      }
     }
 
     // 1. Minus-prefixed currency (Maya format: -₱100.00)
@@ -485,8 +487,9 @@ class ReceiptScanService {
     );
     for (final m in minusCurrencyPattern.allMatches(flat)) {
       final parsed = _parseAmountToken(m.group(1));
-      if (_isPlausibleScannedAmount(parsed))
+      if (_isPlausibleScannedAmount(parsed)) {
         candidates.add((value: parsed!, score: 13));
+      }
     }
 
     // 2. Currency prefix: PHP / ₱ / P
@@ -554,16 +557,18 @@ class ReceiptScanService {
     );
     for (final m in keywordSameLine.allMatches(flat)) {
       final parsed = _parseAmountToken(m.group(1));
-      if (_isPlausibleScannedAmount(parsed))
+      if (_isPlausibleScannedAmount(parsed)) {
         candidates.add((value: parsed!, score: 10));
+      }
     }
 
     // 4. Comma-formatted amounts (e.g. 5,000.00)
     final commaFormatted = RegExp(r'\b(\d{1,3}(?:,\d{3})+\.\d{1,2})\b');
     for (final m in commaFormatted.allMatches(flat)) {
       final parsed = _parseAmountToken(m.group(1));
-      if (_isPlausibleScannedAmount(parsed))
+      if (_isPlausibleScannedAmount(parsed)) {
         candidates.add((value: parsed!, score: 8));
+      }
     }
 
     if (candidates.isNotEmpty) {
@@ -591,8 +596,9 @@ class ReceiptScanService {
       final parsedValue = parsed!;
       if (parsedValue >= 2000 &&
           parsedValue <= 2100 &&
-          m.group(1)!.endsWith('.00'))
+          m.group(1)!.endsWith('.00')) {
         continue;
+      }
       if (best == null || parsedValue > best) best = parsedValue;
     }
     if (best != null) {
@@ -647,8 +653,9 @@ class ReceiptScanService {
     if (destMatch != null) {
       final raw = destMatch.group(1)!.replaceAll(RegExp(r'[^0-9]'), '');
       final normalized = _normalizeAccountDigits(raw);
-      if (normalized != null)
+      if (normalized != null) {
         return (value: normalized, confidence: ReceiptFieldConfidence.high);
+      }
     }
 
     // Source number to skip
@@ -657,9 +664,9 @@ class ReceiptScanService {
       caseSensitive: false,
     );
     final sourceNumMatch = sourceNumPattern.firstMatch(text);
-    final sourceNumber = sourceNumMatch != null
-        ? sourceNumMatch.group(1)!.replaceAll(RegExp(r'[^0-9]'), '')
-        : null;
+    final sourceNumber = sourceNumMatch
+        ?.group(1)!
+        .replaceAll(RegExp(r'[^0-9]'), '');
 
     final hasMayaSentLayout =
         text.toLowerCase().contains('destination') ||
@@ -671,8 +678,9 @@ class ReceiptScanService {
         final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
         if (sourceNumber != null && digits == sourceNumber) continue;
         final normalized = _normalizeAccountDigits(digits);
-        if (normalized != null)
+        if (normalized != null) {
           return (value: normalized, confidence: ReceiptFieldConfidence.high);
+        }
       }
     }
 
@@ -682,8 +690,9 @@ class ReceiptScanService {
       final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
       if (sourceNumber != null && digits == sourceNumber) continue;
       final normalized = _normalizeAccountDigits(digits);
-      if (normalized != null)
+      if (normalized != null) {
         return (value: normalized, confidence: ReceiptFieldConfidence.high);
+      }
     }
 
     // 2. International compact: +639753079315
@@ -692,8 +701,9 @@ class ReceiptScanService {
       final digits = m.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
       if (sourceNumber != null && digits == sourceNumber) continue;
       final normalized = _normalizeAccountDigits(digits);
-      if (normalized != null)
+      if (normalized != null) {
         return (value: normalized, confidence: ReceiptFieldConfidence.high);
+      }
     }
 
     // 3. Local format with spaces: 0975 307 9315
@@ -702,8 +712,9 @@ class ReceiptScanService {
     if (localMatch != null) {
       final digits = localMatch.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
       final normalized = _normalizeAccountDigits(digits);
-      if (normalized != null)
+      if (normalized != null) {
         return (value: normalized, confidence: ReceiptFieldConfidence.medium);
+      }
     }
 
     // 4. Contextual keyword
@@ -717,8 +728,9 @@ class ReceiptScanService {
       final normalized = _normalizeAccountDigits(
         raw.replaceAll(RegExp(r'[^0-9]'), ''),
       );
-      if (normalized != null)
+      if (normalized != null) {
         return (value: normalized, confidence: ReceiptFieldConfidence.high);
+      }
     }
 
     // 5. Maya QR Payment ID
@@ -733,8 +745,9 @@ class ReceiptScanService {
           .trim()
           .replaceAll(RegExp(r'\s+'), ' ')
           .toUpperCase();
-      if (!value.startsWith('MAYA '))
+      if (!value.startsWith('MAYA ')) {
         return (value: value, confidence: ReceiptFieldConfidence.high);
+      }
     }
 
     // 5a. OCR two-column Payment ID fallback
@@ -755,19 +768,23 @@ class ReceiptScanService {
         final canonical = token.replaceAll(RegExp(r'\s+'), '').toUpperCase();
         if (canonical.length < 12 || canonical.length > 24) continue;
         if (!RegExp(r'[A-Z]').hasMatch(canonical) ||
-            !RegExp(r'\d').hasMatch(canonical))
+            !RegExp(r'\d').hasMatch(canonical)) {
           continue;
+        }
         if (canonical.startsWith('MAYA')) continue;
-        if (referenceCanonical != null && canonical == referenceCanonical)
+        if (referenceCanonical != null && canonical == referenceCanonical) {
           continue;
+        }
         candidates.add((value: token.toUpperCase(), start: m.start));
       }
 
       for (final m in compactIdPattern.allMatches(text.toUpperCase())) {
         final token = (m.group(1) ?? '').trim();
         if (token.length < 12 || token.length > 24) continue;
-        if (!RegExp(r'[A-Z]').hasMatch(token) || !RegExp(r'\d').hasMatch(token))
+        if (!RegExp(r'[A-Z]').hasMatch(token) ||
+            !RegExp(r'\d').hasMatch(token)) {
           continue;
+        }
         if (token.startsWith('MAYA')) continue;
         if (referenceCanonical != null && token == referenceCanonical) continue;
         if (token.startsWith('SCALED') || token.startsWith('IMG')) continue;
@@ -795,11 +812,12 @@ class ReceiptScanService {
       caseSensitive: false,
     );
     final merchantIdMatch = merchantIdPattern.firstMatch(text);
-    if (merchantIdMatch != null)
+    if (merchantIdMatch != null) {
       return (
         value: merchantIdMatch.group(1)!.trim(),
         confidence: ReceiptFieldConfidence.medium,
       );
+    }
 
     // 6a. Merchant ID two-column fallback
     if (text.toLowerCase().contains('merchant id')) {
@@ -830,8 +848,9 @@ class ReceiptScanService {
       final normalized = _normalizeAccountDigits(
         '${prefix}9$rest'.replaceAll(RegExp(r'[^0-9]'), ''),
       );
-      if (normalized != null)
+      if (normalized != null) {
         return (value: normalized, confidence: ReceiptFieldConfidence.low);
+      }
     }
 
     return (value: null, confidence: ReceiptFieldConfidence.unknown);
@@ -840,8 +859,9 @@ class ReceiptScanService {
   String? _normalizeAccountDigits(String raw) {
     final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.isEmpty) return null;
-    if (digits.startsWith('63') && digits.length == 12)
+    if (digits.startsWith('63') && digits.length == 12) {
       return '0${digits.substring(2)}';
+    }
     if (digits.length == 10 && digits.startsWith('9')) return '0$digits';
     if (digits.length >= 10 && digits.length <= 13) return digits;
     return null;
@@ -986,8 +1006,9 @@ class ReceiptScanService {
           ((value.length == 8 && int.tryParse(value.substring(4)) != null) ||
               (value.length == 10 && value.endsWith('00')));
       if (isYearLike) continue;
-      if (value.length <= 20)
+      if (value.length <= 20) {
         return (value: value, confidence: ReceiptFieldConfidence.low);
+      }
     }
 
     // 6. Standalone mixed alphanumeric (9–15 chars, letters + digits)
@@ -1002,8 +1023,9 @@ class ReceiptScanService {
     for (final m in standaloneAlphaNum.allMatches(text)) {
       final token = m.group(1)!;
       if (!RegExp(r'[A-Za-z]').hasMatch(token) ||
-          !RegExp(r'[0-9]').hasMatch(token))
+          !RegExp(r'[0-9]').hasMatch(token)) {
         continue;
+      }
       if (token.startsWith('639') || token.startsWith('09')) continue;
       if (commonWords.hasMatch(token)) continue;
       debugPrint('[Reference] Found via standalone alphanumeric: $token');

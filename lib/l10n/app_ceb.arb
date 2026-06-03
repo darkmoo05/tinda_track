@@ -479,5 +479,90 @@
     "placeholders": {
       "amount": { "type": "String" }
     }
+  },
+
+  "inventory": "Imbentaryo",
+  "addProduct": "Magdugang og Produkto",
+  "editProduct": "I-edit ang Produkto",
+  "updateProduct": "I-update ang Produkto",
+  "products": "Mga Produkto",
+  "totalStock": "Kinatibuk-ang Stock",
+  "lowStock": "Ubos na Stock",
+  "outOfStock": "Wala nay Stock",
+  "noProducts": "Wala pay mga produkto.",
+  "searchProductHint": "Pangita pinaagi sa ngalan o barcode...",
+  "archiveProductTitle": "I-archive kini nga Produkto?",
+  "archiveProductMessage": "Ang \"{name}\" matago gikan sa lista. Mahimong ibalik kini sa ulahi.",
+  "@archiveProductMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "archiveBulkTitle": "I-archive ang {count} ka produkto?",
+  "@archiveBulkTitle": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "archive": "I-archive",
+  "archiveProduct": "I-archive ang Produkto",
+  "no": "Dili",
+  "selectMultiple": "Pili-on ang daghan",
+  "nSelected": "{count} ang napili",
+  "@nSelected": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "nProducts": "{count} ka produkto",
+  "@nProducts": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "adjustStock": "Ayuhon ang Stock",
+  "stockHistory": "Kasaysayan sa Stock",
+  "stock": "Stock",
+  "currentStockLabel": "Kasamtangang Stock",
+  "lowStockAlertStat": "Pasidaan sa Ubos nga Stock",
+  "noStockHistory": "Wala pay kasaysayan sa stock.",
+  "productInformation": "Impormasyon sa Produkto",
+  "productName": "Ngalan sa Produkto *",
+  "nameRequired": "Kinahanglan ang ngalan",
+  "skuBarcode": "SKU / Barcode *",
+  "skuRequired": "Kinahanglan ang SKU/barcode",
+  "scanBarcode": "I-scan ang Barcode",
+  "descriptionOptional": "Paglalaragway (opsyonal)",
+  "category": "Kategorya",
+  "unitLabel": "Yunit",
+  "pricing": "Presyo",
+  "costPrice": "Gasto sa Pagpalit",
+  "sellingPrice": "Presyo sa Pagbaligya *",
+  "fieldRequired": "Kinahanglan",
+  "numbersOnly": "Numero lang",
+  "initialStock": "Sinugdanang Stock",
+  "useAdjustStockToChange": "Gamita ang Ayuhon Stock aron mabag-o",
+  "lowStockAlert": "Pasidaan sa Ubos nga Stock",
+  "activeLabel": "Aktibo",
+  "activeHelperText": "Makita sa lista ug POS",
+  "productAdded": "Nadugang na ang produkto!",
+  "productUpdated": "Na-update na ang produkto!",
+  "filters": "Mga Filter",
+  "clearAll": "I-clear tanan",
+  "stockAlerts": "Mga Pasidaan sa Stock",
+  "lowStockOnly": "Ubos nga Stock lamang",
+  "outOfStockOnly": "Wala nay Stock lamang",
+  "noChange": "Walay pagbag-o.",
+  "quickAdjust": "Dali nga pagbag-o",
+  "reason": "Hinungdan",
+  "saveStock": "I-save ang Stock",
+  "manualAmount": "Manwal nga kantidad (+ o -)",
+  "resetBtn": "I-reset",
+  "categoryAndUnit": "Kategorya: {category}  |  {unit}",
+  "@categoryAndUnit": {
+    "placeholders": {
+      "category": { "type": "String" },
+      "unit": { "type": "String" }
+    }
   }
 }

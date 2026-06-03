@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
-import '../../core/l10n_extension.dart';
+import '../../core/l10n/l10n_extension.dart';
 import '../widgets/app_loading_modal.dart';
 import 'receipt_draft.dart';
 import 'receipt_scan_service.dart';

@@ -1341,4 +1341,188 @@ class AppLocalizationsCeb extends AppLocalizations {
   String withdrawableEarningsNote(String amount) {
     return 'Withdrawable nga kita karon: $amount';
   }
+
+  @override
+  String get inventory => 'Imbentaryo';
+
+  @override
+  String get addProduct => 'Magdugang og Produkto';
+
+  @override
+  String get editProduct => 'I-edit ang Produkto';
+
+  @override
+  String get updateProduct => 'I-update ang Produkto';
+
+  @override
+  String get products => 'Mga Produkto';
+
+  @override
+  String get totalStock => 'Kinatibuk-ang Stock';
+
+  @override
+  String get lowStock => 'Ubos na Stock';
+
+  @override
+  String get outOfStock => 'Wala nay Stock';
+
+  @override
+  String get noProducts => 'Wala pay mga produkto.';
+
+  @override
+  String get searchProductHint => 'Pangita pinaagi sa ngalan o barcode...';
+
+  @override
+  String get archiveProductTitle => 'I-archive kini nga Produkto?';
+
+  @override
+  String archiveProductMessage(String name) {
+    return 'Ang \"$name\" matago gikan sa lista. Mahimong ibalik kini sa ulahi.';
+  }
+
+  @override
+  String archiveBulkTitle(int count) {
+    return 'I-archive ang $count ka produkto?';
+  }
+
+  @override
+  String get archive => 'I-archive';
+
+  @override
+  String get archiveProduct => 'I-archive ang Produkto';
+
+  @override
+  String get no => 'Dili';
+
+  @override
+  String get selectMultiple => 'Pili-on ang daghan';
+
+  @override
+  String nSelected(int count) {
+    return '$count ang napili';
+  }
+
+  @override
+  String nProducts(int count) {
+    return '$count ka produkto';
+  }
+
+  @override
+  String get adjustStock => 'Ayuhon ang Stock';
+
+  @override
+  String get stockHistory => 'Kasaysayan sa Stock';
+
+  @override
+  String get stock => 'Stock';
+
+  @override
+  String get currentStockLabel => 'Kasamtangang Stock';
+
+  @override
+  String get lowStockAlertStat => 'Pasidaan sa Ubos nga Stock';
+
+  @override
+  String get noStockHistory => 'Wala pay kasaysayan sa stock.';
+
+  @override
+  String get productInformation => 'Impormasyon sa Produkto';
+
+  @override
+  String get productName => 'Ngalan sa Produkto *';
+
+  @override
+  String get nameRequired => 'Kinahanglan ang ngalan';
+
+  @override
+  String get skuBarcode => 'SKU / Barcode *';
+
+  @override
+  String get skuRequired => 'Kinahanglan ang SKU/barcode';
+
+  @override
+  String get scanBarcode => 'I-scan ang Barcode';
+
+  @override
+  String get descriptionOptional => 'Paglalaragway (opsyonal)';
+
+  @override
+  String get category => 'Kategorya';
+
+  @override
+  String get unitLabel => 'Yunit';
+
+  @override
+  String get pricing => 'Presyo';
+
+  @override
+  String get costPrice => 'Gasto sa Pagpalit';
+
+  @override
+  String get sellingPrice => 'Presyo sa Pagbaligya *';
+
+  @override
+  String get fieldRequired => 'Kinahanglan';
+
+  @override
+  String get numbersOnly => 'Numero lang';
+
+  @override
+  String get initialStock => 'Sinugdanang Stock';
+
+  @override
+  String get useAdjustStockToChange => 'Gamita ang Ayuhon Stock aron mabag-o';
+
+  @override
+  String get lowStockAlert => 'Pasidaan sa Ubos nga Stock';
+
+  @override
+  String get activeLabel => 'Aktibo';
+
+  @override
+  String get activeHelperText => 'Makita sa lista ug POS';
+
+  @override
+  String get productAdded => 'Nadugang na ang produkto!';
+
+  @override
+  String get productUpdated => 'Na-update na ang produkto!';
+
+  @override
+  String get filters => 'Mga Filter';
+
+  @override
+  String get clearAll => 'I-clear tanan';
+
+  @override
+  String get stockAlerts => 'Mga Pasidaan sa Stock';
+
+  @override
+  String get lowStockOnly => 'Ubos nga Stock lamang';
+
+  @override
+  String get outOfStockOnly => 'Wala nay Stock lamang';
+
+  @override
+  String get noChange => 'Walay pagbag-o.';
+
+  @override
+  String get quickAdjust => 'Dali nga pagbag-o';
+
+  @override
+  String get reason => 'Hinungdan';
+
+  @override
+  String get saveStock => 'I-save ang Stock';
+
+  @override
+  String get manualAmount => 'Manwal nga kantidad (+ o -)';
+
+  @override
+  String get resetBtn => 'I-reset';
+
+  @override
+  String categoryAndUnit(String category, String unit) {
+    return 'Kategorya: $category  |  $unit';
+  }
 }

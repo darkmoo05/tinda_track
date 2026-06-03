@@ -5,13 +5,14 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tinda_track/main.dart';
 
 void main() {
   testWidgets('App boots smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const TindaTrackApp());
+    await tester.pumpWidget(const ProviderScope(child: TindaTrackApp()));
     expect(find.byType(TindaTrackApp), findsOneWidget);
   });
 }

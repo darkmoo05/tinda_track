@@ -1,32 +1,21 @@
-import 'package:dio/dio.dart';
 import '../../network/api_client.dart';
-
 class ChargeRemoteRepository {
   ChargeRemoteRepository._();
   static final ChargeRemoteRepository instance = ChargeRemoteRepository._();
 
   Future<bool> push(List<Map<String, dynamic>> records) async {
-    try {
-      await ApiClient.instance.post('/charges/push', records);
-      return true;
-    } on DioException catch (_) {
-      return false;
-    }
+    await ApiClient.instance.post('/charges/push', records);
+    return true;
   }
 
   Future<List<Map<String, dynamic>>> pull({
     required String deviceId,
     int? since,
   }) async {
-    try {
-      final res = await ApiClient.instance.get(
-        '/charges/pull',
-        params: {'deviceId': deviceId, if (since != null) 'since': since},
-      );
-      final data = res.data['data'] as List<dynamic>;
-      return data.cast<Map<String, dynamic>>();
-    } on DioException catch (_) {
-      return [];
+    final params = <String, Object?>{'deviceId': deviceId};
+    if (since != null) {
+      params['since'] = since;
     }
+    return await ApiClient.instance.getJsonList('/charges/pull', params: params);
   }
 }

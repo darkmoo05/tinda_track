@@ -1332,4 +1332,188 @@ class AppLocalizationsEn extends AppLocalizations {
   String withdrawableEarningsNote(String amount) {
     return 'Withdrawable earnings right now: $amount';
   }
+
+  @override
+  String get inventory => 'Inventory';
+
+  @override
+  String get addProduct => 'Add Product';
+
+  @override
+  String get editProduct => 'Edit Product';
+
+  @override
+  String get updateProduct => 'Update Product';
+
+  @override
+  String get products => 'Products';
+
+  @override
+  String get totalStock => 'Total Stock';
+
+  @override
+  String get lowStock => 'Low Stock';
+
+  @override
+  String get outOfStock => 'Out of Stock';
+
+  @override
+  String get noProducts => 'No products yet.';
+
+  @override
+  String get searchProductHint => 'Search by name or barcode...';
+
+  @override
+  String get archiveProductTitle => 'Archive this Product?';
+
+  @override
+  String archiveProductMessage(String name) {
+    return '\"$name\" will be hidden from the list. It can be restored later.';
+  }
+
+  @override
+  String archiveBulkTitle(int count) {
+    return 'Archive $count products?';
+  }
+
+  @override
+  String get archive => 'Archive';
+
+  @override
+  String get archiveProduct => 'Archive Product';
+
+  @override
+  String get no => 'No';
+
+  @override
+  String get selectMultiple => 'Select multiple';
+
+  @override
+  String nSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String nProducts(int count) {
+    return '$count products';
+  }
+
+  @override
+  String get adjustStock => 'Adjust Stock';
+
+  @override
+  String get stockHistory => 'Stock History';
+
+  @override
+  String get stock => 'Stock';
+
+  @override
+  String get currentStockLabel => 'Current Stock';
+
+  @override
+  String get lowStockAlertStat => 'Low Stock Alert';
+
+  @override
+  String get noStockHistory => 'No stock history yet.';
+
+  @override
+  String get productInformation => 'Product Information';
+
+  @override
+  String get productName => 'Product Name *';
+
+  @override
+  String get nameRequired => 'Name is required';
+
+  @override
+  String get skuBarcode => 'SKU / Barcode *';
+
+  @override
+  String get skuRequired => 'SKU/barcode is required';
+
+  @override
+  String get scanBarcode => 'Scan Barcode';
+
+  @override
+  String get descriptionOptional => 'Description (optional)';
+
+  @override
+  String get category => 'Category';
+
+  @override
+  String get unitLabel => 'Unit';
+
+  @override
+  String get pricing => 'Pricing';
+
+  @override
+  String get costPrice => 'Cost Price';
+
+  @override
+  String get sellingPrice => 'Selling Price *';
+
+  @override
+  String get fieldRequired => 'Required';
+
+  @override
+  String get numbersOnly => 'Numbers only';
+
+  @override
+  String get initialStock => 'Initial Stock';
+
+  @override
+  String get useAdjustStockToChange => 'Use Adjust Stock to change';
+
+  @override
+  String get lowStockAlert => 'Low Stock Alert';
+
+  @override
+  String get activeLabel => 'Active';
+
+  @override
+  String get activeHelperText => 'Will appear in the list and POS';
+
+  @override
+  String get productAdded => 'Product added!';
+
+  @override
+  String get productUpdated => 'Product updated!';
+
+  @override
+  String get filters => 'Filters';
+
+  @override
+  String get clearAll => 'Clear all';
+
+  @override
+  String get stockAlerts => 'Stock Alerts';
+
+  @override
+  String get lowStockOnly => 'Low Stock only';
+
+  @override
+  String get outOfStockOnly => 'Out of Stock only';
+
+  @override
+  String get noChange => 'No change.';
+
+  @override
+  String get quickAdjust => 'Quick adjustment';
+
+  @override
+  String get reason => 'Reason';
+
+  @override
+  String get saveStock => 'Save Stock';
+
+  @override
+  String get manualAmount => 'Manual amount (+ or -)';
+
+  @override
+  String get resetBtn => 'Reset';
+
+  @override
+  String categoryAndUnit(String category, String unit) {
+    return 'Category: $category  |  $unit';
+  }
 }

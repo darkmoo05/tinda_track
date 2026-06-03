@@ -543,5 +543,90 @@
     "placeholders": {
       "amount": { "type": "String" }
     }
+  },
+
+  "inventory": "Inventory",
+  "addProduct": "Add Product",
+  "editProduct": "Edit Product",
+  "updateProduct": "Update Product",
+  "products": "Products",
+  "totalStock": "Total Stock",
+  "lowStock": "Low Stock",
+  "outOfStock": "Out of Stock",
+  "noProducts": "No products yet.",
+  "searchProductHint": "Search by name or barcode...",
+  "archiveProductTitle": "Archive this Product?",
+  "archiveProductMessage": "\"{name}\" will be hidden from the list. It can be restored later.",
+  "@archiveProductMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "archiveBulkTitle": "Archive {count} products?",
+  "@archiveBulkTitle": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "archive": "Archive",
+  "archiveProduct": "Archive Product",
+  "no": "No",
+  "selectMultiple": "Select multiple",
+  "nSelected": "{count} selected",
+  "@nSelected": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "nProducts": "{count} products",
+  "@nProducts": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "adjustStock": "Adjust Stock",
+  "stockHistory": "Stock History",
+  "stock": "Stock",
+  "currentStockLabel": "Current Stock",
+  "lowStockAlertStat": "Low Stock Alert",
+  "noStockHistory": "No stock history yet.",
+  "productInformation": "Product Information",
+  "productName": "Product Name *",
+  "nameRequired": "Name is required",
+  "skuBarcode": "SKU / Barcode *",
+  "skuRequired": "SKU/barcode is required",
+  "scanBarcode": "Scan Barcode",
+  "descriptionOptional": "Description (optional)",
+  "category": "Category",
+  "unitLabel": "Unit",
+  "pricing": "Pricing",
+  "costPrice": "Cost Price",
+  "sellingPrice": "Selling Price *",
+  "fieldRequired": "Required",
+  "numbersOnly": "Numbers only",
+  "initialStock": "Initial Stock",
+  "useAdjustStockToChange": "Use Adjust Stock to change",
+  "lowStockAlert": "Low Stock Alert",
+  "activeLabel": "Active",
+  "activeHelperText": "Will appear in the list and POS",
+  "productAdded": "Product added!",
+  "productUpdated": "Product updated!",
+  "filters": "Filters",
+  "clearAll": "Clear all",
+  "stockAlerts": "Stock Alerts",
+  "lowStockOnly": "Low Stock only",
+  "outOfStockOnly": "Out of Stock only",
+  "noChange": "No change.",
+  "quickAdjust": "Quick adjustment",
+  "reason": "Reason",
+  "saveStock": "Save Stock",
+  "manualAmount": "Manual amount (+ or -)",
+  "resetBtn": "Reset",
+  "categoryAndUnit": "Category: {category}  |  {unit}",
+  "@categoryAndUnit": {
+    "placeholders": {
+      "category": { "type": "String" },
+      "unit": { "type": "String" }
+    }
   }
 }
