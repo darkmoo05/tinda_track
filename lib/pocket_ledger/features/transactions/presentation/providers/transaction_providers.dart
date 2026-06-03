@@ -1,17 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../../core/database/daos/pocket_ledger/transactions_dao.dart';
-import '../../../../../core/di/database_providers.dart';
-import '../../data/repositories/transaction_repository_impl.dart';
+import '../../../../../core/database/providers/database_providers.dart';
 import '../../domain/entities/transaction.dart';
 import '../../domain/repositories/transaction_repository.dart';
 
-final transactionsDaoProvider = Provider<TransactionsDao>((ref) {
-  return TransactionsDao(ref.watch(appDatabaseProvider));
-});
-
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
-  return TransactionRepositoryImpl(ref.watch(transactionsDaoProvider));
+  return ref.watch(localTransactionRepositoryProvider);
 });
 
 final transactionsStreamProvider = StreamProvider.autoDispose

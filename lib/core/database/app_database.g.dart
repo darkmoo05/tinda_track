@@ -14520,9 +14520,73 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $UtangRecordsTable utangRecords = $UtangRecordsTable(this);
   late final $SalesTable sales = $SalesTable(this);
   late final $SaleItemsTable saleItems = $SaleItemsTable(this);
+  late final Index chargesIsDirtyIdx = Index(
+    'charges_is_dirty_idx',
+    'CREATE INDEX charges_is_dirty_idx ON charges (is_dirty)',
+  );
+  late final Index chargesTransactionTypeKeyIdx = Index(
+    'charges_transaction_type_key_idx',
+    'CREATE INDEX charges_transaction_type_key_idx ON charges (transaction_type_key)',
+  );
+  late final Index partiesIsDirtyIdx = Index(
+    'parties_is_dirty_idx',
+    'CREATE INDEX parties_is_dirty_idx ON parties (is_dirty)',
+  );
+  late final Index partiesNameIdx = Index(
+    'parties_name_idx',
+    'CREATE INDEX parties_name_idx ON parties (name)',
+  );
+  late final Index transactionTypesIsDirtyIdx = Index(
+    'transaction_types_is_dirty_idx',
+    'CREATE INDEX transaction_types_is_dirty_idx ON transaction_types (is_dirty)',
+  );
+  late final Index movementCategoriesIsDirtyIdx = Index(
+    'movement_categories_is_dirty_idx',
+    'CREATE INDEX movement_categories_is_dirty_idx ON movement_categories (is_dirty)',
+  );
   late final Index ledgerEntriesTransactionIdIdx = Index(
     'ledger_entries_transaction_id_idx',
     'CREATE INDEX ledger_entries_transaction_id_idx ON ledger_entries (transaction_id)',
+  );
+  late final Index ledgerEntriesEntryDateIdx = Index(
+    'ledger_entries_entry_date_idx',
+    'CREATE INDEX ledger_entries_entry_date_idx ON ledger_entries (entry_date)',
+  );
+  late final Index ledgerEntriesIsDirtyIdx = Index(
+    'ledger_entries_is_dirty_idx',
+    'CREATE INDEX ledger_entries_is_dirty_idx ON ledger_entries (is_dirty)',
+  );
+  late final Index ledgerEntriesUpdatedAtMsIdx = Index(
+    'ledger_entries_updated_at_ms_idx',
+    'CREATE INDEX ledger_entries_updated_at_ms_idx ON ledger_entries (updated_at_ms)',
+  );
+  late final Index transactionsEntryDateIdx = Index(
+    'transactions_entry_date_idx',
+    'CREATE INDEX transactions_entry_date_idx ON transactions (entry_date)',
+  );
+  late final Index transactionsIsDirtyIdx = Index(
+    'transactions_is_dirty_idx',
+    'CREATE INDEX transactions_is_dirty_idx ON transactions (is_dirty)',
+  );
+  late final Index transactionsUpdatedAtMsIdx = Index(
+    'transactions_updated_at_ms_idx',
+    'CREATE INDEX transactions_updated_at_ms_idx ON transactions (updated_at_ms)',
+  );
+  late final Index feeTransactionsRelatedTransactionSyncIdIdx = Index(
+    'fee_transactions_related_transaction_sync_id_idx',
+    'CREATE INDEX fee_transactions_related_transaction_sync_id_idx ON fee_transactions (related_transaction_sync_id)',
+  );
+  late final Index feeTransactionsIsDirtyIdx = Index(
+    'fee_transactions_is_dirty_idx',
+    'CREATE INDEX fee_transactions_is_dirty_idx ON fee_transactions (is_dirty)',
+  );
+  late final Index productCategoriesIsDirtyIdx = Index(
+    'product_categories_is_dirty_idx',
+    'CREATE INDEX product_categories_is_dirty_idx ON product_categories (is_dirty)',
+  );
+  late final Index shelfLocationsIsDirtyIdx = Index(
+    'shelf_locations_is_dirty_idx',
+    'CREATE INDEX shelf_locations_is_dirty_idx ON shelf_locations (is_dirty)',
   );
   late final Index productsCategoryIdIdx = Index(
     'products_category_id_idx',
@@ -14532,17 +14596,57 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'products_shelf_location_id_idx',
     'CREATE INDEX products_shelf_location_id_idx ON products (shelf_location_id)',
   );
+  late final Index productsIsDirtyIdx = Index(
+    'products_is_dirty_idx',
+    'CREATE INDEX products_is_dirty_idx ON products (is_dirty)',
+  );
+  late final Index productsNameIdx = Index(
+    'products_name_idx',
+    'CREATE INDEX products_name_idx ON products (name)',
+  );
   late final Index productUnitConversionsProductIdIdx = Index(
     'product_unit_conversions_product_id_idx',
     'CREATE INDEX product_unit_conversions_product_id_idx ON product_unit_conversions (product_id)',
+  );
+  late final Index productUnitConversionsIsDirtyIdx = Index(
+    'product_unit_conversions_is_dirty_idx',
+    'CREATE INDEX product_unit_conversions_is_dirty_idx ON product_unit_conversions (is_dirty)',
   );
   late final Index stockMovementsProductIdIdx = Index(
     'stock_movements_product_id_idx',
     'CREATE INDEX stock_movements_product_id_idx ON stock_movements (product_id)',
   );
+  late final Index stockMovementsIsDirtyIdx = Index(
+    'stock_movements_is_dirty_idx',
+    'CREATE INDEX stock_movements_is_dirty_idx ON stock_movements (is_dirty)',
+  );
+  late final Index stockMovementsCreatedAtMsIdx = Index(
+    'stock_movements_created_at_ms_idx',
+    'CREATE INDEX stock_movements_created_at_ms_idx ON stock_movements (created_at_ms)',
+  );
+  late final Index customersIsDirtyIdx = Index(
+    'customers_is_dirty_idx',
+    'CREATE INDEX customers_is_dirty_idx ON customers (is_dirty)',
+  );
+  late final Index customersNameIdx = Index(
+    'customers_name_idx',
+    'CREATE INDEX customers_name_idx ON customers (name)',
+  );
   late final Index utangRecordsCustomerIdIdx = Index(
     'utang_records_customer_id_idx',
     'CREATE INDEX utang_records_customer_id_idx ON utang_records (customer_id)',
+  );
+  late final Index utangRecordsIsDirtyIdx = Index(
+    'utang_records_is_dirty_idx',
+    'CREATE INDEX utang_records_is_dirty_idx ON utang_records (is_dirty)',
+  );
+  late final Index salesIsDirtyIdx = Index(
+    'sales_is_dirty_idx',
+    'CREATE INDEX sales_is_dirty_idx ON sales (is_dirty)',
+  );
+  late final Index salesCreatedAtMsIdx = Index(
+    'sales_created_at_ms_idx',
+    'CREATE INDEX sales_created_at_ms_idx ON sales (created_at_ms)',
   );
   late final Index saleItemsSaleIdIdx = Index(
     'sale_items_sale_id_idx',
@@ -14551,6 +14655,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final Index saleItemsProductIdIdx = Index(
     'sale_items_product_id_idx',
     'CREATE INDEX sale_items_product_id_idx ON sale_items (product_id)',
+  );
+  late final Index saleItemsIsDirtyIdx = Index(
+    'sale_items_is_dirty_idx',
+    'CREATE INDEX sale_items_is_dirty_idx ON sale_items (is_dirty)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -14575,14 +14683,41 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     utangRecords,
     sales,
     saleItems,
+    chargesIsDirtyIdx,
+    chargesTransactionTypeKeyIdx,
+    partiesIsDirtyIdx,
+    partiesNameIdx,
+    transactionTypesIsDirtyIdx,
+    movementCategoriesIsDirtyIdx,
     ledgerEntriesTransactionIdIdx,
+    ledgerEntriesEntryDateIdx,
+    ledgerEntriesIsDirtyIdx,
+    ledgerEntriesUpdatedAtMsIdx,
+    transactionsEntryDateIdx,
+    transactionsIsDirtyIdx,
+    transactionsUpdatedAtMsIdx,
+    feeTransactionsRelatedTransactionSyncIdIdx,
+    feeTransactionsIsDirtyIdx,
+    productCategoriesIsDirtyIdx,
+    shelfLocationsIsDirtyIdx,
     productsCategoryIdIdx,
     productsShelfLocationIdIdx,
+    productsIsDirtyIdx,
+    productsNameIdx,
     productUnitConversionsProductIdIdx,
+    productUnitConversionsIsDirtyIdx,
     stockMovementsProductIdIdx,
+    stockMovementsIsDirtyIdx,
+    stockMovementsCreatedAtMsIdx,
+    customersIsDirtyIdx,
+    customersNameIdx,
     utangRecordsCustomerIdIdx,
+    utangRecordsIsDirtyIdx,
+    salesIsDirtyIdx,
+    salesCreatedAtMsIdx,
     saleItemsSaleIdIdx,
     saleItemsProductIdIdx,
+    saleItemsIsDirtyIdx,
   ];
 }
 

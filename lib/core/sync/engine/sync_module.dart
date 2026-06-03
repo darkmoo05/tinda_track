@@ -19,7 +19,10 @@ class SyncModule {
 
   /// Pushes every entity's dirty rows. Returns total rows acked.
   Future<int> push(RetryPolicy retry) async {
-    final counts = await Future.wait(entities.map((e) => e.push(retry)));
+    final counts = <int>[];
+    for (final e in entities) {
+      counts.add(await e.push(retry));
+    }
     return counts.fold<int>(0, (a, b) => a + b);
   }
 
@@ -32,11 +35,10 @@ class SyncModule {
     required int sinceMs,
   }) async {
     final since = sinceMs == 0 ? null : sinceMs;
-    final outcomes = await Future.wait(
-      entities.map(
-        (e) => e.pull(retry: retry, deviceId: deviceId, since: since),
-      ),
-    );
+    final outcomes = <EntityPullOutcome>[];
+    for (final e in entities) {
+      outcomes.add(await e.pull(retry: retry, deviceId: deviceId, since: since));
+    }
     var pulled = 0;
     var conflicts = 0;
     var maxServer = 0;

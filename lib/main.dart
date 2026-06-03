@@ -3,12 +3,15 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
 import 'core/database/migrations/legacy_sqflite_importer.dart';
 import 'core/database/providers/database_providers.dart';
+import 'core/database/providers/auth_providers.dart';
+import 'shared/screens/login_screen.dart';
 import 'core/network/api_client.dart';
 import 'core/sync/sync_config.dart';
 import 'core/sync/sync_orchestrator.dart';
@@ -20,8 +23,30 @@ import 'tinda_tracker/app/tinda_tracker_shell.dart';
 
 enum AppMode { pocketLedger, tindaTracker }
 
+/// Applies sticky immersive full-screen mode (hides nav bar + status bar).
+/// Call this from any lifecycle point where you want to (re-)enforce immersive.
+/// Android will auto-restore nav bars on swipe; calling this re-hides them.
+void _enforceImmersiveMode() {
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.immersiveSticky,
+    // immersiveSticky: nav/status bars are hidden by default.
+    // A swipe from the edge reveals them transiently — they fade back
+    // automatically without triggering any layout shift in Flutter.
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Immersive mode: set as early as possible, before first frame ──────────
+  _enforceImmersiveMode();
+
+  // Lock to portrait (remove if you support landscape)
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
   await LocaleProvider.instance.load();
 
   // Build a Riverpod container up-front so we can run one-time DB migrations
@@ -99,7 +124,7 @@ class TindaTrackApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
           ],
           supportedLocales: const [Locale('en'), Locale('fil'), Locale('ceb')],
-          home: const StartupSyncGate(),
+          home: const AuthGate(),
         );
       },
     ); //yes von
@@ -235,6 +260,11 @@ class _AppModeHostState extends ConsumerState<AppModeHost>
 
     if (state == AppLifecycleState.resumed) {
       _exitSyncInFlight = false;
+      // ── Re-enforce immersive mode when app comes back to foreground ───────
+      // Android resets system UI flags when the app is paused. This call
+      // restores sticky immersive mode reliably on every resume event,
+      // including after the user navigates home and returns.
+      _enforceImmersiveMode();
     }
   }
 
@@ -255,6 +285,26 @@ class _AppModeHostState extends ConsumerState<AppModeHost>
       AppMode.tindaTracker => TindaTrackerShell(
         onSwitchApp: () => _switchTo(AppMode.pocketLedger),
       ),
+    };
+  }
+}
+
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    return switch (authState.status) {
+      AuthStatus.initial || AuthStatus.loading => const Scaffold(
+          backgroundColor: Color(0xFF0F0F12),
+          body: Center(
+            child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+          ),
+        ),
+      AuthStatus.authenticated => const StartupSyncGate(),
+      AuthStatus.unauthenticated || AuthStatus.error => const LoginScreen(),
     };
   }
 }

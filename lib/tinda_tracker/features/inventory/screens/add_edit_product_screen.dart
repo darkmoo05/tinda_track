@@ -410,8 +410,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           isActive: _isActive,
           shelfLocation: _shelfLocation,
           // Only update imagePath when the user actually picked a new image.
-          // Passing null leaves the existing image_path/image_url untouched.
-          imagePath: _imageChanged ? _localImageFile?.path : null,
+          // Passing updateSentinel leaves the existing image_path/image_url untouched.
+          imagePath: _imageChanged ? _localImageFile?.path : updateSentinel,
           expirationDate: _expirationDate,
           unitConversions: _buildConversionsForSave(),
         );

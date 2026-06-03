@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart' as raw;
 import 'package:uuid/uuid.dart';
 
@@ -49,14 +50,30 @@ class LegacyImporter {
 
   /// Idempotent entry-point. Call once on app startup.
   Future<bool> runIfNeeded() async {
+    // 1. SharedPreferences double-lock to prevent unnecessary FFI/db logic
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isDone = prefs.getBool(_statusKey) ?? false;
+      if (isDone) {
+        _log('Legacy import already marked done in SharedPreferences.');
+        return false;
+      }
+    } catch (e) {
+      _log('SharedPreferences read failed: $e');
+    }
+
+    // 2. Db-meta fallback lock
     final status = await _appMeta.get(_statusKey);
     if (status == _statusDone || status == _statusNotFound) {
+      _log('Legacy import status in database is "$status". Ensuring SharedPreferences matches.');
+      await _markDoneInPrefs();
       return false;
     }
 
     final legacyPath = await _resolveLegacyPath();
     if (!await File(legacyPath).exists()) {
       await _appMeta.set(_statusKey, _statusNotFound);
+      await _markDoneInPrefs();
       _log('No legacy DB at $legacyPath — nothing to import.');
       return false;
     }
@@ -68,12 +85,17 @@ class LegacyImporter {
       legacyDb = raw.sqlite3.open(uriPath, uri: true);
       
       final rows = await _import(legacyDb);
+      
+      // Perform strict row-count verification before marking done and deleting file
+      await _validateRowCounts(legacyDb);
+      
       legacyDb.dispose();
       legacyDb = null;
 
       await _deleteLegacyFile(legacyPath);
       await _appMeta.set(_statusKey, _statusDone);
-      _log('Imported $rows row(s) from legacy DB and deleted file.');
+      await _markDoneInPrefs();
+      _log('Successfully imported $rows row(s) from legacy DB, validated, and deleted file.');
       return true;
     } catch (e, st) {
       legacyDb?.dispose();
@@ -88,34 +110,97 @@ class LegacyImporter {
     }
   }
 
+  Future<void> _markDoneInPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_statusKey, true);
+    } catch (e) {
+      _log('Failed to write to SharedPreferences: $e');
+    }
+  }
+
   // ── Import driver ──────────────────────────────────────────────────────────
 
+  /// Performs the entire migration atomically inside a single Drift transaction block
   Future<int> _import(raw.Database src) async {
     var total = 0;
-    Future<void> step(Future<int> Function() body) async {
-      await _db.transaction(() async {
-        total += await body();
-      });
-    }
+    await _db.transaction(() async {
+      total += await _importTransactionTypes(src);
+      total += await _importMovementCategories(src);
+      total += await _importParties(src);
+      total += await _importCharges(src);
+      total += await _importLedgerEntries(src);
+      total += await _importFeeTransactions(src);
 
-    await step(() => _importTransactionTypes(src));
-    await step(() => _importMovementCategories(src));
-    await step(() => _importParties(src));
-    await step(() => _importCharges(src));
-    await step(() => _importLedgerEntries(src));
-    await step(() => _importFeeTransactions(src));
-
-    await step(() => _importTtProductCategories(src));
-    await step(() => _importTtShelfLocations(src));
-    await step(() => _importTtProducts(src));
-    await step(() => _importTtProductUnitConversions(src));
-    await step(() => _importTtCustomers(src));
-    await step(() => _importTtUtangRecords(src));
-    await step(() => _importTtSales(src));
-    await step(() => _importTtSaleItems(src));
-    await step(() => _importTtStockMovements(src));
-    
+      total += await _importTtProductCategories(src);
+      total += await _importTtShelfLocations(src);
+      total += await _importTtProducts(src);
+      total += await _importTtProductUnitConversions(src);
+      total += await _importTtCustomers(src);
+      total += await _importTtUtangRecords(src);
+      total += await _importTtSales(src);
+      total += await _importTtSaleItems(src);
+      total += await _importTtStockMovements(src);
+    });
     return total;
+  }
+
+  // ── Row Count Validation Helpers ──────────────────────────────────────────
+
+  int _legacyRowCount(raw.Database src, String tableName) {
+    try {
+      final exists = src.select(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [tableName],
+      );
+      if (exists.isEmpty) return 0;
+      final result = src.select('SELECT COUNT(*) as c FROM $tableName');
+      if (result.isEmpty) return 0;
+      return result.first['c'] as int? ?? 0;
+    } catch (e) {
+      _log('Failed to count rows in legacy table $tableName: $e');
+      return 0;
+    }
+  }
+
+  Future<int> _driftRowCount(Table table) async {
+    final info = table as TableInfo;
+    final countExpr = info.columnsByName.values.first.count();
+    final query = _db.selectOnly(info)..addColumns([countExpr]);
+    final row = await query.getSingle();
+    return row.read(countExpr) ?? 0;
+  }
+
+  Future<void> _validateRowCounts(raw.Database src) async {
+    final validations = [
+      (legacy: 'charges', drift: _db.charges),
+      (legacy: 'parties', drift: _db.parties),
+      (legacy: 'transaction_types', drift: _db.transactionTypes),
+      (legacy: 'owner_movement_categories', drift: _db.movementCategories),
+      (legacy: 'ledger_entries', drift: _db.ledgerEntries),
+      (legacy: 'fee_transactions', drift: _db.feeTransactions),
+      (legacy: 'tt_product_categories', drift: _db.productCategories),
+      (legacy: 'tt_shelf_locations', drift: _db.shelfLocations),
+      (legacy: 'tt_products', drift: _db.products),
+      (legacy: 'tt_product_unit_conversions', drift: _db.productUnitConversions),
+      (legacy: 'tt_customers', drift: _db.customers),
+      (legacy: 'tt_utang_records', drift: _db.utangRecords),
+      (legacy: 'tt_sales', drift: _db.sales),
+      (legacy: 'tt_sale_items', drift: _db.saleItems),
+      (legacy: 'tt_stock_movements', drift: _db.stockMovements),
+    ];
+
+    for (final v in validations) {
+      final legacyCount = _legacyRowCount(src, v.legacy);
+      final driftCount = await _driftRowCount(v.drift);
+      _log('Row count validation for ${v.legacy}: legacy = $legacyCount, drift = $driftCount');
+      if (driftCount != legacyCount) {
+        throw StateError(
+          'Row count mismatch for table ${v.legacy}: legacy database has $legacyCount rows, '
+          'but Drift database has $driftCount rows after import.',
+        );
+      }
+    }
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

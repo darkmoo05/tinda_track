@@ -86,6 +86,7 @@ dependencies:
   # ── Functional helpers used in domain layer (Either/Failure) ─────────────
   # Lightweight; no full fpdart needed.
   equatable: ^2.0.5
+  flutter_secure_storage: ^10.3.1
 
 dev_dependencies:
   flutter_test:

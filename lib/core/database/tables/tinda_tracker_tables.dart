@@ -6,6 +6,7 @@ import 'pocket_ledger_tables.dart' show SyncedRow;
 // PRODUCT CATEGORY — Prisma `ProductCategory` (table `product_categories`).
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('ProductCategoryRow')
+@TableIndex(name: 'product_categories_is_dirty_idx', columns: {#isDirty})
 class ProductCategories extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -32,6 +33,7 @@ class ProductCategories extends Table with SyncedRow {
 // (NOT synced) used by the UI when offline.
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('ShelfLocationRow')
+@TableIndex(name: 'shelf_locations_is_dirty_idx', columns: {#isDirty})
 class ShelfLocations extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -60,6 +62,8 @@ class ShelfLocations extends Table with SyncedRow {
 @DataClassName('ProductRow')
 @TableIndex(name: 'products_category_id_idx', columns: {#categoryId})
 @TableIndex(name: 'products_shelf_location_id_idx', columns: {#shelfLocationId})
+@TableIndex(name: 'products_is_dirty_idx', columns: {#isDirty})
+@TableIndex(name: 'products_name_idx', columns: {#name})
 class Products extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -101,6 +105,7 @@ class Products extends Table with SyncedRow {
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('ProductUnitConversionRow')
 @TableIndex(name: 'product_unit_conversions_product_id_idx', columns: {#productId})
+@TableIndex(name: 'product_unit_conversions_is_dirty_idx', columns: {#isDirty})
 class ProductUnitConversions extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get productId => text().references(Products, #id)();
@@ -125,6 +130,8 @@ class ProductUnitConversions extends Table with SyncedRow {
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('StockMovementRow')
 @TableIndex(name: 'stock_movements_product_id_idx', columns: {#productId})
+@TableIndex(name: 'stock_movements_is_dirty_idx', columns: {#isDirty})
+@TableIndex(name: 'stock_movements_created_at_ms_idx', columns: {#createdAtMs})
 class StockMovements extends Table {
   TextColumn get id => text()();
   TextColumn get productId => text().references(Products, #id)();
@@ -149,6 +156,8 @@ class StockMovements extends Table {
 // CUSTOMER / UTANG — Prisma `Customer` and `UtangRecord`.
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('CustomerRow')
+@TableIndex(name: 'customers_is_dirty_idx', columns: {#isDirty})
+@TableIndex(name: 'customers_name_idx', columns: {#name})
 class Customers extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -165,6 +174,7 @@ class Customers extends Table with SyncedRow {
 
 @DataClassName('UtangRecordRow')
 @TableIndex(name: 'utang_records_customer_id_idx', columns: {#customerId})
+@TableIndex(name: 'utang_records_is_dirty_idx', columns: {#isDirty})
 class UtangRecords extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get customerId => text().references(Customers, #id)();
@@ -182,6 +192,8 @@ class UtangRecords extends Table with SyncedRow {
 // SALE / SALE ITEM — Prisma `Sale` and `SaleItem`.
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('SaleRow')
+@TableIndex(name: 'sales_is_dirty_idx', columns: {#isDirty})
+@TableIndex(name: 'sales_created_at_ms_idx', columns: {#createdAtMs})
 class Sales extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get reference => text()();
@@ -207,6 +219,7 @@ class Sales extends Table with SyncedRow {
 @DataClassName('SaleItemRow')
 @TableIndex(name: 'sale_items_sale_id_idx', columns: {#saleId})
 @TableIndex(name: 'sale_items_product_id_idx', columns: {#productId})
+@TableIndex(name: 'sale_items_is_dirty_idx', columns: {#isDirty})
 class SaleItems extends Table {
   TextColumn get id => text()();
   TextColumn get saleId => text().references(Sales, #id)();

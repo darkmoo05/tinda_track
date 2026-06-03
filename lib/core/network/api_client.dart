@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../sync/engine/sync_errors.dart';
 import 'api_config.dart';
+import 'auth_interceptor.dart';
 
 class ApiClient {
   ApiClient._()
@@ -11,7 +12,9 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 15),
           headers: {'Content-Type': 'application/json'},
         ),
-      );
+      ) {
+    _dio.interceptors.add(AuthInterceptor());
+  }
 
   static final ApiClient instance = ApiClient._();
 

@@ -1,8 +1,3 @@
-import '../entities/transaction.dart';
+import '../../../../../core/database/repositories/transaction_repository.dart' as central;
 
-abstract class TransactionRepository {
-  Stream<List<TxRecord>> watchAll({String? walletProvider});
-  Future<TxRecord?> findById(String id);
-  Future<TxRecord> save(TxRecord tx);
-  Future<void> delete(String id);
-}
+typedef TransactionRepository = central.TransactionRepository;

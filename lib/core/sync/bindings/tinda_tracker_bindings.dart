@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:drift/drift.dart';
 import '../../../tinda_tracker/features/customers/data/mappers/customer_mapper.dart';
 import '../../../tinda_tracker/features/customers/data/mappers/utang_record_mapper.dart';
 import '../../../tinda_tracker/features/inventory/data/mappers/product_category_mapper.dart';
@@ -84,6 +86,24 @@ SyncModule buildTindaTrackerModule(TindaTrackerDao dao) {
               deviceId: deviceId,
               since: since,
             ),
+        postPushHook: (acked) async {
+          for (final row in acked) {
+            if (row.imageLocalPath != null && row.imageUrl == null) {
+              final file = File(row.imageLocalPath!);
+              if (await file.exists()) {
+                final url = await ShelfLocationRemoteRepository.instance.uploadImage(row.id, file);
+                if (url != null) {
+                  await (shelves.update(shelves.shelfLocations)..where((t) => t.id.equals(row.id))).write(
+                    ShelfLocationsCompanion(
+                      imageUrl: Value(url),
+                      isDirty: const Value(false),
+                    ),
+                  );
+                }
+              }
+            }
+          }
+        },
       ),
       EntitySync<ProductRow>(
         entityKey: 'products',
@@ -98,6 +118,24 @@ SyncModule buildTindaTrackerModule(TindaTrackerDao dao) {
         pullRemote: ({required deviceId, since}) => ProductRemoteRepository
             .instance
             .pull(deviceId: deviceId, since: since),
+        postPushHook: (acked) async {
+          for (final row in acked) {
+            if (row.imageLocalPath != null && row.imageUrl == null) {
+              final file = File(row.imageLocalPath!);
+              if (await file.exists()) {
+                final url = await ProductRemoteRepository.instance.uploadImage(row.id, file);
+                if (url != null) {
+                  await (products.update(products.products)..where((t) => t.id.equals(row.id))).write(
+                    ProductsCompanion(
+                      imageUrl: Value(url),
+                      isDirty: const Value(false),
+                    ),
+                  );
+                }
+              }
+            }
+          }
+        },
       ),
       EntitySync<ProductUnitConversionRow>(
         entityKey: 'product_unit_conversions',

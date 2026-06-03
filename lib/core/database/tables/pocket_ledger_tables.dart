@@ -25,6 +25,8 @@ mixin SyncedRow on Table {
 // Mirrors Prisma `Charge` (table `charges`).
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('ChargeRow')
+@TableIndex(name: 'charges_is_dirty_idx', columns: {#isDirty})
+@TableIndex(name: 'charges_transaction_type_key_idx', columns: {#transactionTypeKey})
 class Charges extends Table with SyncedRow {
   TextColumn get id => text()();
   RealColumn get lowerBound => real()();
@@ -45,6 +47,8 @@ class Charges extends Table with SyncedRow {
 // Mirrors Prisma `Party` (table `parties`).
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('PartyRow')
+@TableIndex(name: 'parties_is_dirty_idx', columns: {#isDirty})
+@TableIndex(name: 'parties_name_idx', columns: {#name})
 class Parties extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -66,6 +70,7 @@ class Parties extends Table with SyncedRow {
 // Mirrors Prisma `TransactionType` (table `transaction_types`).
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('TransactionTypeRow')
+@TableIndex(name: 'transaction_types_is_dirty_idx', columns: {#isDirty})
 class TransactionTypes extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -84,6 +89,7 @@ class TransactionTypes extends Table with SyncedRow {
 // Mirrors Prisma `MovementCategory` (table `movement_categories`).
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('MovementCategoryRow')
+@TableIndex(name: 'movement_categories_is_dirty_idx', columns: {#isDirty})
 class MovementCategories extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -102,6 +108,9 @@ class MovementCategories extends Table with SyncedRow {
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('LedgerEntryRow')
 @TableIndex(name: 'ledger_entries_transaction_id_idx', columns: {#transactionId})
+@TableIndex(name: 'ledger_entries_entry_date_idx', columns: {#entryDate})
+@TableIndex(name: 'ledger_entries_is_dirty_idx', columns: {#isDirty})
+@TableIndex(name: 'ledger_entries_updated_at_ms_idx', columns: {#updatedAtMs})
 class LedgerEntries extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get transactionId => text().nullable()();
@@ -138,6 +147,9 @@ class LedgerEntries extends Table with SyncedRow {
 // validated by mappers — this keeps the schema portable across SQLite versions.
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('TransactionRow')
+@TableIndex(name: 'transactions_entry_date_idx', columns: {#entryDate})
+@TableIndex(name: 'transactions_is_dirty_idx', columns: {#isDirty})
+@TableIndex(name: 'transactions_updated_at_ms_idx', columns: {#updatedAtMs})
 class Transactions extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get walletProvider => text()(); // GCASH | MAYA
@@ -178,6 +190,8 @@ class Transactions extends Table with SyncedRow {
 // Mirrors Prisma `FeeTransaction` (table `fee_transactions`).
 // ─────────────────────────────────────────────────────────────────────────────
 @DataClassName('FeeTransactionRow')
+@TableIndex(name: 'fee_transactions_related_transaction_sync_id_idx', columns: {#relatedTransactionSyncId})
+@TableIndex(name: 'fee_transactions_is_dirty_idx', columns: {#isDirty})
 class FeeTransactions extends Table with SyncedRow {
   TextColumn get id => text()();
   TextColumn get relatedTransactionSyncId => text().nullable()();

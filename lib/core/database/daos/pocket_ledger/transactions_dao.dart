@@ -96,4 +96,45 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
     )..addColumns([transactions.updatedAtMs.max()])).getSingle();
     return row.read(transactions.updatedAtMs.max()) ?? 0;
   }
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+
+  Future<List<TransactionRow>> listPaginated({
+    int limit = 20,
+    int offset = 0,
+    String? walletProvider,
+  }) {
+    final q = select(transactions)
+      ..where((t) => t.isDeleted.equals(false));
+    if (walletProvider != null) {
+      q.where((t) => t.walletProvider.equals(walletProvider));
+    }
+    q.orderBy([(t) => OrderingTerm.desc(t.entryDate), (t) => OrderingTerm.desc(t.id)]);
+    q.limit(limit, offset: offset);
+    return q.get();
+  }
+
+  Future<List<TransactionRow>> listCursorPaginated({
+    int limit = 20,
+    String? cursorEntryDate,
+    String? cursorId,
+    String? walletProvider,
+  }) {
+    final q = select(transactions)
+      ..where((t) => t.isDeleted.equals(false));
+    if (walletProvider != null) {
+      q.where((t) => t.walletProvider.equals(walletProvider));
+    }
+    if (cursorEntryDate != null && cursorId != null) {
+      q.where((t) =>
+          t.entryDate.isSmallerThanValue(cursorEntryDate) |
+          (t.entryDate.equals(cursorEntryDate) & t.id.isSmallerThanValue(cursorId)));
+    }
+    q.orderBy([
+      (t) => OrderingTerm.desc(t.entryDate),
+      (t) => OrderingTerm.desc(t.id),
+    ]);
+    q.limit(limit);
+    return q.get();
+  }
 }

@@ -12,6 +12,13 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../repositories/ledger_repository.dart';
+import '../repositories/ledger_repository_impl.dart';
+import '../repositories/transaction_repository.dart';
+import '../repositories/transaction_repository_impl.dart';
+import '../repositories/inventory_repository.dart';
+import '../repositories/inventory_repository_impl.dart';
+
 import '../app_database.dart';
 import '../daos/app_meta_dao.dart';
 import '../daos/pocket_ledger/charges_dao.dart';
@@ -119,3 +126,18 @@ final pocketLedgerDaoProvider = Provider<PocketLedgerDao>(
 final tindaTrackerDaoProvider = Provider<TindaTrackerDao>(
   (ref) => TindaTrackerDao(ref.watch(appDatabaseProvider)),
 );
+
+// ── Central Repositories ─────────────────────────────────────────────────────
+
+final ledgerRepositoryProvider = Provider<LedgerRepository>((ref) {
+  return LedgerRepositoryImpl(ref.watch(pocketLedgerDaoProvider));
+});
+
+final localTransactionRepositoryProvider = Provider<TransactionRepository>((ref) {
+  return TransactionRepositoryImpl(ref.watch(transactionsDaoProvider));
+});
+
+final localInventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
+  return InventoryRepositoryImpl(database: ref.watch(appDatabaseProvider));
+});
+

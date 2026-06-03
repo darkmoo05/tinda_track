@@ -6,4 +6,4 @@
 /// resolving. New code should depend on the canonical path directly.
 library;
 
-export '../database/providers/database_providers.dart' show appDatabaseProvider;
+export '../database/providers/database_providers.dart';
