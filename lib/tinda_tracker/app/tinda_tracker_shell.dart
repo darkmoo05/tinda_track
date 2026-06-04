@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_theme.dart';
 import '../../shared/widgets/app_side_drawer.dart';
+import '../../shared/widgets/unsynced_banner.dart';
 import '../features/customers/screens/customer_list_screen.dart';
 import '../features/dashboard/screens/tt_dashboard_screen.dart';
 import '../features/inventory/screens/inventory_screen.dart';
@@ -9,16 +11,16 @@ import '../features/pos/screens/pos_screen.dart';
 import '../features/reports/screens/reports_screen.dart';
 import 'tinda_tracker_drawer_config.dart';
 
-class TindaTrackerShell extends StatefulWidget {
+class TindaTrackerShell extends ConsumerStatefulWidget {
   const TindaTrackerShell({super.key, this.onSwitchApp});
 
   final VoidCallback? onSwitchApp;
 
   @override
-  State<TindaTrackerShell> createState() => _TindaTrackerShellState();
+  ConsumerState<TindaTrackerShell> createState() => _TindaTrackerShellState();
 }
 
-class _TindaTrackerShellState extends State<TindaTrackerShell> {
+class _TindaTrackerShellState extends ConsumerState<TindaTrackerShell> {
   int _selectedIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -34,17 +36,29 @@ class _TindaTrackerShellState extends State<TindaTrackerShell> {
           onSwitchApp: widget.onSwitchApp,
         ),
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
+      body: Stack(
         children: [
-          TtDashboardScreen(
-            onGoToSell: () => _onNavTap(1),
-            onGoToInventory: () => _onNavTap(2),
+          // Unsynced data warning — only visible when a returning user has
+          // offline changes that weren't pushed before their last logout.
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: UnsyncedBanner(),
           ),
-          const PosScreen(),
-          const InventoryScreen(), // ConsumerStatefulWidget — const ctor is fine
-          const CustomerListScreen(),
-          const ReportsScreen(),
+          IndexedStack(
+            index: _selectedIndex,
+            children: [
+              TtDashboardScreen(
+                onGoToSell: () => _onNavTap(1),
+                onGoToInventory: () => _onNavTap(2),
+              ),
+              const PosScreen(),
+              const InventoryScreen(), // ConsumerStatefulWidget — const ctor is fine
+              const CustomerListScreen(),
+              const ReportsScreen(),
+            ],
+          ),
         ],
       ),
       bottomNavigationBar: _TindaNavBar(

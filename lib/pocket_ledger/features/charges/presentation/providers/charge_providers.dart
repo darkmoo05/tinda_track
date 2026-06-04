@@ -8,7 +8,7 @@ import '../../domain/repositories/charge_repository.dart';
 
 /// DAO and repository providers — singleton-per-container, no rebuilds.
 final chargesDaoProvider = Provider<ChargesDao>((ref) {
-  return ChargesDao(ref.watch(appDatabaseProvider));
+  return ChargesDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final chargeRepositoryProvider = Provider<ChargeRepository>((ref) {

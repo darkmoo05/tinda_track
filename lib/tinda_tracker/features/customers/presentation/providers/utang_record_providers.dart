@@ -7,7 +7,7 @@ import '../../domain/entities/utang_record.dart';
 import '../../domain/repositories/utang_record_repository.dart';
 
 final utangRecordsDaoProvider = Provider<UtangRecordsDao>((ref) {
-  return UtangRecordsDao(ref.watch(appDatabaseProvider));
+  return UtangRecordsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final utangRecordRepositoryProvider = Provider<UtangRecordRepository>((ref) {

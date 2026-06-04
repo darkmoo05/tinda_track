@@ -36,7 +36,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late final DashboardRepository _dashboardRepository = DashboardRepository(
-    database: ref.read(appDatabaseProvider),
+    database: ref.read(currentAppDatabaseProvider),
   );
   _DashboardActivityFilter _activityFilter = _DashboardActivityFilter.all;
   late Future<DashboardSnapshot> _dashboardFuture;

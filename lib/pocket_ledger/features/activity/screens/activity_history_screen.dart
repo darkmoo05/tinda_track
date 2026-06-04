@@ -40,7 +40,7 @@ class ActivityHistoryScreen extends ConsumerStatefulWidget {
 
 class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  AppDatabase get _database => ref.read(appDatabaseProvider);
+  AppDatabase get _database => ref.read(currentAppDatabaseProvider);
   final TextEditingController _searchController = TextEditingController();
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'en_PH',

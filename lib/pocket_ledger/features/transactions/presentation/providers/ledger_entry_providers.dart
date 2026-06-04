@@ -7,7 +7,7 @@ import '../../domain/entities/ledger_entry.dart';
 import '../../domain/repositories/ledger_entry_repository.dart';
 
 final ledgerEntriesDaoProvider = Provider<LedgerEntriesDao>((ref) {
-  return LedgerEntriesDao(ref.watch(appDatabaseProvider));
+  return LedgerEntriesDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final ledgerEntryRepositoryProvider = Provider<LedgerEntryRepository>((ref) {

@@ -16,7 +16,7 @@ import 'sale_model.dart';
 /// app's Drift database. Consumers should obtain the repo via
 /// `ref.read(posRepositoryProvider)` rather than instantiating it directly.
 final posRepositoryProvider = Provider<PosRepository>((ref) {
-  return PosRepository(database: ref.watch(appDatabaseProvider));
+  return PosRepository(database: ref.watch(currentAppDatabaseProvider));
 });
 
 class CheckoutRequest {

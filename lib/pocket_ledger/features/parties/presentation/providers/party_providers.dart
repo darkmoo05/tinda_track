@@ -7,7 +7,7 @@ import '../../domain/entities/party.dart';
 import '../../domain/repositories/party_repository.dart';
 
 final partiesDaoProvider = Provider<PartiesDao>(
-  (ref) => PartiesDao(ref.watch(appDatabaseProvider)),
+  (ref) => PartiesDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 final partyRepositoryProvider = Provider<PartyRepository>(

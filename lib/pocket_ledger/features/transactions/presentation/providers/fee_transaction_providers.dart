@@ -7,7 +7,7 @@ import '../../domain/entities/fee_transaction.dart';
 import '../../domain/repositories/fee_transaction_repository.dart';
 
 final feeTransactionsDaoProvider = Provider<FeeTransactionsDao>((ref) {
-  return FeeTransactionsDao(ref.watch(appDatabaseProvider));
+  return FeeTransactionsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final feeTransactionRepositoryProvider = Provider<FeeTransactionRepository>((

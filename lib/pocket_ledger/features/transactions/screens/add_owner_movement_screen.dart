@@ -35,7 +35,7 @@ class AddOwnerMovementScreen extends ConsumerStatefulWidget {
 
 class _AddOwnerMovementScreenState
     extends ConsumerState<AddOwnerMovementScreen> {
-  AppDatabase get _database => ref.read(appDatabaseProvider);
+  AppDatabase get _database => ref.read(currentAppDatabaseProvider);
   final _amountController = TextEditingController();
   final _referenceController = TextEditingController();
   final _notesController = TextEditingController();

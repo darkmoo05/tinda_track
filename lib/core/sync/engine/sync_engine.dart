@@ -104,10 +104,26 @@ class SyncEngine {
         for (final entity in module.entities) {
           final payload = await entity.preparePush();
           if (payload != null && payload.records.isNotEmpty) {
+            final records = payload.records;
+            for (final record in records) {
+              final recDeviceId = record['deviceId'];
+              if (recDeviceId == null || recDeviceId.toString().trim().isEmpty) {
+                try {
+                  record['deviceId'] = deviceId;
+                } catch (_) {
+                  final mutableRecord = Map<String, dynamic>.from(record);
+                  mutableRecord['deviceId'] = deviceId;
+                  final index = records.indexOf(record);
+                  if (index != -1) {
+                    records[index] = mutableRecord;
+                  }
+                }
+              }
+            }
             final serverKey = _snakeToCamel(payload.entityKey);
-            pushData[serverKey] = payload.records;
+            pushData[serverKey] = records;
             ackCallbacks.add(payload.onAck);
-            pushedCount += payload.records.length;
+            pushedCount += records.length;
           }
         }
         modulePushedCounts[moduleKey] = pushedCount;

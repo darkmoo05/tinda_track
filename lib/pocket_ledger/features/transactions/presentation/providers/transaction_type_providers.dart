@@ -7,7 +7,7 @@ import '../../domain/entities/transaction_type.dart';
 import '../../domain/repositories/transaction_type_repository.dart';
 
 final transactionTypesDaoProvider = Provider<TransactionTypesDao>(
-  (ref) => TransactionTypesDao(ref.watch(appDatabaseProvider)),
+  (ref) => TransactionTypesDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 final transactionTypeRepositoryProvider = Provider<TransactionTypeRepository>(

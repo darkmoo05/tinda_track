@@ -9,7 +9,7 @@ import '../../domain/repositories/product_unit_conversion_repository.dart';
 final productUnitConversionsDaoProvider = Provider<ProductUnitConversionsDao>((
   ref,
 ) {
-  return ProductUnitConversionsDao(ref.watch(appDatabaseProvider));
+  return ProductUnitConversionsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final productUnitConversionRepositoryProvider =

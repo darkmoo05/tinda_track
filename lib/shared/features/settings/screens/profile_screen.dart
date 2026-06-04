@@ -126,8 +126,9 @@ class ProfileScreen extends ConsumerWidget {
       builder: (dialogCtx) => AlertDialog(
         title: const Text('Unsynced Changes'),
         content: Text(
-          'You have $pending offline changes that are not synced to the cloud. '
-          'Logging out now will permanently delete these changes. What would you like to do?',
+          'You have $pending offline changes that are not yet synced to the cloud. '
+          'Your data will be kept safe — you can sync it when you log back in. '
+          'Would you like to sync now before logging out?',
         ),
         actions: [
           TextButton(
@@ -145,7 +146,7 @@ class ProfileScreen extends ConsumerWidget {
                 Navigator.of(context).pop(); // Pop ProfileScreen
               }
             },
-            child: const Text('LOG OUT ANYWAY'),
+            child: const Text('LOG OUT WITHOUT SYNCING'),
           ),
           ElevatedButton(
             onPressed: () async {

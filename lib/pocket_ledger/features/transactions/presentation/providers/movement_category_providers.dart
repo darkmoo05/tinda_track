@@ -7,7 +7,7 @@ import '../../domain/entities/movement_category.dart';
 import '../../domain/repositories/movement_category_repository.dart';
 
 final movementCategoriesDaoProvider = Provider<MovementCategoriesDao>(
-  (ref) => MovementCategoriesDao(ref.watch(appDatabaseProvider)),
+  (ref) => MovementCategoriesDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 final movementCategoryRepositoryProvider = Provider<MovementCategoryRepository>(

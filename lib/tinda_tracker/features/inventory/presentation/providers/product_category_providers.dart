@@ -7,7 +7,7 @@ import '../../domain/entities/product_category.dart';
 import '../../domain/repositories/product_category_repository.dart';
 
 final productCategoriesDaoProvider = Provider<ProductCategoriesDao>((ref) {
-  return ProductCategoriesDao(ref.watch(appDatabaseProvider));
+  return ProductCategoriesDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final productCategoryRepositoryProvider = Provider<ProductCategoryRepository>((

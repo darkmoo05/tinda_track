@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
+import '../database/providers/auth_providers.dart';
+import '../database/providers/database_providers.dart';
 import 'sync_orchestrator.dart';
 
 const String backgroundSyncTaskName = 'com.tindatrack.backgroundSyncTask';
@@ -12,6 +14,14 @@ void callbackDispatcher() {
     if (taskName == backgroundSyncTaskName) {
       final container = ProviderContainer();
       try {
+        // Hydrate the active username from secure storage so the background task
+        // opens the correct user-scoped database file.
+        final authRepo = container.read(authRepositoryProvider);
+        final username = await authRepo.getLastUsername();
+        if (username != null && username.isNotEmpty) {
+          container.read(activeUsernameProvider.notifier).state = username;
+        }
+
         final orchestrator = container.read(syncOrchestratorProvider);
         final results = await orchestrator.syncAll();
         

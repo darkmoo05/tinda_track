@@ -7,7 +7,7 @@ import '../../domain/entities/shelf_location.dart';
 import '../../domain/repositories/shelf_location_repository.dart';
 
 final shelfLocationsDaoProvider = Provider<ShelfLocationsDao>((ref) {
-  return ShelfLocationsDao(ref.watch(appDatabaseProvider));
+  return ShelfLocationsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final shelfLocationRepositoryProvider = Provider<ShelfLocationRepository>((

@@ -56,7 +56,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   final _notesController = TextEditingController();
   final TransactionRepository _transactionRepository =
       TransactionRepository.instance;
-  AppDatabase get _database => ref.read(appDatabaseProvider);
+  AppDatabase get _database => ref.read(currentAppDatabaseProvider);
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
   String? _lastScannedAccountName;

@@ -7,7 +7,7 @@ import '../../domain/entities/customer.dart';
 import '../../domain/repositories/customer_repository.dart';
 
 final customersDaoProvider = Provider<CustomersDao>((ref) {
-  return CustomersDao(ref.watch(appDatabaseProvider));
+  return CustomersDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final customerRepositoryProvider = Provider<CustomerRepository>((ref) {
