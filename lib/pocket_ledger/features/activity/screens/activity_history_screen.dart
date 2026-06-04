@@ -133,8 +133,18 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
           letterSpacing: 1.0,
         ),
         tabs: [
-          Tab(text: context.l10n.transactions),
-          Tab(text: context.l10n.ownerMovements),
+          Tab(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(context.l10n.transactions),
+            ),
+          ),
+          Tab(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(context.l10n.ownerMovements),
+            ),
+          ),
         ],
       ),
     );
@@ -868,32 +878,43 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
                           ),
                           const SizedBox(height: 8),
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  entryTypeLabel,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      entryTypeLabel,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                              const Spacer(),
-                              Text(
-                                amountText,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    amountText,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -1136,12 +1157,15 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            beforeText,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.onSurface,
-              fontWeight: FontWeight.w700,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              beforeText,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -1160,12 +1184,15 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
             ],
           ),
           const SizedBox(height: 2),
-          Text(
-            afterText,
-            style: TextStyle(
-              fontSize: 13,
-              color: trendColor,
-              fontWeight: FontWeight.w700,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              afterText,
+              style: TextStyle(
+                fontSize: 13,
+                color: trendColor,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

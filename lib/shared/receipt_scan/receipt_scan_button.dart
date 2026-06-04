@@ -27,10 +27,13 @@ import 'receipt_scan_service.dart';
 /// )
 /// ```
 class ReceiptScanButton extends StatefulWidget {
-  const ReceiptScanButton({super.key, required this.onDraftReady});
+  const ReceiptScanButton({super.key, required this.onDraftReady, this.child});
 
   /// Called after the user confirms the scanned data.
   final void Function(ReceiptDraft draft) onDraftReady;
+
+  /// Custom child widget to render. If null, standard button is rendered.
+  final Widget? child;
 
   @override
   State<ReceiptScanButton> createState() => _ReceiptScanButtonState();
@@ -269,6 +272,13 @@ class _ReceiptScanButtonState extends State<ReceiptScanButton> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.child != null) {
+      return InkWell(
+        onTap: _isScanning ? null : _onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: widget.child!,
+      );
+    }
     return OutlinedButton.icon(
       onPressed: _isScanning ? null : _onPressed,
       icon: _isScanning

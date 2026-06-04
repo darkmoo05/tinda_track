@@ -67,6 +67,7 @@ class _AddOwnerMovementScreenState
   double _onHandFeeIncomeTotal = 0.0;
   double _onHandFeeWithdrawnTotal = 0.0;
   double _onHandFeeAdjustment = 0.0;
+  bool _showDetails = false;
 
   bool get _isPersonalExpense => _movementType == 'Borrowed Funds';
 
@@ -397,106 +398,114 @@ class _AddOwnerMovementScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildSectionTitle('Movement Details'),
-                const SizedBox(height: 12),
-                _buildDropdownField(
-                  label: context.l10n.movementType,
-                  value: _movementType,
-                  items: _movementTypes,
-                  onChanged: _onMovementTypeChanged,
-                  hintText: context.l10n.chooseMovementType,
-                  isRequired: true,
-                  hasError: _isMovementTypeMissing,
-                ),
+                const SizedBox(height: 14),
+                _buildMovementTypeSelector(),
                 const SizedBox(height: 20),
                 _buildFlowMetaCard(),
                 const SizedBox(height: 20),
-                _buildDropdownField(
-                  label: _accountLabel(context),
-                  value: _destination,
-                  items: _accountOptions,
-                  onChanged: (val) {
-                    if (val == null) {
-                      return;
-                    }
-                    setState(() => _destination = val);
-                    if (_isFeeWithdrawal || _isCashTransferToWallet) {
-                      _refreshAvailableFeeIncome();
-                    }
-                  },
-                ),
+                _buildAccountSelector(context),
                 if (_isFeeWithdrawal) ...[
-                  const SizedBox(height: 8),
-                  if (_isLoadingFeeIncome)
-                    const LinearProgressIndicator(minHeight: 2)
-                  else
-                    Text(
-                      'Available fee earnings in $_destinationLabel: ₱ ${(_availableFeeIncome ?? 0).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
                   const SizedBox(height: 16),
                 ] else if (_isCashTransferToWallet) ...[
-                  const SizedBox(height: 8),
-                  if (_isLoadingFeeIncome)
-                    const LinearProgressIndicator(minHeight: 2)
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Available fee earnings in On-Hand Cash: ₱ ${(_availableFeeIncomeOnHand ?? 0).toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.onSurfaceVariant,
-                                ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: _isLoadingFeeIncome
+                        ? const Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                               ),
                             ),
-                            Switch(
-                              value: _includeFeeIncomeInTransfer,
-                              onChanged: (_availableFeeIncomeOnHand ?? 0) <= 0
-                                  ? null
-                                  : (v) => setState(
-                                      () => _includeFeeIncomeInTransfer = v,
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Transfer Fee Earnings?',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.onSurface,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Avail. Fee On-Hand: ₱ ${(_availableFeeIncomeOnHand ?? 0).toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                            ),
-                          ],
-                        ),
-                        if (_onHandFeeIncomeTotal > 0 ||
-                            _onHandFeeWithdrawnTotal > 0)
-                          Text(
-                            'Earned: ₱ ${_onHandFeeIncomeTotal.toStringAsFixed(2)} • Withdrawn/Moved: ₱ ${_onHandFeeWithdrawnTotal.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.onSurfaceVariant,
-                            ),
+                                  ),
+                                  Switch(
+                                    value: _includeFeeIncomeInTransfer,
+                                    activeThumbColor: AppColors.primary,
+                                    onChanged: (_availableFeeIncomeOnHand ?? 0) <= 0
+                                        ? null
+                                        : (v) => setState(
+                                            () => _includeFeeIncomeInTransfer = v,
+                                          ),
+                                  ),
+                                ],
+                              ),
+                              if (_onHandFeeIncomeTotal > 0 ||
+                                  _onHandFeeWithdrawnTotal > 0) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Earned: ₱ ${_onHandFeeIncomeTotal.toStringAsFixed(2)} • Moved: ₱ ${_onHandFeeWithdrawnTotal.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                              if (_onHandFeeAdjustment > 0) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Historical over-withdrawal adjusted: ₱ ${_onHandFeeAdjustment.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                              if ((_availableFeeIncomeOnHand ?? 0) <= 0 &&
+                                  _onHandFeeIncomeTotal > 0) ...[
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'No On-Hand fee is currently available because previous withdrawals/transfers already consumed it.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.error,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                        if (_onHandFeeAdjustment > 0)
-                          Text(
-                            'Historical over-withdrawal adjusted: ₱ ${_onHandFeeAdjustment.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                        if ((_availableFeeIncomeOnHand ?? 0) <= 0 &&
-                            _onHandFeeIncomeTotal > 0)
-                          const Text(
-                            'No On-Hand fee is currently available because previous withdrawals/transfers already consumed it.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                      ],
-                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ] else ...[
                   const SizedBox(height: 16),
-                ] else
-                  const SizedBox(height: 16),
+                ],
 
                 if (_isPersonalExpense) ...[
                   _buildCategorySection(),
@@ -510,6 +519,7 @@ class _AddOwnerMovementScreenState
                   prefixText: '₱  ',
                   isRequired: true,
                   hasError: _isAmountMissing,
+                  isUnderline: true,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
@@ -522,12 +532,10 @@ class _AddOwnerMovementScreenState
                       final totalToWallet = amount + _cashTransferFeeMoveAmount;
                       final requiredOnHand =
                           amount + _cashTransferFeeMoveAmount;
-                      // Hint when fee switch is ON: remind about cap
                       final showFeeCapHint =
                           _includeFeeIncomeInTransfer &&
                           availableFeeOnHand > 0 &&
                           amount > 0;
-                      // Hint when fee switch is OFF: warn that amount may eat into fee income
                       final showFeeConsumeHint =
                           !_includeFeeIncomeInTransfer &&
                           availableFeeOnHand > 0 &&
@@ -576,46 +584,116 @@ class _AddOwnerMovementScreenState
                   ),
                 ],
                 if (_isFeeWithdrawal) ...[
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: _isLoadingFeeIncome
-                          ? null
-                          : _applyMaxFeeWithdrawalAmount,
-                      icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                      label: Text(
-                        'Use Max (₱ ${(_availableFeeIncome ?? 0).toStringAsFixed(2)})',
-                        style: const TextStyle(fontSize: 12),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: _isLoadingFeeIncome
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                ),
+                              )
+                            : Text(
+                                'Available Fee: ₱ ${(_availableFeeIncome ?? 0).toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
+                              ),
                       ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      GestureDetector(
+                        onTap: _isLoadingFeeIncome ? null : _applyMaxFeeWithdrawalAmount,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'Use Max',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-                _buildTextField(
-                  controller: _referenceController,
-                  label: context.l10n.referenceOptional,
-                  hint: _referenceHint,
+                GestureDetector(
+                  onTap: () => setState(() => _showDetails = !_showDetails),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(
+                              Icons.receipt_long_rounded,
+                              color: AppColors.onSurfaceVariant,
+                              size: 18,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Additional Details (Optional)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Icon(
+                          _showDetails ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: ReceiptScanButton(onDraftReady: _applyReceiptDraft),
-                ),
-                const SizedBox(height: 16),
-
-                _buildTextField(
-                  controller: _notesController,
-                  label: context.l10n.notesOptional,
-                  hint: context.l10n.additionalDetails,
-                  maxLines: 3,
-                ),
+                if (_showDetails) ...[
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    controller: _referenceController,
+                    label: context.l10n.referenceOptional,
+                    hint: _referenceHint,
+                    isBorderless: true,
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ReceiptScanButton(onDraftReady: _applyReceiptDraft),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    controller: _notesController,
+                    label: context.l10n.notesOptional,
+                    hint: context.l10n.additionalDetails,
+                    maxLines: 3,
+                    isBorderless: true,
+                  ),
+                ],
               ],
             ),
           ),
@@ -825,62 +903,87 @@ class _AddOwnerMovementScreenState
                     : Icons.north_east_rounded));
 
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withValues(alpha: 0.15),
+          width: 1,
+        ),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Text(
-                  _movementSummaryLabel(context),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: color,
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _movementSummaryLabel(context),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _movementDescription,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  _movementDescription,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-                if (_referenceController.text.trim().isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    _referenceController.text.trim(),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
-          Text(
-            '$sign ₱ ${displayAmount.toStringAsFixed(2)}',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
+          CustomPaint(
+            size: const Size(double.infinity, 1),
+            painter: DashedLinePainter(color: color.withValues(alpha: 0.25)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Record Summary',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      '$sign ₱ ${displayAmount.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -907,56 +1010,6 @@ class _AddOwnerMovementScreenState
     );
   }
 
-  Widget _buildDropdownField({
-    required String label,
-    required String? value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-    String? hintText,
-    bool isRequired = false,
-    bool hasError = false,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _fieldLabel(
-          label,
-          isRequired: isRequired,
-          showErrorIndicator: hasError,
-        ),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          initialValue: value,
-          isExpanded: true,
-          onChanged: onChanged,
-          decoration: _inputDecoration(
-            hasError: hasError,
-          ).copyWith(hintText: hintText),
-          hint: hintText != null && value == null
-              ? Text(
-                  hintText,
-                  style: const TextStyle(
-                    color: AppColors.outlineVariant,
-                    fontSize: 13,
-                  ),
-                )
-              : null,
-          icon: const Icon(
-            Icons.expand_more_rounded,
-            color: AppColors.onSurfaceVariant,
-          ),
-          items: items
-              .map(
-                (t) => DropdownMenuItem(
-                  value: t,
-                  child: Text(t, maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-              )
-              .toList(),
-        ),
-      ],
-    );
-  }
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -967,6 +1020,8 @@ class _AddOwnerMovementScreenState
     int maxLines = 1,
     bool isRequired = false,
     bool hasError = false,
+    bool isUnderline = false,
+    bool isBorderless = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -984,6 +1039,8 @@ class _AddOwnerMovementScreenState
           onChanged: (_) => setState(() {}),
           decoration: _inputDecoration(
             hasError: hasError,
+            isUnderline: isUnderline,
+            isBorderless: isBorderless,
           ).copyWith(hintText: hint, prefixText: prefixText),
         ),
       ],
@@ -1035,12 +1092,15 @@ class _AddOwnerMovementScreenState
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : const Text(
-                'SAVE RECORD',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
+            : const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'SAVE RECORD',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
                 ),
               ),
       ),
@@ -2430,7 +2490,56 @@ class _AddOwnerMovementScreenState
     );
   }
 
-  InputDecoration _inputDecoration({bool hasError = false}) {
+  InputDecoration _inputDecoration({
+    bool hasError = false,
+    bool isUnderline = false,
+    bool isBorderless = false,
+  }) {
+    if (isBorderless) {
+      return InputDecoration(
+        filled: true,
+        fillColor: AppColors.surfaceContainerLow,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      );
+    }
+
+    if (isUnderline) {
+      return InputDecoration(
+        filled: false,
+        border: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? AppColors.error : AppColors.outlineVariant,
+          ),
+        ),
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? AppColors.error : AppColors.outlineVariant,
+          ),
+        ),
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? AppColors.error : AppColors.primary,
+            width: hasError ? 1.6 : 1.2,
+          ),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      );
+    }
+
     return InputDecoration(
       filled: true,
       fillColor: AppColors.surfaceContainerLow,
@@ -2457,6 +2566,253 @@ class _AddOwnerMovementScreenState
       hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
     );
   }
+
+  Widget _buildMovementTypeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fieldLabel(
+          context.l10n.movementType,
+          isRequired: true,
+          showErrorIndicator: _isMovementTypeMissing,
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 82,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _movementTypes.length,
+            itemBuilder: (context, index) {
+              final type = _movementTypes[index];
+              final isSelected = _movementType == type;
+              
+              final Color activeColor;
+              if (type == 'Borrowed Funds' || type == 'Fee Withdrawal') {
+                activeColor = AppColors.error;
+              } else if (type == 'Cash Transfer (On-hand to Wallet)') {
+                activeColor = AppColors.primary;
+              } else {
+                activeColor = AppColors.secondary;
+              }
+
+              return GestureDetector(
+                onTap: () => _onMovementTypeChanged(type),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 90,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? activeColor.withValues(alpha: 0.08)
+                        : AppColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected ? activeColor : Colors.transparent,
+                      width: 1.8,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? activeColor.withValues(alpha: 0.15)
+                              : AppColors.onSurfaceVariant.withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _typeIcon(type),
+                          color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _typeShortLabel(type),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected
+                                  ? activeColor
+                                  : AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _typeIcon(String type) {
+    return switch (type) {
+      'Top-up' => Icons.arrow_downward_rounded,
+      'Cash Transfer (On-hand to Wallet)' => Icons.swap_horiz_rounded,
+      'Borrowed Funds' => Icons.arrow_upward_rounded,
+      'Fee Withdrawal' => Icons.savings_rounded,
+      'Borrowed Funds Repayment' => Icons.settings_backup_restore_rounded,
+      _ => Icons.help_outline_rounded,
+    };
+  }
+
+  String _typeShortLabel(String type) {
+    return switch (type) {
+      'Top-up' => 'Top-up',
+      'Cash Transfer (On-hand to Wallet)' => 'Cash Transfer',
+      'Borrowed Funds' => 'Borrow Funds',
+      'Fee Withdrawal' => 'Fee Withdraw',
+      'Borrowed Funds Repayment' => 'Repay Borrow',
+      _ => type,
+    };
+  }
+
+  Widget _buildAccountSelector(BuildContext context) {
+    final options = _accountOptions;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fieldLabel(_accountLabel(context)),
+        const SizedBox(height: 10),
+        Row(
+          children: options.map((option) {
+            final isSelected = _destination == option;
+            
+            final Color activeColor;
+            final Color logoBgColor;
+            final Widget logoWidget;
+            final String displayText = option == 'On-hand Cash' ? 'Cash' : option;
+
+            if (option == 'GCash') {
+              activeColor = const Color(0xFF005DAC);
+              logoBgColor = Colors.white;
+              logoWidget = const Text(
+                'G',
+                style: TextStyle(
+                  color: Color(0xFF005DAC),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              );
+            } else if (option == 'Maya Wallet') {
+              activeColor = const Color(0xFF106D20);
+              logoBgColor = Colors.black;
+              logoWidget = const Text(
+                'm',
+                style: TextStyle(
+                  color: Color(0xFF106D20),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              );
+            } else {
+              activeColor = const Color(0xFFD4AF37);
+              logoBgColor = const Color(0xFFFFF8E7);
+              logoWidget = const Icon(
+                Icons.payments_rounded,
+                color: Color(0xFFD4AF37),
+                size: 12,
+              );
+            }
+
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _destination = option);
+                  if (_isFeeWithdrawal || _isCashTransferToWallet) {
+                    _refreshAvailableFeeIncome();
+                  }
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.only(right: 8),
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? activeColor.withValues(alpha: 0.08)
+                        : AppColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected ? activeColor : Colors.transparent,
+                      width: 1.8,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: logoBgColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: activeColor.withValues(alpha: 0.15),
+                            width: 1,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: logoWidget,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            displayText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected
+                                  ? activeColor
+                                  : AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class DashedLinePainter extends CustomPainter {
+  final Color color;
+  DashedLinePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double dashWidth = 5, dashSpace = 3, startX = 0;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.2;
+    while (startX < size.width) {
+      canvas.drawLine(Offset(startX, 0), Offset(startX + dashWidth, 0), paint);
+      startX += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
 class _AddCategoryDialog extends StatefulWidget {

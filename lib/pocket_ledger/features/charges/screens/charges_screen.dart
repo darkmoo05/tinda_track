@@ -110,7 +110,9 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   final _lowerBoundController = TextEditingController();
   final _upperBoundController = TextEditingController();
   final _chargeAmountController = TextEditingController();
-  late String _selectedTypeKey;
+  late String _selectedWalletPrefix;
+  late String _selectedService;
+  String get _selectedTypeKey => '${_selectedWalletPrefix}_$_selectedService';
   bool _helpExpanded = false;
 
   String _serviceLabel(BuildContext context, String serviceKey) {
@@ -156,8 +158,15 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedTypeKey =
+    final initialKey =
         widget.initialTypeKey ?? FixedTransactionType.all.first.key;
+    if (initialKey.startsWith('maya')) {
+      _selectedWalletPrefix = 'maya';
+      _selectedService = initialKey.replaceFirst('maya_', '');
+    } else {
+      _selectedWalletPrefix = 'gcash';
+      _selectedService = initialKey.replaceFirst('gcash_', '');
+    }
   }
 
   @override
@@ -170,9 +179,6 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final walletPrefix = _selectedTypeKey.startsWith('maya') ? 'maya' : 'gcash';
-    final service = _selectedTypeKey.replaceFirst('${walletPrefix}_', '');
-
     return Scaffold(
       key: _scaffoldKey,
       appBar: ArchitectAppBar(
@@ -218,9 +224,9 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
         children: [
           _buildPageHeader(context),
           const SizedBox(height: 24),
-          _buildActiveServiceTag(walletPrefix, service),
-          const SizedBox(height: 24),
-          _buildAddTierCard(context),
+          _buildInlineWalletSelector(),
+          const SizedBox(height: 16),
+          _buildInlineServiceChips(),
           const SizedBox(height: 24),
           _buildHelpSection(),
           const SizedBox(height: 24),
@@ -237,33 +243,82 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
           const SizedBox(height: 100),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddBracketBottomSheet(context),
+        backgroundColor: _selectedWalletPrefix == 'maya'
+            ? AppColors.secondary
+            : AppColors.primary,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: Text(
+          context.l10n.addNewBracket,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildWalletToggle(
-    String prefix,
-    String label,
-    Color color,
-    bool selected,
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        decoration: BoxDecoration(
-          color: selected
-              ? color.withValues(alpha: 0.12)
-              : AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected
-                ? color.withValues(alpha: 0.60)
-                : AppColors.outlineVariant.withValues(alpha: 0.35),
-            width: selected ? 2 : 1,
+  Widget _buildInlineWalletSelector() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildWalletTab(
+              label: context.l10n.gcashWalletOption,
+              prefix: 'gcash',
+              color: AppColors.primary,
+              icon: Icons.account_balance_wallet_outlined,
+            ),
           ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildWalletTab(
+              label: context.l10n.mayaWalletOption,
+              prefix: 'maya',
+              color: AppColors.secondary,
+              icon: Icons.wallet_rounded,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWalletTab({
+    required String label,
+    required String prefix,
+    required Color color,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedWalletPrefix == prefix;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedWalletPrefix = prefix;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : null,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -271,108 +326,70 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
             Icon(
               icon,
               size: 16,
-              color: selected ? color : AppColors.onSurfaceVariant,
+              color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
             ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: selected ? color : AppColors.onSurfaceVariant,
+            const SizedBox(width: 8),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
+                  ),
+                ),
               ),
             ),
-            if (selected) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.check_rounded, size: 16, color: color),
-            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildServiceDropdown({
-    required String currentService,
-    required String walletPrefix,
-    required ValueChanged<String> onChanged,
-  }) {
-    final color = walletPrefix == 'maya'
+  Widget _buildInlineServiceChips() {
+    final activeColor = _selectedWalletPrefix == 'maya'
         ? AppColors.secondary
         : AppColors.primary;
-    final currentLabel = _serviceLabel(context, currentService);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: currentService,
-          isExpanded: true,
-          borderRadius: BorderRadius.circular(16),
-          dropdownColor: AppColors.surfaceContainerLowest,
-          icon: Icon(Icons.keyboard_arrow_down_rounded, color: color),
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
-          ),
-          selectedItemBuilder: (context) {
-            return _serviceOptionKeys
-                .map((serviceKey) {
-                  final isCurrent = serviceKey == currentService;
-                  final label = _serviceLabel(context, serviceKey);
-                  return Row(
-                    children: [
-                      Icon(Icons.tune_rounded, size: 16, color: color),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          isCurrent
-                              ? context.l10n.selectFeeType(currentLabel)
-                              : context.l10n.selectFeeType(label),
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onSurface,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                })
-                .toList(growable: false);
-          },
-          items: _serviceOptionKeys
-              .map((serviceKey) {
-                final isSelected = serviceKey == currentService;
-                return DropdownMenuItem<String>(
-                  value: serviceKey,
-                  child: Row(
-                    children: [
-                      if (isSelected) ...[
-                        Icon(Icons.check_rounded, size: 18, color: color),
-                        const SizedBox(width: 8),
-                      ],
-                      if (!isSelected) const SizedBox(width: 26),
-                      Expanded(child: Text(_serviceLabel(context, serviceKey))),
-                    ],
-                  ),
-                );
-              })
-              .toList(growable: false),
-          onChanged: (value) {
-            if (value == null) {
-              return;
-            }
-            onChanged(value);
-          },
-        ),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _serviceOptionKeys.map((key) {
+          final isSelected = _selectedService == key;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              showCheckmark: false,
+              label: Text(_serviceLabel(context, key)),
+              selected: isSelected,
+              onSelected: (selected) {
+                if (selected) {
+                  setState(() {
+                    _selectedService = key;
+                  });
+                }
+              },
+              selectedColor: activeColor.withValues(alpha: 0.12),
+              backgroundColor: AppColors.surfaceContainerLow,
+              side: BorderSide(
+                color: isSelected
+                    ? activeColor.withValues(alpha: 0.4)
+                    : AppColors.outlineVariant.withValues(alpha: 0.2),
+                width: 1,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              labelStyle: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -384,238 +401,150 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
     );
   }
 
-  Widget _buildActiveServiceTag(String walletPrefix, String service) {
-    final walletLabel = walletPrefix == 'maya'
-        ? context.l10n.mayaWalletOption
-        : context.l10n.gcashWalletOption;
-    final walletIcon = walletPrefix == 'maya'
-        ? Icons.wallet_rounded
-        : Icons.account_balance_wallet_outlined;
-    final walletColor = walletPrefix == 'maya'
-        ? AppColors.secondary
-        : AppColors.primary;
-    final serviceLabel = _serviceLabel(context, service);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.l10n.configureFeesFor,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
-            border: Border.all(color: walletColor.withValues(alpha: 0.3)),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: walletColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(walletIcon, size: 20, color: walletColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      walletLabel,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      serviceLabel,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _showServiceSwitchMenu,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.swap_horiz_rounded,
-                      size: 20,
-                      color: walletColor,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _showServiceSwitchMenu() async {
-    await showDialog<void>(
+  void _showAddBracketBottomSheet(BuildContext context) {
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) {
-        String selectedWalletPrefix = _selectedTypeKey.startsWith('maya')
-            ? 'maya'
-            : 'gcash';
-        String selectedService = _selectedTypeKey.replaceFirst(
-          '${selectedWalletPrefix}_',
-          '',
-        );
-
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
-            void applySelection(String walletPrefix, String service) {
-              setDialogState(() {
-                selectedWalletPrefix = walletPrefix;
-                selectedService = service;
-              });
+          builder: (context, setSheetState) {
+            final activeColor = _selectedWalletPrefix == 'maya'
+                ? AppColors.secondary
+                : AppColors.primary;
 
-              setState(() {
-                _selectedTypeKey = '${walletPrefix}_$service';
-                _lowerBoundController.clear();
-                _upperBoundController.clear();
-                _chargeAmountController.clear();
-              });
-            }
-
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: AlertDialog(
-                  backgroundColor: AppColors.surfaceContainerLowest,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  titlePadding: EdgeInsets.zero,
-                  contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  title: Container(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.06),
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.swap_horiz_outlined,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            context.l10n.switchService,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                left: 24,
+                right: 24,
+                top: 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const SizedBox(height: 16),
-                      Text(
-                        context.l10n.selectWalletAndTransactionType,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
                       Row(
                         children: [
-                          Expanded(
-                            child: _buildWalletToggle(
-                              'gcash',
-                              context.l10n.gcashWalletOption,
-                              AppColors.primary,
-                              selectedWalletPrefix == 'gcash',
-                              Icons.account_balance_wallet_outlined,
-                              () => applySelection('gcash', selectedService),
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: activeColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.add_circle_outline_rounded,
+                              color: activeColor,
+                              size: 18,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildWalletToggle(
-                              'maya',
-                              context.l10n.mayaWalletOption,
-                              AppColors.secondary,
-                              selectedWalletPrefix == 'maya',
-                              Icons.wallet_rounded,
-                              () => applySelection('maya', selectedService),
+                          const SizedBox(width: 12),
+                          Text(
+                            context.l10n.addNewBracket,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.onSurface,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      _buildServiceDropdown(
-                        currentService: selectedService,
-                        walletPrefix: selectedWalletPrefix,
-                        onChanged: (service) =>
-                            applySelection(selectedWalletPrefix, service),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),
-                  actions: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              side: const BorderSide(
-                                color: AppColors.outlineVariant,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: Text(context.l10n.done),
-                          ),
+                  const SizedBox(height: 20),
+                  _buildBottomSheetField(
+                    controller: _lowerBoundController,
+                    label: context.l10n.lowerBound,
+                    hint: context.l10n.lowerBoundHint,
+                    activeColor: activeColor,
+                    onChanged: () => setSheetState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildBottomSheetField(
+                    controller: _upperBoundController,
+                    label: context.l10n.upperBound,
+                    hint: context.l10n.upperBoundHint,
+                    activeColor: activeColor,
+                    onChanged: () => setSheetState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildBottomSheetField(
+                    controller: _chargeAmountController,
+                    label: context.l10n.chargeAmount,
+                    hint: context.l10n.chargeAmountHint,
+                    activeColor: activeColor,
+                    onChanged: () => setSheetState(() {}),
+                    isDecimal: true,
+                  ),
+                  if (_lowerBoundController.text.isNotEmpty &&
+                      _upperBoundController.text.isNotEmpty &&
+                      _chargeAmountController.text.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: activeColor.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: activeColor.withValues(alpha: 0.12),
                         ),
-                      ],
+                      ),
+                      child: Text(
+                        context.l10n.feePreview(
+                          _lowerBoundController.text,
+                          _chargeAmountController.text,
+                        ),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: activeColor,
+                        ),
+                      ),
                     ),
                   ],
-                ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () async {
+                        await _addBracket();
+                        if (_lowerBoundController.text.isEmpty) {
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+                        }
+                      },
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: activeColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        context.l10n.addNewBracket.toUpperCase(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             );
           },
@@ -624,118 +553,56 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
     );
   }
 
-  Widget _buildAddTierCard(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+  Widget _buildBottomSheetField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required Color activeColor,
+    required VoidCallback onChanged,
+    bool isDecimal = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: AppColors.onSurfaceVariant,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.add_circle_outline_rounded,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                context.l10n.addNewBracket,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildInputField(
-            controller: _lowerBoundController,
-            label: context.l10n.lowerBound,
-            hint: context.l10n.lowerBoundHint,
-            keyboardType: TextInputType.number,
-            helpText: context.l10n.startingAmountHelp,
-          ),
-          const SizedBox(height: 12),
-          _buildInputField(
-            controller: _upperBoundController,
-            label: context.l10n.upperBound,
-            hint: context.l10n.upperBoundHint,
-            keyboardType: TextInputType.number,
-            helpText: context.l10n.endingAmountHelp,
-          ),
-          const SizedBox(height: 12),
-          _buildInputField(
-            controller: _chargeAmountController,
-            label: context.l10n.chargeAmount,
-            hint: context.l10n.chargeAmountHint,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            helpText: context.l10n.feeAmountHelp,
-          ),
-          if (_lowerBoundController.text.isNotEmpty &&
-              _upperBoundController.text.isNotEmpty &&
-              _chargeAmountController.text.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  context.l10n.feePreview(
-                    _lowerBoundController.text,
-                    _chargeAmountController.text,
-                  ),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
-                  ),
-                ),
-              ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          keyboardType: isDecimal
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.number,
+          onChanged: (_) {
+            onChanged();
+            setState(() {});
+          },
+          decoration: InputDecoration(
+            prefixText: '₱ ',
+            prefixStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.onSurface,
             ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _addBracket,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: AppColors.primary,
-              ),
-              child: Text(
-                context.l10n.addNewBracket.toUpperCase(),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
+            hintText: hint,
+            hintStyle: const TextStyle(color: AppColors.outlineVariant),
+            filled: true,
+            fillColor: AppColors.surfaceContainerLow,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -860,61 +727,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
     );
   }
 
-  Widget _buildInputField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    TextInputType? keyboardType,
-    String? helpText,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            if (helpText != null)
-              Tooltip(
-                message: helpText,
-                child: Icon(
-                  Icons.info_outline_rounded,
-                  size: 14,
-                  color: AppColors.primary.withValues(alpha: 0.6),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(color: AppColors.outlineVariant),
-            filled: true,
-            fillColor: AppColors.surfaceContainerLow,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildActiveTiersSection(BuildContext context, List<Charge> brackets) {
     return Column(
@@ -1004,141 +817,164 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
       return context.l10n.largeTransactions;
     }
 
+    final activeColor = _selectedWalletPrefix == 'maya'
+        ? AppColors.secondary
+        : AppColors.primary;
+
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: activeColor, width: 4),
+            ),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.tierName(
-                        tierNumber.toString(),
-                        getTierDescription(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.tierName(
+                            tierNumber.toString(),
+                            getTierDescription(),
+                          ),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: activeColor,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.sync_alt_rounded,
+                              size: 14,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '₱${bracket.lowerBound.toInt()} — ₱${bracket.upperBound.toInt()}',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: activeColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      context.l10n.feeAmount(
+                        bracket.chargeAmount.toStringAsFixed(2),
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
+                        fontWeight: FontWeight.bold,
+                        color: activeColor,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '₱${bracket.lowerBound.toInt()} — ₱${bracket.upperBound.toInt()}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  context.l10n.feeAmount(
-                    bracket.chargeAmount.toStringAsFixed(2),
+              const SizedBox(height: 12),
+              Divider(
+                height: 1,
+                color: AppColors.outlineVariant.withValues(alpha: 0.2),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: AppColors.secondary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        context.l10n.tierStatus(context.l10n.active),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                    ],
                   ),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.secondary,
+                  Row(
+                    children: [
+                      IconButton.filledTonal(
+                        onPressed: () => _editBracket(bracket),
+                        style: IconButton.styleFrom(
+                          backgroundColor: activeColor.withValues(alpha: 0.08),
+                          foregroundColor: activeColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          minimumSize: const Size(32, 32),
+                          padding: EdgeInsets.zero,
+                        ),
+                        icon: const Icon(Icons.edit_rounded, size: 14),
+                        tooltip: context.l10n.edit,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        onPressed: () => _deleteBracket(bracket),
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.error.withValues(alpha: 0.08),
+                          foregroundColor: AppColors.error,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          minimumSize: const Size(32, 32),
+                          padding: EdgeInsets.zero,
+                        ),
+                        icon: const Icon(Icons.delete_rounded, size: 14),
+                        tooltip: context.l10n.delete,
+                      ),
+                    ],
                   ),
-                ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Divider(
-            height: 1,
-            color: AppColors.outlineVariant.withValues(alpha: 0.2),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.tierStatus(context.l10n.active),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      context.l10n.availableForTransactions,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton.icon(
-                onPressed: () => _editBracket(bracket),
-                icon: const Icon(Icons.edit_outlined, size: 16),
-                label: Text(context.l10n.edit),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: () => _deleteBracket(bracket),
-                icon: const Icon(Icons.delete_outline, size: 16),
-                label: Text(context.l10n.delete),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1694,11 +1530,16 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
           controller: controller,
           keyboardType: keyboardType,
           decoration: InputDecoration(
+            prefixText: '₱ ',
+            prefixStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.onSurface,
+            ),
             hintText: hint,
             filled: true,
             fillColor: AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
             ),
             contentPadding: const EdgeInsets.symmetric(

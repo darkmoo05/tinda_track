@@ -640,12 +640,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           color: isActive ? AppColors.primary : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+            ),
           ),
         ),
       ),

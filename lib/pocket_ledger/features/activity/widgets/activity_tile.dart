@@ -129,12 +129,15 @@ class ArchitectActivityTile extends StatelessWidget {
                                     color: iconColor.withValues(alpha: 0.08),
                                     borderRadius: BorderRadius.circular(999),
                                   ),
-                                  child: Text(
-                                    supportingText!,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: iconColor,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      supportingText!,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: iconColor,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -146,16 +149,19 @@ class ArchitectActivityTile extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(
-                            amount,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: isTopUp
-                                  ? AppColors.primary
-                                  : (isIncome
-                                        ? AppColors.secondary
-                                        : AppColors.error),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              amount,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: isTopUp
+                                    ? AppColors.primary
+                                    : (isIncome
+                                          ? AppColors.secondary
+                                          : AppColors.error),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 2),

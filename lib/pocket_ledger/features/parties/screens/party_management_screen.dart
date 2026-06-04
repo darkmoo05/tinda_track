@@ -31,7 +31,6 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Timer? _searchDebounce;
   String _searchQuery = '';
-  String _currentFilter = 'all'; // 'all', 'verified'
   String _currentSort = 'newest'; // 'newest', 'oldest', 'name'
 
   @override
@@ -44,6 +43,8 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.of(context).size.width < 380;
     final isVeryCompact = MediaQuery.of(context).size.width < 340;
+    final parties = ref.watch(partiesStreamProvider).value ?? const <Party>[];
+    final hasData = parties.isNotEmpty;
     return Scaffold(
       key: _scaffoldKey,
       appBar: ArchitectAppBar(
@@ -73,7 +74,7 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
                   ref.watch(partiesStreamProvider).value ?? const <Party>[];
               final filteredParties = _applyFiltersAndSearch(parties);
               final animationKey = ValueKey(
-                '${_currentFilter}_${_currentSort}_${_searchQuery.trim()}_${filteredParties.length}',
+                '${_currentSort}_${_searchQuery.trim()}_${filteredParties.length}',
               );
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
@@ -105,23 +106,25 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
           const SizedBox(height: 100),
         ],
       ),
-      floatingActionButton: isVeryCompact
-          ? FloatingActionButton(
-              heroTag: null,
-              onPressed: _onAddParty,
-              tooltip: context.l10n.addNewPerson,
-              child: const Icon(Icons.add_rounded),
-            )
-          : FloatingActionButton.extended(
-              heroTag: null,
-              onPressed: _onAddParty,
-              label: Text(
-                context.l10n.addNewPerson,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              icon: const Icon(Icons.add_rounded),
-            ),
+      floatingActionButton: !hasData
+          ? null
+          : (isVeryCompact
+              ? FloatingActionButton(
+                  heroTag: null,
+                  onPressed: _onAddParty,
+                  tooltip: context.l10n.addNewPerson,
+                  child: const Icon(Icons.add_rounded),
+                )
+              : FloatingActionButton.extended(
+                  heroTag: null,
+                  onPressed: _onAddParty,
+                  label: Text(
+                    context.l10n.addNewPerson,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  icon: const Icon(Icons.add_rounded),
+                )),
     );
   }
 
@@ -138,52 +141,38 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
         final parties =
             ref.watch(partiesStreamProvider).value ?? const <Party>[];
         final total = parties.length;
-        final verified = parties.where((p) => p.isVerified).length;
-        final percent = total == 0
-            ? 0
-            : (verified / total * 100).toStringAsFixed(1);
-        final pending = total - verified;
 
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.outlineVariant),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildStatPill(
-                    context,
-                    Icons.people_alt_rounded,
-                    '$total ${context.l10n.peopleSaved}',
-                    AppColors.surfaceContainerLow,
-                    AppColors.onSurface,
-                  ),
-                  _buildStatPill(
-                    context,
-                    Icons.verified_rounded,
-                    '$verified ${context.l10n.verified} ($percent%)',
-                    AppColors.secondary.withValues(alpha: 0.12),
-                    AppColors.secondary,
-                  ),
-                ],
-              ),
-              if (pending > 0) ...[
-                const SizedBox(height: 8),
-                _buildStatPill(
-                  context,
-                  Icons.schedule_rounded,
-                  '$pending ${context.l10n.waitingToVerify}',
-                  Colors.orange.withValues(alpha: 0.12),
-                  Colors.orange.shade800,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
-              ],
+                child: const Icon(
+                  Icons.people_alt_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '$total ${context.l10n.peopleSaved}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: AppColors.onSurface,
+                ),
+              ),
             ],
           ),
         );
@@ -191,117 +180,38 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
     );
   }
 
-  Widget _buildStatPill(
-    BuildContext context,
-    IconData icon,
-    String label,
-    Color bgColor,
-    Color textColor,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: textColor),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: textColor,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFilterAndSortRow(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildFilterChip(
-                context.l10n.all,
-                _currentFilter == 'all',
-                () => setState(() => _currentFilter = 'all'),
+    return Align(
+      alignment: Alignment.centerRight,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: DropdownButton<String>(
+            value: _currentSort,
+            items: [
+              DropdownMenuItem(
+                value: 'newest',
+                child: Text(context.l10n.newest),
               ),
-              const SizedBox(width: 8),
-              _buildFilterChip(
-                '✓ ${context.l10n.verified}',
-                _currentFilter == 'verified',
-                () => setState(() => _currentFilter = 'verified'),
+              DropdownMenuItem(
+                value: 'oldest',
+                child: Text(context.l10n.oldest),
+              ),
+              DropdownMenuItem(
+                value: 'name',
+                child: Text(context.l10n.name),
               ),
             ],
+            onChanged: (v) => setState(() => _currentSort = v ?? 'newest'),
+            isDense: true,
+            underline: const SizedBox(),
           ),
         ),
-        const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: DropdownButton<String>(
-                value: _currentSort,
-                items: [
-                  DropdownMenuItem(
-                    value: 'newest',
-                    child: Text(context.l10n.newest),
-                  ),
-                  DropdownMenuItem(
-                    value: 'oldest',
-                    child: Text(context.l10n.oldest),
-                  ),
-                  DropdownMenuItem(
-                    value: 'name',
-                    child: Text(context.l10n.name),
-                  ),
-                ],
-                onChanged: (v) => setState(() => _currentSort = v ?? 'newest'),
-                isDense: true,
-                underline: const SizedBox(),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilterChip(String label, bool selected, VoidCallback onTap) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      selectedColor: AppColors.primary.withValues(alpha: 0.14),
-      backgroundColor: AppColors.surfaceContainerLow,
-      side: BorderSide(
-        color: selected
-            ? AppColors.primary.withValues(alpha: 0.35)
-            : AppColors.outlineVariant.withValues(alpha: 0.5),
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      labelStyle: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        color: selected ? AppColors.primary : AppColors.onSurface,
-      ),
-      showCheckmark: false,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 
@@ -348,16 +258,20 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
             ),
             if (!hasActiveSearch) ...[
               const SizedBox(height: 24),
-              ElevatedButton.icon(
+              FilledButton.icon(
                 onPressed: _onAddParty,
                 icon: const Icon(Icons.add_rounded),
                 label: Text(context.l10n.addNewPerson),
-                style: ElevatedButton.styleFrom(
+                style: FilledButton.styleFrom(
                   minimumSize: const Size(0, 44),
                   backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.onPrimary,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
                     vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
@@ -376,9 +290,6 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
               description: party.description,
               accountNumber: party.accountNumber,
               joinDate: party.joinDate,
-              status: party.isVerified
-                  ? PartyStatus.verified
-                  : PartyStatus.pending,
               onEdit: () => _onEditParty(party),
               onDelete: () => _onDeleteParty(party),
             ),
@@ -398,12 +309,7 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
   }
 
   List<Party> _applyFiltersAndSearch(List<Party> parties) {
-    // Apply filter first
     List<Party> filtered = List.from(parties);
-
-    if (_currentFilter == 'verified') {
-      filtered = filtered.where((p) => p.isVerified).toList();
-    }
 
     // Apply search
     final query = _searchQuery.trim().toLowerCase();
