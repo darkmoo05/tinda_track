@@ -6,6 +6,7 @@ import 'connection/native.dart';
 import 'tables/pocket_ledger_tables.dart';
 import 'tables/shared_tables.dart';
 import 'tables/tinda_tracker_tables.dart';
+import 'tables/business_profiles_table.dart';
 
 part 'app_database.g.dart';
 
@@ -41,6 +42,9 @@ part 'app_database.g.dart';
     UtangRecords,
     Sales,
     SaleItems,
+    BusinessProfiles,
+    ProductSerialNumbers,
+    ProductRecipeIngredients,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -50,13 +54,24 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forExecutor(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
       await _seedDefaults();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(businessProfiles);
+      }
+      if (from < 3) {
+        await m.addColumn(products, products.itemType);
+        await m.addColumn(products, products.customAttributesJson);
+        await m.createTable(productSerialNumbers);
+        await m.createTable(productRecipeIngredients);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');

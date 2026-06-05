@@ -53,7 +53,7 @@ class ProductsNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(productRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(product));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../../../../core/database/app_database.dart';
 import 'product_unit_conversion.dart';
 
@@ -31,6 +32,8 @@ class InventoryProduct {
   /// or editing to enable at-a-glance expiry alerts.
   final DateTime? expirationDate;
   final List<ProductUnitConversion> unitConversions;
+  final String itemType;
+  final Map<String, dynamic> customAttributes;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -54,6 +57,8 @@ class InventoryProduct {
     this.shelfLocation = 'Counter',
     this.expirationDate,
     this.unitConversions = const [],
+    this.itemType = 'standard',
+    this.customAttributes = const {},
     required this.createdAt,
     required this.updatedAt,
   }) : baseUnit = (baseUnit ?? unit ?? 'pcs'),
@@ -110,6 +115,8 @@ class InventoryProduct {
       unitConversions: ((json['unitConversions'] as List<dynamic>?) ?? const [])
           .map((e) => ProductUnitConversion.fromJson(e as Map<String, dynamic>))
           .toList(growable: false),
+      itemType: (json['itemType'] as String?) ?? 'standard',
+      customAttributes: (json['customAttributes'] as Map<String, dynamic>?) ?? const {},
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -144,6 +151,10 @@ class InventoryProduct {
           ? DateTime.tryParse(row['expiration_date'] as String)
           : null,
       unitConversions: const [],
+      itemType: (row['item_type'] as String?) ?? 'standard',
+      customAttributes: row['custom_attributes_json'] == null || (row['custom_attributes_json'] as String).isEmpty
+          ? const {}
+          : Map<String, dynamic>.from(json.decode(row['custom_attributes_json'] as String) as Map),
       createdAt: DateTime.parse(row['created_at'] as String),
       updatedAt: DateTime.parse(row['updated_at'] as String),
     );
@@ -176,6 +187,10 @@ class InventoryProduct {
           ? null
           : DateTime.fromMillisecondsSinceEpoch(row.expirationDateMs!),
       unitConversions: conversions,
+      itemType: row.itemType,
+      customAttributes: row.customAttributesJson.isEmpty
+          ? const {}
+          : Map<String, dynamic>.from(json.decode(row.customAttributesJson) as Map),
       createdAt: DateTime.fromMillisecondsSinceEpoch(row.createdAtMs),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs),
     );
@@ -200,6 +215,8 @@ class InventoryProduct {
     'shelfLocation': shelfLocation,
     'expirationDate': expirationDate?.toIso8601String(),
     'unitConversions': unitConversions.map((e) => e.toJson()).toList(),
+    'itemType': itemType,
+    'customAttributes': customAttributes,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
   };
@@ -224,6 +241,8 @@ class InventoryProduct {
     String? shelfLocation,
     Object? expirationDate = _sentinel,
     List<ProductUnitConversion>? unitConversions,
+    String? itemType,
+    Map<String, dynamic>? customAttributes,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -248,6 +267,8 @@ class InventoryProduct {
           ? this.expirationDate
           : expirationDate as DateTime?,
       unitConversions: unitConversions ?? this.unitConversions,
+      itemType: itemType ?? this.itemType,
+      customAttributes: customAttributes ?? this.customAttributes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

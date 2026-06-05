@@ -238,14 +238,12 @@ class _StartupSyncGateState extends ConsumerState<StartupSyncGate> {
     } catch (_) {
       // Startup should continue even if first sync attempt fails.
     } finally {
-      if (!mounted) {
-        return;
-      }
       loading.close();
-      setState(() {
-        _ready = true;
-      });
     }
+    if (!mounted) return;
+    setState(() {
+      _ready = true;
+    });
   }
 
   @override

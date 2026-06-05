@@ -29,7 +29,7 @@ class LedgerEntriesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(ledgerEntryRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(entry));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

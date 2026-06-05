@@ -41,11 +41,21 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> register(String username, String password, {String? role}) async {
+  Future<Map<String, dynamic>> register(
+    String username,
+    String password, {
+    String? role,
+    required String businessName,
+    required String businessType,
+    String? defaultCurrency,
+  }) async {
     try {
       final payload = {
         'username': username,
         'password': password,
+        'businessName': businessName,
+        'businessType': businessType,
+        'defaultCurrency': defaultCurrency ?? 'PHP',
       };
       if (role != null) {
         payload['role'] = role;

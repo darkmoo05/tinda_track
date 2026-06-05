@@ -1,4 +1,4 @@
-﻿# TindaTracker Inventory Feature Overview
+# TindaTracker Inventory Feature Overview
 
 Purpose: This document is the source of truth for the Inventory area across Flutter app, local SQLite, sync layer, and Nest/Prisma backend integration.
 
@@ -8,6 +8,15 @@ Scope: Inventory UI, product lifecycle, stock adjustments, measurement and conve
 ---
 
 ## Change Log
+
+### 2026-06-05
+- Evolved Tinda Tracker into a versatile multi-industry platform (Phase 1):
+  - Created `BusinessProfile` database model (server Postgres & client Drift SQLite) with user isolation.
+  - Updated NestJS registration DTO and AuthService to atomically create the user and their 1-to-1 business profile on signup.
+  - Updated Sync Engine (bindings, DTOs, mappers, remote repositories) to support `businessProfiles` push/pull.
+  - Created `BusinessProfileWizardScreen` onboarding flow for new registrations and legacy user fallbacks.
+  - Updated client sign-up UI (LoginScreen) with business name and type selections.
+  - Updated dashboard screen to dynamically display the store name and respect currency configurations.
 
 ### 2026-05-24
 - Updated inventory architecture to support base-unit stock with multi-unit conversion packages.
@@ -42,6 +51,7 @@ The Inventory area lets store owners:
 - Use list or grid views with filters.
 - Manage categories and shelf locations in-place.
 - Define product measurements using a base unit plus alternative packaged units.
+- Customize modular features (Recipes/BOM, Serial Tracking, Multi-Location, Bundles) using specialized **Business Profiles** based on business type templates (Sari-Sari, Carinderia, Auto Shop, Hardware, Public Market).
 
 Architecture is local-first:
 - Writes are committed to SQLite first.
@@ -65,15 +75,31 @@ Architecture is local-first:
   - optional unit-specific `costPrice` and `sellingPrice`.
 - Conversion entries are persisted both locally and in server schema.
 
+### Business Profile & Configuration Model (Phase 1)
+- User accounts support a strictly 1-to-1 relationship with `BusinessProfile`.
+- A profile defines the business type template (`retail`, `food_service`, `auto_parts`, `hardware`, `marketplace`, `general`).
+- Industry templates map to specific feature configuration flags stored in `preferencesJson`:
+  - `showRecipes`: true for `food_service` (Carinderia). Hides/shows ingredient lists.
+  - `showSerialTracking`: true for `auto_parts` (Auto Shop) and `hardware`.
+  - `showMultiLocation`: true for `auto_parts` and `hardware`.
+  - `showBundles`: true for `auto_parts` and `hardware`.
+- Standardizes default store currency (e.g. PHP or USD) across the dashboard and sales records.
+
 ### Backward compatibility notes
 - Legacy `unit` values are normalized to current canonical values during local DB open.
 - Existing code paths maintain compatibility getters where needed, but base-unit fields are authoritative.
+- Fallback onboarding setup wizard launches automatically if a logged-in user has no local business profile.
 
 ---
 
 ## 3) User Flows and Behavior
 
-### A. Add or Edit Product
+### A. Setup Wizard & Sign-Up Flow
+- New users configure their store name, currency, and business template directly on the registration form.
+- Legacy users logging in with 0 profile records are intercepted by a wizard flow (`BusinessProfileWizardScreen`) before accessing the dashboard.
+- The selected template initializes target settings dynamically (e.g. enabling recipes for carinderias or serial number fields for auto shops).
+
+### B. Add or Edit Product
 - User sets product identity and pricing details.
 - Measurement setup now supports:
   - base unit selection,
@@ -81,17 +107,17 @@ Architecture is local-first:
   - optional package-level pricing overrides.
 - Dropdown logic is hardened to avoid assertion errors from duplicate or missing selected values.
 
-### B. Quick Stock Adjustment
+### C. Quick Stock Adjustment
 - User can choose adjustment unit (base unit or conversion unit).
 - Input quantity is converted to base units before persistence.
 - Movement is saved local-first; sync pushes when server is reachable.
 
-### C. Product Cards and Inventory List
+### D. Product Cards and Inventory List
 - Stock display is conversion-aware and formatted for readable presentation.
 - List and grid cards share aligned status behavior.
-- Peso formatting remains standardized via `\u20B1` rendering paths.
+- Currency symbols are dynamically formatted based on the active business profile.
 
-### D. Manage Categories and Shelf Locations
+### E. Manage Categories and Shelf Locations
 - Search is available for category and shelf management.
 - Category row UI uses mixed concept design:
   - avatar,
@@ -106,7 +132,7 @@ Architecture is local-first:
 ## 4) Sync and Connectivity Behavior
 
 ### Local-first sync model
-- Inventory mutations mark records dirty and return immediately to UI.
+- Inventory and business profile mutations mark records dirty and return immediately to UI.
 - Sync service pushes and pulls in background cycles.
 
 ### Endpoint resiliency
@@ -116,10 +142,11 @@ Architecture is local-first:
 - Health probing treats non-5xx responses as reachable transport layer.
 
 ### Sync payload updates
-- Product sync now includes:
+- Product sync includes:
   - `baseUnit`,
   - `stockInBaseUnit`,
   - `unitConversions` list.
+- Sync engine manages the `businessProfiles` entity registry to synchronize profile configurations between Drift SQLite and Postgres.
 
 ---
 
@@ -128,15 +155,15 @@ Architecture is local-first:
 ### Server (Nest/Prisma)
 - Product fields migrated from legacy unit stock model to base-unit float model.
 - `ProductUnitConversion` relation added.
-- Inventory DTOs and services updated for conversion payloads.
-- POS stock checks and deductions updated to use base-unit quantities.
+- Added `BusinessProfile` model with `businessType`, `businessName`, `defaultCurrency`, and `preferences` (JSONB).
+- Updated auth/register to create user and profile atomically.
 
 ### Local SQLite
-- DB version bumped to v19.
+- DB version bumped to v2.
 - `tt_products` includes `base_unit` and `stock_in_base_unit`.
 - `tt_product_conversions` table added.
-- Migration includes backfill behavior for prior records.
-- DB open hook normalizes legacy unit text variants.
+- `business_profiles` table added with `preferences_json` field.
+- Migration logic manages table creation when upgrading schema.
 
 ---
 
@@ -161,20 +188,22 @@ Architecture is local-first:
 Flutter app:
 - `lib/tinda_tracker/features/inventory/screens/inventory_screen.dart`
 - `lib/tinda_tracker/features/inventory/screens/add_edit_product_screen.dart`
+- `lib/tinda_tracker/features/inventory/screens/business_profile_wizard_screen.dart`
+- `lib/tinda_tracker/features/inventory/domain/entities/business_profile.dart`
+- `lib/core/database/tables/business_profiles_table.dart`
+- `lib/core/database/daos/tinda_tracker/business_profiles_dao.dart`
 - `lib/tinda_tracker/features/inventory/widgets/quick_stock_sheet.dart`
 - `lib/tinda_tracker/features/inventory/widgets/product_cards.dart`
 - `lib/tinda_tracker/features/inventory/widgets/manage_lookup_sheet.dart`
 - `lib/tinda_tracker/features/inventory/data/local_inventory_repository.dart`
-- `lib/tinda_tracker/features/inventory/data/models/inventory_product.dart`
-- `lib/tinda_tracker/features/inventory/data/models/product_unit_conversion.dart`
 - `lib/core/database/app_database.dart`
 - `lib/core/sync/sync_service.dart`
 - `lib/core/sync/sync_config.dart`
 
 Backend integration:
 - `../tinda_track_server_nest/prisma/schema.prisma`
-- `../tinda_track_server_nest/src/tinda_tracker/modules/inventory/*`
-- `../tinda_track_server_nest/src/tinda_tracker/modules/pos/pos.service.ts`
+- `../tinda_track_server_nest/src/modules/auth/auth.service.ts`
+- `../tinda_track_server_nest/src/modules/sync/sync.service.ts`
 
 ---
 
@@ -186,10 +215,11 @@ Backend integration:
 4. Adjust stock using conversion unit; verify base-unit stock math.
 5. Confirm list and grid stock/status views remain consistent.
 6. Validate category Add button remains disabled when name is blank.
-7. Trigger duplicate category and quick-limit errors; verify updated wording.
-8. Force stale API URL then verify sync auto-switches to reachable endpoint.
-9. Run sync cycle and confirm conversion payloads round-trip correctly.
+7. Verify setup wizard screen displays and blocks dashboard access if local profile records are zero.
+8. Complete registration with business name/type and verify profile creation atomically.
+9. Verify dashboard renders store name dynamically and formats currency symbol correctly based on profile defaultCurrency.
+10. Run sync cycle and confirm profile configuration payload round-trips correctly between Drift and Postgres.
 
 ---
 
-Current status: Inventory area is aligned to a base-unit + conversions model with local-first reliability, improved UX guardrails, and post-migration stabilization fixes.
+Current status: Inventory area supports a multi-industry base-unit + conversions model and dynamic business profile setups with local-first reliability and improved UX controls.

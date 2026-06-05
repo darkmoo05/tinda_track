@@ -124,10 +124,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> register(String username, String password, {String role = 'OWNER'}) async {
+  Future<bool> register(
+    String username,
+    String password, {
+    String role = 'OWNER',
+    required String businessName,
+    required String businessType,
+    String defaultCurrency = 'PHP',
+  }) async {
     state = const AuthState.loading();
     try {
-      await _repository.register(username, password, role: role);
+      await _repository.register(
+        username,
+        password,
+        role: role,
+        businessName: businessName,
+        businessType: businessType,
+        defaultCurrency: defaultCurrency,
+      );
       // Automatically login after successful registration
       return await login(username, password);
     } catch (e) {

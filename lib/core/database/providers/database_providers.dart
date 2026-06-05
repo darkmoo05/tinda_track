@@ -45,6 +45,7 @@ import '../daos/tinda_tracker/sales_dao.dart';
 import '../daos/tinda_tracker/shelf_locations_dao.dart';
 import '../daos/tinda_tracker/stock_movements_dao.dart';
 import '../daos/tinda_tracker/utang_records_dao.dart';
+import '../daos/tinda_tracker/business_profiles_dao.dart';
 import '../daos/tinda_tracker_dao.dart';
 
 // ── Database ─────────────────────────────────────────────────────────────────
@@ -139,6 +140,9 @@ final salesDaoProvider = Provider<SalesDao>(
 );
 final saleItemsDaoProvider = Provider<SaleItemsDao>(
   (ref) => SaleItemsDao(ref.watch(currentAppDatabaseProvider)),
+);
+final businessProfilesDaoProvider = Provider<BusinessProfilesDao>(
+  (ref) => BusinessProfilesDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 // ── Grouped facade DAOs (preferred for new code) ─────────────────────────────

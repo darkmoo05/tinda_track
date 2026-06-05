@@ -564,5 +564,123 @@
       "category": { "type": "String" },
       "unit": { "type": "String" }
     }
-  }
+  },
+  "errEmptyCart": "Walang item sa iyong cart.",
+  "errNegativePaidAmount": "Hindi puwedeng negative ang binayad.",
+  "errUnitConversionNotSet": "Hindi naka-set ang unit conversion para sa unit na {unit} sa produktong {product}.",
+  "@errUnitConversionNotSet": {
+    "placeholders": {
+      "unit": { "type": "String" },
+      "product": { "type": "String" }
+    }
+  },
+  "errEmptyRecipeIngredients": "Walang sangkap na naka-set para sa recipe product: {product}.",
+  "@errEmptyRecipeIngredients": {
+    "placeholders": {
+      "product": { "type": "String" }
+    }
+  },
+  "errInsufficientIngredientStock": "Kulang ang stock ng sangkap na {ingredient} para sa recipe product: {product}. Kailangan: {needed}, mayroon lang: {available}.",
+  "@errInsufficientIngredientStock": {
+    "placeholders": {
+      "ingredient": { "type": "String" },
+      "product": { "type": "String" },
+      "needed": { "type": "double" },
+      "available": { "type": "double" }
+    }
+  },
+  "errInsufficientProductStock": "Kulang ang stocks para sa {product}. Kailangan: {needed}, mayroon lang: {available}.",
+  "@errInsufficientProductStock": {
+    "placeholders": {
+      "product": { "type": "String" },
+      "needed": { "type": "double" },
+      "available": { "type": "double" }
+    }
+  },
+  "errSerialSelection": "Kailangang mag-select ng eksaktong {required} serial number(s) para sa {product}. Kasalukuyang pinili: {selected}.",
+  "@errSerialSelection": {
+    "placeholders": {
+      "required": { "type": "int" },
+      "product": { "type": "String" },
+      "selected": { "type": "int" }
+    }
+  },
+  "errSerialNotAvailable": "Ang serial number na \"{serial}\" ay hindi available o nabenta na.",
+  "@errSerialNotAvailable": {
+    "placeholders": {
+      "serial": { "type": "String" }
+    }
+  },
+  "errPaidAmountInsufficient": "Kulang ang binayad ng customer. Binayad: {paid}, Total: {total}.",
+  "@errPaidAmountInsufficient": {
+    "placeholders": {
+      "paid": { "type": "double" },
+      "total": { "type": "double" }
+    }
+  },
+  "noIngredientsAvailable": "Walang available na sangkap",
+  "noIngredientsSet": "Walang sangkap na naka-set. Magdagdag ng mga sangkap sa ibaba.",
+  "noSerialsRegistered": "Walang serial numbers na nakarehistro.",
+  "noBarcodeRead": "Walang barcode na nabasa. Subukan ulit.",
+  "noProductForBarcode": "Walang produktong may barcode na \"{code}\".",
+  "@noProductForBarcode": {
+    "placeholders": {
+      "code": { "type": "String" }
+    }
+  },
+  "addItemsFirst": "Magdagdag muna ng items sa cart bago mag-checkout.",
+  "cannotCheckoutNow": "Hindi makapag-checkout sa ngayon. Pakisuri muli.",
+  "insufficientPayment": "Kulang ang bayad. Pakisuri muli.",
+  "checkoutFailed": "Pakyas ang checkout: {error}",
+  "@checkoutFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "failedToLoadProducts": "Pakyas sa pag-load ng mga produkto. Pakisubukan muli.",
+  "noProductsFound": "Walang nahanap na mga produkto.",
+  "lowStockWarningEditAllowed": "May mga item na mababa ang stock. Maaari mo pa rin silang i-edit bago mag-checkout.",
+  "noSerialsAvailableForProduct": "Walang magagamit na mga serial number para sa produktong ito.",
+  "noMatchingProducts": "Walang nahanap na tugmang produkto.",
+  "scanDuplicateWarning": "Nabasa na ito kanina lang. I-scan ulit pagkatapos ng sandali.",
+  "addedToQueue": "Na-add sa queue: {product}",
+  "@addedToQueue": {
+    "placeholders": {
+      "product": { "type": "String" }
+    }
+  },
+  "saleCompleteWithChange": "Kumpleto ang benta! Sukli: {change}",
+  "@saleCompleteWithChange": {
+    "placeholders": {
+      "change": { "type": "String" }
+    }
+  },
+  "selectSerialsRequired": "Pumili ng eksaktong {required} serial number(s). Naka-select: {selected}",
+  "@selectSerialsRequired": {
+    "placeholders": {
+      "required": { "type": "int" },
+      "selected": { "type": "int" }
+    }
+  },
+  "serialsLimitExceeded": "Limitadong hanggang {required} serials lang.",
+  "@serialsLimitExceeded": {
+    "placeholders": {
+      "required": { "type": "int" }
+    }
+  },
+  "continuousScan": "Continuous scan",
+  "muteScanSound": "I-mute ang tunog ng scan",
+  "enableScanSound": "I-enable ang tunog ng scan",
+  "disableVibration": "I-disable ang vibration",
+  "enableVibration": "I-enable ang vibration",
+  "typeBarcodeManually": "I-type ang barcode nang manu-mano",
+  "serialAlreadyAdded": "Ang serial number na ito ay naidagdag na.",
+  "stockMustMatchSerials": "Ang stock quantity ({stock}) ay kailangang katumbas ng bilang ng available serial numbers ({count}).",
+  "@stockMustMatchSerials": {
+    "placeholders": {
+      "stock": { "type": "int" },
+      "count": { "type": "int" }
+    }
+  },
+  "scanOrTypeSerial": "Mag-scan o mag-type ng serial number upang idagdag."
 }

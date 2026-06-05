@@ -26,7 +26,7 @@ class PartiesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(partyRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(party));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

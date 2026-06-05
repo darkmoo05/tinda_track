@@ -29,7 +29,7 @@ class ShelfLocationsNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(shelfLocationRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(location));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

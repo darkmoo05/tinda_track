@@ -33,7 +33,7 @@ class CustomersNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(customerRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(customer));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

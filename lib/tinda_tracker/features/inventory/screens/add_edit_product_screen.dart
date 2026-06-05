@@ -5,7 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:drift/drift.dart' show Value;
 
+import 'package:uuid/uuid.dart';
+import '../../../../../core/database/app_database.dart';
+import '../../../../../core/database/providers/database_providers.dart';
 import '../../../../../core/app_theme.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/l10n/l10n_extension.dart';
@@ -44,6 +48,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   late final TextEditingController _baseUnitCtrl;
 
   final List<_AltUnitDraft> _altUnits = [];
+  final List<_RecipeIngredientDraft> _recipeIngredients = [];
+  final List<_SerialNumberDraft> _serialNumbers = [];
+  final Map<String, TextEditingController> _customAttrControllers = {};
+  late String _itemType;
+  final _serialInputCtrl = TextEditingController();
 
   late String _category;
   late String _unit;
@@ -105,9 +114,19 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         ),
       );
     }
+    _itemType = p?.itemType ?? 'standard';
+    final initialAttrs = p?.customAttributes ?? const {};
+    for (final entry in initialAttrs.entries) {
+      _customAttrControllers[entry.key] = TextEditingController(text: entry.value?.toString());
+    }
+
     if (p?.imagePath != null) {
       final f = File(p!.imagePath!);
       if (f.existsSync()) _localImageFile = f;
+    }
+
+    if (_isEdit) {
+      _loadProductDetails();
     }
   }
 
@@ -124,6 +143,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     for (final d in _altUnits) {
       d.dispose();
     }
+    for (final d in _recipeIngredients) {
+      d.dispose();
+    }
+    _serialInputCtrl.dispose();
+    _customAttrControllers.forEach((_, ctrl) => ctrl.dispose());
     super.dispose();
   }
 
@@ -382,61 +406,363 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     if (picked != null && mounted) setState(() => _category = picked);
   }
 
+  Future<void> _loadProductDetails() async {
+    final tindaDao = ref.read(tindaTrackerDaoProvider);
+    final recipeIngs = await tindaDao.productRecipeIngredients.listForRecipe(widget.existing!.id);
+    final serials = await tindaDao.productSerialNumbers.listForProduct(widget.existing!.id);
+    
+    // Load ingredient names for display
+    final allProds = await ref.read(allProductsProvider.future);
+    final prodMap = {for (final p in allProds) p.id: p};
+    
+    if (mounted) {
+      setState(() {
+        _recipeIngredients.clear();
+        for (final row in recipeIngs) {
+          final ingProd = prodMap[row.ingredientProductId];
+          _recipeIngredients.add(
+            _RecipeIngredientDraft(
+              id: row.id,
+              ingredientProductId: row.ingredientProductId,
+              ingredientName: ingProd?.name ?? 'Unknown Product',
+              quantityCtrl: TextEditingController(text: row.quantityNeeded.toString()),
+              unit: ingProd?.unit ?? 'pcs',
+            ),
+          );
+        }
+        
+        _serialNumbers.clear();
+        for (final row in serials) {
+          _serialNumbers.add(
+            _SerialNumberDraft(
+              id: row.id,
+              serialNumber: row.serialNumber,
+              status: row.status,
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  Future<void> _addIngredient() async {
+    // Capture all context-dependent string values before any async gap.
+    final noIngredientsMsg = context.l10n.noIngredientsAvailable;
+    final allProds = await ref.read(allProductsProvider.future);
+    // Filter out recipes and the current product to avoid loops
+    final candidates = allProds.where((p) => p.itemType != 'recipe' && p.id != widget.existing?.id).toList();
+    
+    if (candidates.isEmpty) {
+      if (mounted) showTopAlert(context, noIngredientsMsg);
+      return;
+    }
+    if (!mounted) return;
+    
+    final picked = await showModalBottomSheet<InventoryProduct>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceContainerLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.7,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Pumili ng Sangkap',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: candidates.length,
+                    itemBuilder: (_, i) {
+                      final p = candidates[i];
+                      return ListTile(
+                        leading: const Icon(Icons.restaurant_menu_rounded),
+                        title: Text(p.name),
+                        subtitle: Text('Stock: ${p.stockQuantity} ${p.unit}'),
+                        onTap: () => Navigator.pop(ctx, p),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    
+    if (picked != null && mounted) {
+      // Check if already in recipe ingredients
+      if (_recipeIngredients.any((d) => d.ingredientProductId == picked.id)) {
+        showTopAlert(context, '${picked.name} ay nasa listahan na.');
+        return;
+      }
+      setState(() {
+        _recipeIngredients.add(
+          _RecipeIngredientDraft(
+            id: '',
+            ingredientProductId: picked.id,
+            ingredientName: picked.name,
+            quantityCtrl: TextEditingController(text: '1.0'),
+            unit: picked.unit,
+          ),
+        );
+      });
+    }
+  }
+
+  void _addSerialNumber(String code) {
+    final cleanCode = code.trim();
+    if (cleanCode.isEmpty) return;
+    if (_serialNumbers.any((s) => s.serialNumber.toLowerCase() == cleanCode.toLowerCase())) {
+      showTopAlert(context, context.l10n.serialAlreadyAdded);
+      return;
+    }
+    setState(() {
+      _serialNumbers.add(
+        _SerialNumberDraft(
+          id: '',
+          serialNumber: cleanCode,
+          status: 'AVAILABLE',
+        ),
+      );
+      _serialInputCtrl.clear();
+      
+      // Auto-update stock quantity count to match serial numbers count (for new products)
+      if (!_isEdit) {
+        _stockCtrl.text = _serialNumbers.where((s) => s.status == 'AVAILABLE').length.toString();
+      }
+    });
+  }
+
+  Widget _buildCustomAttributesSection(String businessType) {
+    if (businessType == 'auto_parts') {
+      return _SectionCard(
+        title: 'Auto Parts Compatibility & Details',
+        child: Column(
+          children: [
+            _customField(
+              key: 'compatibility',
+              label: 'Compatibility (e.g. Toyota Vios 2018)',
+              icon: Icons.directions_car_rounded,
+            ),
+            const SizedBox(height: 12),
+            _customField(
+              key: 'brand',
+              label: 'Brand (e.g. Denso, Bosch)',
+              icon: Icons.branding_watermark_rounded,
+            ),
+          ],
+        ),
+      );
+    } else if (businessType == 'hardware') {
+      return _SectionCard(
+        title: 'Hardware Dimensions & Specifications',
+        child: Column(
+          children: [
+            _customField(
+              key: 'dimensions',
+              label: 'Dimensions (e.g. 10mm x 50mm)',
+              icon: Icons.square_foot_rounded,
+            ),
+            const SizedBox(height: 12),
+            _customField(
+              key: 'weight',
+              label: 'Weight (e.g. 1.2kg)',
+              icon: Icons.monitor_weight_rounded,
+            ),
+          ],
+        ),
+      );
+    } else if (businessType == 'food_service') {
+      return _SectionCard(
+        title: 'Carinderia Prep Info',
+        child: Column(
+          children: [
+            _customField(
+              key: 'prepTime',
+              label: 'Prep Time (e.g. 15 mins)',
+              icon: Icons.timer_rounded,
+            ),
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _customField({
+    required String key,
+    required String label,
+    required IconData icon,
+  }) {
+    final ctrl = _customAttrControllers.putIfAbsent(key, () => TextEditingController());
+    return _field(
+      controller: ctrl,
+      label: label,
+      icon: icon,
+    );
+  }
+
   // -- Save -----------------------------------------------------------------
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final activeAvailableCount = _serialNumbers.where((s) => s.status == 'AVAILABLE').length;
+    final stockVal = _isEdit 
+        ? (widget.existing!.stockInBaseUnit)
+        : (double.tryParse(_stockCtrl.text) ?? 0.0);
+    
+    if (_serialNumbers.isNotEmpty && stockVal.toInt() != activeAvailableCount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.stockMustMatchSerials(
+              stockVal.toInt(),
+              activeAvailableCount,
+            ),
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
 
     try {
       final repo = ref.read(localInventoryRepositoryProvider);
-      if (_isEdit) {
-        await repo.updateProduct(
-          widget.existing!.id,
-          name: _nameCtrl.text.trim(),
-          sku: _skuCtrl.text.trim(),
-          description: _descCtrl.text.trim(),
-          category: _category,
-          unit: _baseUnitCtrl.text.trim().isEmpty
-              ? _unit
-              : _baseUnitCtrl.text.trim(),
-          baseUnit: _baseUnitCtrl.text.trim().isEmpty
-              ? _unit
-              : _baseUnitCtrl.text.trim(),
-          costPrice: double.tryParse(_costCtrl.text) ?? 0,
-          sellingPrice: double.tryParse(_sellCtrl.text) ?? 0,
-          stockInBaseUnit: double.tryParse(_stockCtrl.text) ?? 0,
-          reorderPoint: int.tryParse(_reorderCtrl.text) ?? 0,
-          isActive: _isActive,
-          shelfLocation: _shelfLocation,
-          // Only update imagePath when the user actually picked a new image.
-          // Passing updateSentinel leaves the existing image_path/image_url untouched.
-          imagePath: _imageChanged ? _localImageFile?.path : updateSentinel,
-          expirationDate: _expirationDate,
-          unitConversions: _buildConversionsForSave(),
-        );
-      } else {
-        await repo.createProduct(
-          name: _nameCtrl.text.trim(),
-          sku: _skuCtrl.text.trim(),
-          description: _descCtrl.text.trim(),
-          category: _category,
-          unit: _baseUnitCtrl.text.trim().isEmpty
-              ? _unit
-              : _baseUnitCtrl.text.trim(),
-          baseUnit: _baseUnitCtrl.text.trim().isEmpty
-              ? _unit
-              : _baseUnitCtrl.text.trim(),
-          costPrice: double.tryParse(_costCtrl.text) ?? 0,
-          sellingPrice: double.tryParse(_sellCtrl.text) ?? 0,
-          stockQuantity: int.tryParse(_stockCtrl.text) ?? 0,
-          stockInBaseUnit: double.tryParse(_stockCtrl.text) ?? 0,
-          reorderPoint: int.tryParse(_reorderCtrl.text) ?? 0,
-          isActive: _isActive,
-          shelfLocation: _shelfLocation,
-          imagePath: _localImageFile?.path,
-          expirationDate: _expirationDate,
-          unitConversions: _buildConversionsForSave(),
+
+      final customAttrs = <String, dynamic>{};
+      _customAttrControllers.forEach((k, v) {
+        if (v.text.trim().isNotEmpty) {
+          customAttrs[k] = v.text.trim();
+        }
+      });
+
+      final savedProduct = _isEdit
+          ? await repo.updateProduct(
+              widget.existing!.id,
+              name: _nameCtrl.text.trim(),
+              sku: _skuCtrl.text.trim(),
+              description: _descCtrl.text.trim(),
+              category: _category,
+              unit: _baseUnitCtrl.text.trim().isEmpty
+                  ? _unit
+                  : _baseUnitCtrl.text.trim(),
+              baseUnit: _baseUnitCtrl.text.trim().isEmpty
+                  ? _unit
+                  : _baseUnitCtrl.text.trim(),
+              costPrice: double.tryParse(_costCtrl.text) ?? 0,
+              sellingPrice: double.tryParse(_sellCtrl.text) ?? 0,
+              stockInBaseUnit: double.tryParse(_stockCtrl.text) ?? 0,
+              reorderPoint: int.tryParse(_reorderCtrl.text) ?? 0,
+              isActive: _isActive,
+              shelfLocation: _shelfLocation,
+              // Only update imagePath when the user actually picked a new image.
+              // Passing updateSentinel leaves the existing image_path/image_url untouched.
+              imagePath: _imageChanged ? _localImageFile?.path : updateSentinel,
+              expirationDate: _expirationDate,
+              unitConversions: _buildConversionsForSave(),
+              itemType: _itemType,
+              customAttributes: customAttrs,
+            )
+          : await repo.createProduct(
+              name: _nameCtrl.text.trim(),
+              sku: _skuCtrl.text.trim(),
+              description: _descCtrl.text.trim(),
+              category: _category,
+              unit: _baseUnitCtrl.text.trim().isEmpty
+                  ? _unit
+                  : _baseUnitCtrl.text.trim(),
+              baseUnit: _baseUnitCtrl.text.trim().isEmpty
+                  ? _unit
+                  : _baseUnitCtrl.text.trim(),
+              costPrice: double.tryParse(_costCtrl.text) ?? 0,
+              sellingPrice: double.tryParse(_sellCtrl.text) ?? 0,
+              stockQuantity: int.tryParse(_stockCtrl.text) ?? 0,
+              stockInBaseUnit: double.tryParse(_stockCtrl.text) ?? 0,
+              reorderPoint: int.tryParse(_reorderCtrl.text) ?? 0,
+              isActive: _isActive,
+              shelfLocation: _shelfLocation,
+              imagePath: _localImageFile?.path,
+              expirationDate: _expirationDate,
+              unitConversions: _buildConversionsForSave(),
+              itemType: _itemType,
+              customAttributes: customAttrs,
+            );
+
+      final productId = savedProduct.id;
+      final tindaDao = ref.read(tindaTrackerDaoProvider);
+      final deviceId = await ref.read(appMetaDaoProvider).getOrCreateDeviceId();
+
+      if (_itemType == 'recipe') {
+        final existingIngs = await tindaDao.productRecipeIngredients.listForRecipe(productId);
+        for (final row in existingIngs) {
+          final stillExists = _recipeIngredients.any((d) => d.id == row.id);
+          if (!stillExists) {
+            await tindaDao.productRecipeIngredients.softDelete(row.id);
+          }
+        }
+        for (final d in _recipeIngredients) {
+          final qty = double.tryParse(d.quantityCtrl.text.trim()) ?? 0.0;
+          if (qty <= 0) continue;
+          final syncId = d.id.isNotEmpty ? d.id : const Uuid().v4();
+          await tindaDao.productRecipeIngredients.upsertLocal(
+            ProductRecipeIngredientsCompanion(
+              id: Value(syncId),
+              syncId: Value(syncId),
+              deviceId: Value(deviceId),
+              recipeProductId: Value(productId),
+              ingredientProductId: Value(d.ingredientProductId),
+              quantityNeeded: Value(qty),
+              isDeleted: const Value(false),
+            ),
+          );
+        }
+      }
+
+      final existingSerials = await tindaDao.productSerialNumbers.listForProduct(productId);
+      for (final row in existingSerials) {
+        final stillExists = _serialNumbers.any((d) => d.id == row.id);
+        if (!stillExists) {
+          await tindaDao.productSerialNumbers.softDelete(row.id);
+        }
+      }
+      for (final d in _serialNumbers) {
+        if (d.serialNumber.trim().isEmpty) continue;
+        final syncId = d.id.isNotEmpty ? d.id : const Uuid().v4();
+        await tindaDao.productSerialNumbers.upsertLocal(
+          ProductSerialNumbersCompanion(
+            id: Value(syncId),
+            syncId: Value(syncId),
+            deviceId: Value(deviceId),
+            productId: Value(productId),
+            serialNumber: Value(d.serialNumber.trim()),
+            status: Value(d.status),
+            isDeleted: const Value(false),
+          ),
         );
       }
 
@@ -605,6 +931,20 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = ref.watch(businessProfileProvider).value;
+    final showRecipes = profile?.showRecipes ?? false;
+    final showSerialTracking = profile?.showSerialTracking ?? false;
+    final businessType = profile?.businessType ?? 'retail';
+
+    final itemTypeItems = showRecipes
+        ? const ['standard', 'recipe', 'ingredient', 'service']
+        : const ['standard', 'service'];
+
+    final normalizedItemTypes = List<String>.from(itemTypeItems);
+    if (!normalizedItemTypes.contains(_itemType)) {
+      normalizedItemTypes.insert(0, _itemType);
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -721,6 +1061,85 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                 ],
               ),
             ),
+
+            // -- Item Type Dropdown ---------------------------------------
+            _SectionCard(
+              title: 'Item Type',
+              child: _dropdown(
+                label: 'Item Type',
+                value: _itemType,
+                items: normalizedItemTypes,
+                onChanged: (v) => setState(() => _itemType = v!),
+                icon: Icons.merge_type_rounded,
+              ),
+            ),
+
+            // -- Recipe ingredients builder -------------------------------
+            if (_itemType == 'recipe')
+              _SectionCard(
+                title: 'Recipe Ingredients (BOM)',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_recipeIngredients.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          AppLocalizations.of(context)!.noIngredientsSet,
+                          style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 13),
+                        ),
+                      )
+                    else
+                      ..._recipeIngredients.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final d = entry.value;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  d.ingredientName,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  controller: d.quantityCtrl,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: InputDecoration(
+                                    labelText: 'Qty',
+                                    suffixText: d.unit,
+                                    isDense: true,
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () {
+                                  setState(() {
+                                    d.dispose();
+                                    _recipeIngredients.removeAt(index);
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _addIngredient,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Ingredient'),
+                    ),
+                  ],
+                ),
+              ),
 
             // -- Category ------------------------------------------------
             _SectionCard(
@@ -925,6 +1344,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                   ),
             ),
 
+            // -- Custom Attributes ----------------------------------------
+            _buildCustomAttributesSection(businessType),
+
             // -- Pricing -------------------------------------------------
             _SectionCard(
               title: context.l10n.pricing,
@@ -1007,6 +1429,135 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                 ],
               ),
             ),
+
+            // -- Serial Numbers -------------------------------------------
+            if (showSerialTracking || _serialNumbers.isNotEmpty)
+              _SectionCard(
+                title: 'Serial Numbers',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_serialNumbers.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          AppLocalizations.of(context)!.noSerialsRegistered,
+                          style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 13),
+                        ),
+                      )
+                    else
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.outlineVariant),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: _serialNumbers.length,
+                          itemBuilder: (context, index) {
+                            final s = _serialNumbers[index];
+                            final isAvailable = s.status == 'AVAILABLE';
+                            return ListTile(
+                              dense: true,
+                              title: Text(
+                                s.serialNumber,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  decoration: isAvailable ? null : TextDecoration.lineThrough,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isAvailable
+                                          ? Colors.green.withValues(alpha: 0.15)
+                                          : Colors.grey.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      s.status,
+                                      style: TextStyle(
+                                        color: isAvailable ? Colors.green : Colors.grey,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  if (isAvailable)
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                      onPressed: () {
+                                        setState(() {
+                                          _serialNumbers.removeAt(index);
+                                          if (!_isEdit) {
+                                            _stockCtrl.text = _serialNumbers.where((sn) => sn.status == 'AVAILABLE').length.toString();
+                                          }
+                                        });
+                                      },
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _serialInputCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Add Serial Number',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            onFieldSubmitted: _addSerialNumber,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.qr_code_scanner_rounded),
+                          onPressed: () async {
+                            final scanned = await Navigator.push<String>(
+                              context,
+                              MaterialPageRoute(builder: (_) => const _BarcodeScannerScreen()),
+                            );
+                            if (scanned != null) {
+                              _addSerialNumber(scanned);
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.add),
+                          onPressed: () => _addSerialNumber(_serialInputCtrl.text),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      context.l10n.scanOrTypeSerial,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             // -- More details (collapsible: image, expiration, status) ---
             // Groups optional/rarely-edited fields behind a single tap so
@@ -1912,4 +2463,36 @@ class _ImageReviewScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _RecipeIngredientDraft {
+  final String id;
+  final String ingredientProductId;
+  final String ingredientName;
+  final TextEditingController quantityCtrl;
+  final String unit;
+
+  _RecipeIngredientDraft({
+    required this.id,
+    required this.ingredientProductId,
+    required this.ingredientName,
+    required this.quantityCtrl,
+    required this.unit,
+  });
+
+  void dispose() {
+    quantityCtrl.dispose();
+  }
+}
+
+class _SerialNumberDraft {
+  final String id;
+  final String serialNumber;
+  final String status;
+
+  _SerialNumberDraft({
+    required this.id,
+    required this.serialNumber,
+    required this.status,
+  });
 }

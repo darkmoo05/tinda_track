@@ -16,6 +16,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _businessNameController = TextEditingController();
+  String _businessType = 'retail';
 
   bool _isSignUp = false;
   String? _localError;
@@ -24,6 +26,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _businessNameController.dispose();
     super.dispose();
   }
 
@@ -41,7 +44,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     bool success;
 
     if (_isSignUp) {
-      success = await notifier.register(username, password);
+      success = await notifier.register(
+        username,
+        password,
+        businessName: _businessNameController.text.trim(),
+        businessType: _businessType,
+      );
     } else {
       success = await notifier.login(username, password);
     }
@@ -337,6 +345,128 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     return null;
                                   },
                                 ),
+                                if (_isSignUp) ...[
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    'BUSINESS NAME',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white.withValues(alpha: 0.4),
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _businessNameController,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: InputDecoration(
+                                      hintText: 'Enter your business name',
+                                      hintStyle: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.25),
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.storefront_outlined,
+                                        color: Colors.white.withValues(alpha: 0.4),
+                                        size: 20,
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white.withValues(alpha: 0.02),
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 16,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withValues(alpha: 0.08),
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withValues(alpha: 0.08),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF00E5FF),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                    validator: (v) {
+                                      if (_isSignUp && (v == null || v.trim().length < 2)) {
+                                        return 'Business name must be at least 2 characters';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    'BUSINESS TYPE',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white.withValues(alpha: 0.4),
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    value: _businessType,
+                                    dropdownColor: const Color(0xFF1E1E24),
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: InputDecoration(
+                                      prefixIcon: Icon(
+                                        Icons.business_center_outlined,
+                                        color: Colors.white.withValues(alpha: 0.4),
+                                        size: 20,
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white.withValues(alpha: 0.02),
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 16,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withValues(alpha: 0.08),
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withValues(alpha: 0.08),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF00E5FF),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(value: 'retail', child: Text('Sari-Sari / Retail')),
+                                      DropdownMenuItem(value: 'food_service', child: Text('Carinderia / Food Service')),
+                                      DropdownMenuItem(value: 'auto_parts', child: Text('Auto Shop')),
+                                      DropdownMenuItem(value: 'hardware', child: Text('Hardware')),
+                                      DropdownMenuItem(value: 'marketplace', child: Text('Public Market')),
+                                      DropdownMenuItem(value: 'general', child: Text('General / Other')),
+                                    ],
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setState(() {
+                                          _businessType = val;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ],
                                 const SizedBox(height: 24),
 
                                 // Error display

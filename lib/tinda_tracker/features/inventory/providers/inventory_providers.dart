@@ -1,10 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/database/providers/database_providers.dart';
 import '../data/local_inventory_repository.dart';
+import '../data/mappers/business_profile_mapper.dart';
 import '../data/models/custom_category.dart';
 import '../data/models/custom_shelf_location.dart';
 import '../data/models/inventory_product.dart';
 import '../data/models/stock_movement.dart';
+import '../domain/entities/business_profile.dart';
+
+final businessProfileProvider = StreamProvider.autoDispose<BusinessProfile?>((ref) {
+  final dao = ref.watch(tindaTrackerDaoProvider).businessProfiles;
+  return dao.watchActiveProfile().map((row) => row?.toDomain());
+});
 
 // Refresh counter — increment to re-fetch products from API
 final inventoryRefreshProvider = StateProvider<int>((ref) => 0);

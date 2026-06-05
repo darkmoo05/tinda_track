@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
@@ -55,7 +56,10 @@ class InventoryRepositoryImpl implements InventoryRepository {
     if (search != null && search.trim().isNotEmpty) {
       final pattern = '%${search.trim().toLowerCase()}%';
       query.where(
-        (t) => t.name.lower().like(pattern) | t.sku.lower().like(pattern),
+        (t) =>
+            t.name.lower().like(pattern) |
+            t.sku.lower().like(pattern) |
+            t.customAttributesJson.lower().like(pattern),
       );
     }
     query.orderBy([(t) => OrderingTerm.desc(t.createdAtMs)]);
@@ -100,6 +104,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
     String? imagePath,
     DateTime? expirationDate,
     List<ProductUnitConversion> unitConversions = const [],
+    String itemType = 'standard',
+    Map<String, dynamic> customAttributes = const {},
   }) async {
     final existing = await _productsDao.findBySku(sku);
     if (existing != null) {
@@ -129,6 +135,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
           imageLocalPath: Value(imagePath),
           shelfLocation: Value(shelfLocation),
           expirationDateMs: Value(expirationDate?.millisecondsSinceEpoch),
+          itemType: Value(itemType),
+          customAttributesJson: Value(json.encode(customAttributes)),
           createdAtMs: 0,
           updatedAtMs: 0,
         ),
@@ -158,6 +166,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
     Object? imagePath = updateSentinel,
     Object? expirationDate = updateSentinel,
     Object? unitConversions = updateSentinel,
+    Object? itemType = updateSentinel,
+    Object? customAttributes = updateSentinel,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
 
@@ -190,6 +200,10 @@ class InventoryRepositoryImpl implements InventoryRepository {
       expirationDateMs: identical(expirationDate, updateSentinel)
           ? const Value<int?>.absent()
           : Value<int?>((expirationDate as DateTime?)?.millisecondsSinceEpoch),
+      itemType: v<String>(itemType),
+      customAttributesJson: identical(customAttributes, updateSentinel)
+          ? const Value<String>.absent()
+          : Value(json.encode(customAttributes as Map<String, dynamic>)),
       isDirty: const Value(true),
       updatedAtMs: Value(now),
     );

@@ -34,7 +34,7 @@ class ProductUnitConversionsNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(productUnitConversionRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(conversion));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

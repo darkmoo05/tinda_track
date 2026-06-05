@@ -28,7 +28,7 @@ class TransactionTypesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(transactionTypeRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(type));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

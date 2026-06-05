@@ -6,6 +6,8 @@ import '../../shared/widgets/app_side_drawer.dart';
 import '../../shared/widgets/unsynced_banner.dart';
 import '../features/customers/screens/customer_list_screen.dart';
 import '../features/dashboard/screens/tt_dashboard_screen.dart';
+import '../features/inventory/providers/inventory_providers.dart';
+import '../features/inventory/screens/business_profile_wizard_screen.dart';
 import '../features/inventory/screens/inventory_screen.dart';
 import '../features/pos/screens/pos_screen.dart';
 import '../features/reports/screens/reports_screen.dart';
@@ -28,43 +30,68 @@ class _TindaTrackerShellState extends ConsumerState<TindaTrackerShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: AppSideDrawer(
-        config: buildTindaTrackerDrawerConfig(
-          context,
-          onSwitchApp: widget.onSwitchApp,
+    final profileAsync = ref.watch(businessProfileProvider);
+
+    return profileAsync.when(
+      loading: () => const Scaffold(
+        backgroundColor: Color(0xFF0F0F12),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
         ),
       ),
-      body: Stack(
-        children: [
-          // Unsynced data warning — only visible when a returning user has
-          // offline changes that weren't pushed before their last logout.
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: UnsyncedBanner(),
+      error: (e, _) => Scaffold(
+        backgroundColor: const Color(0xFF0F0F12),
+        body: Center(
+          child: Text(
+            'Error loading profile: $e',
+            style: const TextStyle(color: Colors.white),
           ),
-          IndexedStack(
-            index: _selectedIndex,
+        ),
+      ),
+      data: (profile) {
+        if (profile == null) {
+          return const BusinessProfileWizardScreen();
+        }
+
+        return Scaffold(
+          key: _scaffoldKey,
+          drawer: AppSideDrawer(
+            config: buildTindaTrackerDrawerConfig(
+              context,
+              onSwitchApp: widget.onSwitchApp,
+            ),
+          ),
+          body: Stack(
             children: [
-              TtDashboardScreen(
-                onGoToSell: () => _onNavTap(1),
-                onGoToInventory: () => _onNavTap(2),
+              // Unsynced data warning — only visible when a returning user has
+              // offline changes that weren't pushed before their last logout.
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: UnsyncedBanner(),
               ),
-              const PosScreen(),
-              const InventoryScreen(), // ConsumerStatefulWidget — const ctor is fine
-              const CustomerListScreen(),
-              const ReportsScreen(),
+              IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  TtDashboardScreen(
+                    onGoToSell: () => _onNavTap(1),
+                    onGoToInventory: () => _onNavTap(2),
+                  ),
+                  const PosScreen(),
+                  const InventoryScreen(), // ConsumerStatefulWidget — const ctor is fine
+                  const CustomerListScreen(),
+                  const ReportsScreen(),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
-      bottomNavigationBar: _TindaNavBar(
-        selectedIndex: _selectedIndex,
-        onTap: _onNavTap,
-      ),
+          bottomNavigationBar: _TindaNavBar(
+            selectedIndex: _selectedIndex,
+            onTap: _onNavTap,
+          ),
+        );
+      },
     );
   }
 }

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1072,7 +1072,7 @@ class _ContextualEmptyState extends StatelessWidget {
     final String subtitle;
     if (hasSearch) {
       icon = Icons.search_off_rounded;
-      title = 'Walang nahanap';
+      title = context.l10n.noMatchingProducts;
       subtitle =
           'No products match "${filter.search}". Try a different keyword.';
     } else if (hasFilters) {

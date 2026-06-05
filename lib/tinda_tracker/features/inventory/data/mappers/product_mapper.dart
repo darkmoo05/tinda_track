@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../../../core/database/app_database.dart';
@@ -26,6 +27,10 @@ extension ProductRowMapper on ProductRow {
         : DateTime.fromMillisecondsSinceEpoch(expirationDateMs!),
     categoryId: categoryId,
     shelfLocationId: shelfLocationId,
+    itemType: itemType,
+    customAttributes: customAttributesJson.isEmpty
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(json.decode(customAttributesJson) as Map),
     sync: SyncMetadata(
       syncId: syncId,
       deviceId: deviceId,
@@ -62,6 +67,8 @@ extension ProductCompanionMapper on Product {
     expirationDateMs: Value(expirationDate?.millisecondsSinceEpoch),
     categoryId: Value(categoryId),
     shelfLocationId: Value(shelfLocationId),
+    itemType: Value(itemType),
+    customAttributesJson: Value(jsonEncode(customAttributes)),
   );
 }
 
@@ -99,6 +106,12 @@ ProductsCompanion productCompanionFromRemoteJson(Map<String, dynamic> json) {
     ),
     categoryId: Value(json['categoryId'] as String?),
     shelfLocationId: Value(json['shelfLocationId'] as String?),
+    itemType: Value((json['itemType'] as String?) ?? 'standard'),
+    customAttributesJson: Value(
+      json['customAttributes'] == null
+          ? '{}'
+          : jsonEncode(json['customAttributes']),
+    ),
     // imageLocalPath omitted — local-only.
   );
 }
@@ -122,6 +135,8 @@ Map<String, dynamic> productToRemoteJson(Product p) => {
   'expirationDate': p.expirationDate?.toUtc().toIso8601String(),
   'categoryId': p.categoryId,
   'shelfLocationId': p.shelfLocationId,
+  'itemType': p.itemType,
+  'customAttributes': p.customAttributes,
   'isDeleted': p.sync.isDeleted,
   'createdAt': p.sync.createdAt.toUtc().toIso8601String(),
   'updatedAt': p.sync.updatedAt.toUtc().toIso8601String(),

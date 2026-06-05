@@ -2865,6 +2865,237 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Category: {category}  |  {unit}'**
   String categoryAndUnit(String category, String unit);
+
+  /// No description provided for @errEmptyCart.
+  ///
+  /// In en, this message translates to:
+  /// **'No items in checkout queue. Add items before checking out.'**
+  String get errEmptyCart;
+
+  /// No description provided for @errNegativePaidAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid amount cannot be negative.'**
+  String get errNegativePaidAmount;
+
+  /// No description provided for @errUnitConversionNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Unit {unit} is not configured for {product}.'**
+  String errUnitConversionNotSet(String unit, String product);
+
+  /// No description provided for @errEmptyRecipeIngredients.
+  ///
+  /// In en, this message translates to:
+  /// **'No ingredients configured for recipe {product}.'**
+  String errEmptyRecipeIngredients(String product);
+
+  /// No description provided for @errInsufficientIngredientStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient stock for ingredient {ingredient} of {product}. Needed: {needed}, Available: {available}.'**
+  String errInsufficientIngredientStock(
+    String ingredient,
+    String product,
+    double needed,
+    double available,
+  );
+
+  /// No description provided for @errInsufficientProductStock.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient stock for {product}. Needed: {needed}, Available: {available}.'**
+  String errInsufficientProductStock(
+    String product,
+    double needed,
+    double available,
+  );
+
+  /// No description provided for @errSerialSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select exactly {required} serial number(s) for {product}. Selected: {selected}.'**
+  String errSerialSelection(int required, String product, int selected);
+
+  /// No description provided for @errSerialNotAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Serial number \"{serial}\" is not available.'**
+  String errSerialNotAvailable(String serial);
+
+  /// No description provided for @errPaidAmountInsufficient.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient payment. Paid: {paid}, Total: {total}.'**
+  String errPaidAmountInsufficient(double paid, double total);
+
+  /// No description provided for @noIngredientsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No ingredients available.'**
+  String get noIngredientsAvailable;
+
+  /// No description provided for @noIngredientsSet.
+  ///
+  /// In en, this message translates to:
+  /// **'No ingredients set. Add ingredients below.'**
+  String get noIngredientsSet;
+
+  /// No description provided for @noSerialsRegistered.
+  ///
+  /// In en, this message translates to:
+  /// **'No serial numbers registered.'**
+  String get noSerialsRegistered;
+
+  /// No description provided for @noBarcodeRead.
+  ///
+  /// In en, this message translates to:
+  /// **'No barcode detected. Try again.'**
+  String get noBarcodeRead;
+
+  /// No description provided for @noProductForBarcode.
+  ///
+  /// In en, this message translates to:
+  /// **'No product linked to barcode \"{code}\".'**
+  String noProductForBarcode(String code);
+
+  /// No description provided for @addItemsFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Add items to the cart before checking out.'**
+  String get addItemsFirst;
+
+  /// No description provided for @cannotCheckoutNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot checkout now. Please check again.'**
+  String get cannotCheckoutNow;
+
+  /// No description provided for @insufficientPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient payment. Please check again.'**
+  String get insufficientPayment;
+
+  /// No description provided for @checkoutFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkout failed: {error}'**
+  String checkoutFailed(String error);
+
+  /// No description provided for @failedToLoadProducts.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load products. Please try again.'**
+  String get failedToLoadProducts;
+
+  /// No description provided for @noProductsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No products found.'**
+  String get noProductsFound;
+
+  /// No description provided for @lowStockWarningEditAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Some items are low on stock. You can still edit them before checkout.'**
+  String get lowStockWarningEditAllowed;
+
+  /// No description provided for @noSerialsAvailableForProduct.
+  ///
+  /// In en, this message translates to:
+  /// **'No available serial numbers for this product.'**
+  String get noSerialsAvailableForProduct;
+
+  /// No description provided for @noMatchingProducts.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching products found.'**
+  String get noMatchingProducts;
+
+  /// No description provided for @scanDuplicateWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This was scanned just recently. Scan again after a moment.'**
+  String get scanDuplicateWarning;
+
+  /// No description provided for @addedToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to queue: {product}'**
+  String addedToQueue(String product);
+
+  /// No description provided for @saleCompleteWithChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Sale complete! Change: {change}'**
+  String saleCompleteWithChange(String change);
+
+  /// No description provided for @selectSerialsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select exactly {required} serial number(s). Selected: {selected}'**
+  String selectSerialsRequired(int required, int selected);
+
+  /// No description provided for @serialsLimitExceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Limit is up to {required} serials only.'**
+  String serialsLimitExceeded(int required);
+
+  /// No description provided for @continuousScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Continuous scan'**
+  String get continuousScan;
+
+  /// No description provided for @muteScanSound.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute scan sound'**
+  String get muteScanSound;
+
+  /// No description provided for @enableScanSound.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable scan sound'**
+  String get enableScanSound;
+
+  /// No description provided for @disableVibration.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable vibration'**
+  String get disableVibration;
+
+  /// No description provided for @enableVibration.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable vibration'**
+  String get enableVibration;
+
+  /// No description provided for @typeBarcodeManually.
+  ///
+  /// In en, this message translates to:
+  /// **'Type barcode manually'**
+  String get typeBarcodeManually;
+
+  /// No description provided for @serialAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'This serial number has already been added.'**
+  String get serialAlreadyAdded;
+
+  /// No description provided for @stockMustMatchSerials.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock quantity ({stock}) must equal the number of available serial numbers ({count}).'**
+  String stockMustMatchSerials(int stock, int count);
+
+  /// No description provided for @scanOrTypeSerial.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan or type a serial number to add.'**
+  String get scanOrTypeSerial;
 }
 
 class _AppLocalizationsDelegate

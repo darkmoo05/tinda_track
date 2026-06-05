@@ -27,7 +27,7 @@ class EntityPushPayload {
 ///
 /// Example (see `bindings/pocket_ledger_bindings.dart`):
 ///
-///   EntitySync<ChargeRow>(
+///   EntitySync&lt;ChargeRow&gt;(
 ///     entityKey: 'charges',
 ///     route: '/charges',
 ///     pendingPush: charges.pendingPush,

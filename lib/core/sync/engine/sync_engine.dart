@@ -153,7 +153,7 @@ class SyncEngine {
         var conflicts = 0;
         var maxServerUpdatedAt = 0;
 
-        final dbAction = () async {
+        Future<void> dbAction() async {
           for (final entity in module.entities) {
             final serverKey = _snakeToCamel(entity.entityKey);
             final recordsJson = pullObj[serverKey];
@@ -167,7 +167,7 @@ class SyncEngine {
               }
             }
           }
-        };
+        }
 
         if (module.runInTransaction != null) {
           await module.runInTransaction!(dbAction);

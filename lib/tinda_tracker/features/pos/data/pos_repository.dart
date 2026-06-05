@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:drift/drift.dart' show Variable;
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -9,8 +9,8 @@ import '../../../../core/database/daos/app_meta_dao.dart';
 import '../../../../core/di/database_providers.dart';
 import '../../../../core/network/api_client.dart';
 import '../../inventory/data/models/inventory_product.dart';
-import 'models/cart_item.dart';
 import 'sale_model.dart';
+import 'exceptions/pos_exceptions.dart';
 
 /// Riverpod provider that hands out a singleton [PosRepository] bound to the
 /// app's Drift database. Consumers should obtain the repo via
@@ -151,12 +151,10 @@ class PosRepository {
 
   Future<TtSale> checkout(CheckoutRequest request) async {
     if (request.items.isEmpty) {
-      throw Exception(
-        'Walang item sa checkout queue. Mag-add muna bago mag-checkout.',
-      );
+      throw CheckoutEmptyCartException();
     }
     if (request.paidAmount < 0) {
-      throw Exception('Hindi puwedeng negative ang amount received.');
+      throw NegativePaidAmountException();
     }
 
     final deviceId = request.deviceId ?? await _appMeta.getOrCreateDeviceId();
@@ -171,47 +169,32 @@ class PosRepository {
     await _database.transaction(() async {
       for (final item in request.items) {
         // Look up product row by canonical id.
-        final productRows = await _selectRows(
-          'SELECT id, name, base_unit, stock_in_base_unit '
-          'FROM products WHERE id = ? LIMIT 1',
-          variables: [Variable<String>(item.product.id)],
-        );
-        if (productRows.isEmpty) {
+        final pRow = await (_database.select(_database.products)
+              ..where((t) => t.id.equals(item.product.id))
+              ..limit(1))
+            .getSingleOrNull();
+
+        if (pRow == null) {
           throw Exception('Product not found: ${item.product.name}');
         }
-        final pRow = productRows.first;
-        final productId = pRow['id'] as String;
-        final baseUnit = (pRow['base_unit'] as String?) ?? 'pc';
+        final productId = pRow.id;
+        final baseUnit = pRow.baseUnit;
         final selectedUnit = item.selectedUnitName;
+        final itemType = pRow.itemType;
 
         double conversionFactor = 1;
         if (selectedUnit.toLowerCase() != baseUnit.toLowerCase()) {
-          final conversionRows = await _selectRows(
-            'SELECT conversion_factor FROM product_unit_conversions '
-            'WHERE product_id = ? AND LOWER(unit_name) = LOWER(?) '
-            'AND COALESCE(is_deleted, 0) = 0 LIMIT 1',
-            variables: [
-              Variable<String>(productId),
-              Variable<String>(selectedUnit),
-            ],
-          );
-          if (conversionRows.isEmpty) {
-            throw Exception(
-              'Hindi naka-set ang unit na $selectedUnit para sa '
-              '${item.product.name}.',
-            );
+          final conversionRow = await (_database.select(_database.productUnitConversions)
+                ..where((t) => t.productId.equals(productId) & t.unitName.lower().equals(selectedUnit.toLowerCase()) & t.isDeleted.equals(false))
+                ..limit(1))
+              .getSingleOrNull();
+          if (conversionRow == null) {
+            throw UnitConversionNotSetException(selectedUnit, item.product.name);
           }
-          conversionFactor = (conversionRows.first['conversion_factor'] as num)
-              .toDouble();
+          conversionFactor = conversionRow.conversionFactor;
         }
 
         final computedBaseQuantity = item.quantity * conversionFactor;
-        final currentBaseStock =
-            (pRow['stock_in_base_unit'] as num?)?.toDouble() ?? 0;
-        if (computedBaseQuantity > currentBaseStock) {
-          throw Exception('Kulang ang stocks para sa ${item.product.name}.');
-        }
-
         final lineTotal = item.appliedPrice * item.quantity;
         subtotal += lineTotal;
 
@@ -226,62 +209,165 @@ class PosRepository {
           ),
         );
 
-        final newBaseStock = currentBaseStock - computedBaseQuantity;
-        await _database.customStatement(
-          'UPDATE products SET stock_in_base_unit = ?, is_dirty = 1, '
-          'updated_at_ms = ? WHERE id = ?',
-          [newBaseStock, nowMs, productId],
-        );
+        if (itemType == 'recipe') {
+          // Deduct ingredients instead of parent product stock
+          final ingredientsQuery = _database.select(_database.productRecipeIngredients).join([
+            leftOuterJoin(
+              _database.products,
+              _database.products.id.equalsExp(_database.productRecipeIngredients.ingredientProductId),
+            ),
+          ])..where(_database.productRecipeIngredients.recipeProductId.equals(productId) & _database.productRecipeIngredients.isDeleted.equals(false));
+
+          final ingredientRows = await ingredientsQuery.get();
+
+          if (ingredientRows.isEmpty) {
+            throw EmptyRecipeIngredientsException(item.product.name);
+          }
+
+          for (final row in ingredientRows) {
+            final pri = row.readTable(_database.productRecipeIngredients);
+            final p = row.readTableOrNull(_database.products);
+            if (p == null) continue;
+
+            final ingId = pri.ingredientProductId;
+            final quantityNeeded = pri.quantityNeeded;
+            final ingName = p.name;
+            final ingCurrentStock = p.stockInBaseUnit;
+
+            final totalIngDeduction = quantityNeeded * computedBaseQuantity;
+            if (totalIngDeduction > ingCurrentStock) {
+              throw InsufficientIngredientStockException(
+                ingredientName: ingName,
+                productName: item.product.name,
+                needed: totalIngDeduction,
+                available: ingCurrentStock,
+              );
+            }
+
+            final newIngStock = ingCurrentStock - totalIngDeduction;
+            await (_database.update(_database.products)..where((t) => t.id.equals(ingId))).write(
+              ProductsCompanion(
+                stockInBaseUnit: Value(newIngStock),
+                isDirty: const Value(true),
+                updatedAtMs: Value(nowMs),
+              ),
+            );
+
+            // Record PRODUCTION_DEDUCTION stock movement locally
+            await _database.into(_database.stockMovements).insert(
+              StockMovementsCompanion.insert(
+                id: _uuid.v4(),
+                productId: ingId,
+                movementType: 'PRODUCTION_DEDUCTION',
+                quantity: totalIngDeduction,
+                previousQuantity: ingCurrentStock,
+                newQuantity: newIngStock,
+                note: Value('Ingredient for recipe ${pRow.name}'),
+                reference: Value(reference),
+                createdAtMs: nowMs,
+                isDirty: const Value(true),
+              ),
+            );
+          }
+        } else {
+          // Standard product stock deduction
+          final currentBaseStock = pRow.stockInBaseUnit;
+          if (computedBaseQuantity > currentBaseStock) {
+            throw InsufficientProductStockException(
+              productName: item.product.name,
+              needed: computedBaseQuantity,
+              available: currentBaseStock,
+            );
+          }
+
+          final newBaseStock = currentBaseStock - computedBaseQuantity;
+          await (_database.update(_database.products)..where((t) => t.id.equals(productId))).write(
+            ProductsCompanion(
+              stockInBaseUnit: Value(newBaseStock),
+              isDirty: const Value(true),
+              updatedAtMs: Value(nowMs),
+            ),
+          );
+
+          // Handle serial tracking if applicable
+          final serialsInDb = await (_database.select(_database.productSerialNumbers)
+                ..where((t) => t.productId.equals(productId) & t.isDeleted.equals(false)))
+              .get();
+          final hasSerialsCount = serialsInDb.length;
+
+          if (hasSerialsCount > 0) {
+            final requiredSerials = computedBaseQuantity.toInt();
+            if (item.selectedSerials.length != requiredSerials) {
+              throw SerialSelectionException(
+                productName: item.product.name,
+                requiredCount: requiredSerials,
+                selectedCount: item.selectedSerials.length,
+              );
+            }
+
+            for (final serial in item.selectedSerials) {
+              final serialRow = await (_database.select(_database.productSerialNumbers)
+                    ..where((t) => t.productId.equals(productId) & t.serialNumber.equals(serial) & t.isDeleted.equals(false))
+                    ..limit(1))
+                  .getSingleOrNull();
+
+              if (serialRow == null || serialRow.status != 'AVAILABLE') {
+                throw SerialNotAvailableException(serial);
+              }
+
+              await (_database.update(_database.productSerialNumbers)
+                    ..where((t) => t.productId.equals(productId) & t.serialNumber.equals(serial)))
+                  .write(
+                ProductSerialNumbersCompanion(
+                  status: const Value('SOLD'),
+                  isDirty: const Value(true),
+                  updatedAtMs: Value(nowMs),
+                ),
+              );
+            }
+          }
+        }
       }
 
       final totalAmount = subtotal;
       if (request.paidAmount < totalAmount) {
-        throw Exception(
-          'Kulangan ang binayad. Paki-check ulit bago mag-checkout.',
-        );
+        throw PaidAmountInsufficientException(request.paidAmount, totalAmount);
       }
       final changeAmount = request.paidAmount - totalAmount;
 
-      await _database.customStatement(
-        'INSERT INTO sales ('
-        'id, reference, note, subtotal, total_amount, paid_amount, '
-        'change_amount, total_items, '
-        'sync_id, device_id, is_deleted, is_dirty, '
-        'created_at_ms, updated_at_ms'
-        ') VALUES (?,?,?,?,?,?,?,?,?,?,0,1,?,?)',
-        [
-          saleId,
-          reference,
-          request.note ?? '',
-          subtotal,
-          totalAmount,
-          request.paidAmount,
-          changeAmount,
-          totalItems,
-          saleId,
-          deviceId,
-          nowMs,
-          nowMs,
-        ],
+      await _database.into(_database.sales).insert(
+        SaleRow(
+          id: saleId,
+          reference: reference,
+          note: request.note ?? '',
+          subtotal: subtotal,
+          totalAmount: totalAmount,
+          paidAmount: request.paidAmount,
+          changeAmount: changeAmount,
+          totalItems: totalItems,
+          syncId: saleId,
+          deviceId: deviceId,
+          isDeleted: false,
+          isDirty: true,
+          createdAtMs: nowMs,
+          updatedAtMs: nowMs,
+        ),
       );
 
       for (final item in enrichedItems) {
-        await _database.customStatement(
-          'INSERT INTO sale_items ('
-          'id, sale_id, product_id, selected_unit, quantity, unit_price, '
-          'computed_base_quantity, line_total, created_at_ms, is_dirty'
-          ') VALUES (?,?,?,?,?,?,?,?,?,1)',
-          [
-            _uuid.v4(),
-            saleId,
-            item.productId,
-            item.selectedUnit,
-            item.quantity,
-            item.unitPrice,
-            item.computedBaseQuantity,
-            item.lineTotal,
-            nowMs,
-          ],
+        await _database.into(_database.saleItems).insert(
+          SaleItemRow(
+            id: _uuid.v4(),
+            saleId: saleId,
+            productId: item.productId,
+            selectedUnit: item.selectedUnit,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            computedBaseQuantity: item.computedBaseQuantity,
+            lineTotal: item.lineTotal,
+            createdAtMs: nowMs,
+            isDirty: true,
+          ),
         );
       }
     });

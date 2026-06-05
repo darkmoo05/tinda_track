@@ -31,6 +31,8 @@ abstract class InventoryRepository {
     String? imagePath,
     DateTime? expirationDate,
     List<ProductUnitConversion> unitConversions = const [],
+    String itemType = 'standard',
+    Map<String, dynamic> customAttributes = const {},
   });
   Future<InventoryProduct> updateProduct(
     String id, {
@@ -49,6 +51,8 @@ abstract class InventoryRepository {
     Object? imagePath = updateSentinel,
     Object? expirationDate = updateSentinel,
     Object? unitConversions = updateSentinel,
+    Object? itemType = updateSentinel,
+    Object? customAttributes = updateSentinel,
   });
   Future<void> deleteProduct(String id);
   Future<void> adjustStock({
