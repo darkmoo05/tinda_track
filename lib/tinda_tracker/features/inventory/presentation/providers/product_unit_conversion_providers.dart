@@ -9,7 +9,7 @@ import '../../domain/repositories/product_unit_conversion_repository.dart';
 final productUnitConversionsDaoProvider = Provider<ProductUnitConversionsDao>((
   ref,
 ) {
-  return ProductUnitConversionsDao(ref.watch(appDatabaseProvider));
+  return ProductUnitConversionsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final productUnitConversionRepositoryProvider =
@@ -34,7 +34,7 @@ class ProductUnitConversionsNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(productUnitConversionRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(conversion));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

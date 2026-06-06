@@ -29,6 +29,8 @@ class Product with _$Product {
     DateTime? expirationDate,
     String? categoryId,
     String? shelfLocationId,
+    @Default('standard') String itemType,
+    @Default(<String, dynamic>{}) Map<String, dynamic> customAttributes,
     required SyncMetadata sync,
   }) = _Product;
 

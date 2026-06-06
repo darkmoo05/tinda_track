@@ -1,6 +1,13 @@
 abstract class AuthRepository {
   Future<Map<String, dynamic>> login(String username, String password);
-  Future<Map<String, dynamic>> register(String username, String password, {String? role});
+  Future<Map<String, dynamic>> register(
+    String username,
+    String password, {
+    String? role,
+    required String businessName,
+    required String businessType,
+    String? defaultCurrency,
+  });
   Future<void> logout();
   Future<String?> getAccessToken();
   Future<bool> hasValidToken();

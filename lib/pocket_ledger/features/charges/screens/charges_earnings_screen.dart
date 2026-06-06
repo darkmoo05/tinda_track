@@ -204,7 +204,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   }
 
   Future<void> _loadFeeMovements() async {
-    final database = ref.read(appDatabaseProvider);
+    final database = ref.read(currentAppDatabaseProvider);
     final result = await database.customSelect(_feeMovementsSql).get();
     final allEntries = result
         .map((row) => _mapFeeMovementEntry(Map<String, Object?>.from(row.data)))
@@ -1511,7 +1511,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
   }
 
   Future<void> _load() async {
-    final database = ref.read(appDatabaseProvider);
+    final database = ref.read(currentAppDatabaseProvider);
     final result = await database.customSelect(_feeMovementsSql).get();
     if (!mounted) return;
     setState(() {

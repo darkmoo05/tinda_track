@@ -7,7 +7,7 @@ import '../../domain/entities/utang_record.dart';
 import '../../domain/repositories/utang_record_repository.dart';
 
 final utangRecordsDaoProvider = Provider<UtangRecordsDao>((ref) {
-  return UtangRecordsDao(ref.watch(appDatabaseProvider));
+  return UtangRecordsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final utangRecordRepositoryProvider = Provider<UtangRecordRepository>((ref) {
@@ -34,7 +34,7 @@ class UtangRecordsNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(utangRecordRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(record));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

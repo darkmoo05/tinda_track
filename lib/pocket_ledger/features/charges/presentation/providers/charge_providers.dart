@@ -8,7 +8,7 @@ import '../../domain/repositories/charge_repository.dart';
 
 /// DAO and repository providers — singleton-per-container, no rebuilds.
 final chargesDaoProvider = Provider<ChargesDao>((ref) {
-  return ChargesDao(ref.watch(appDatabaseProvider));
+  return ChargesDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final chargeRepositoryProvider = Provider<ChargeRepository>((ref) {
@@ -34,7 +34,7 @@ class ChargesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(chargeRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(charge));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

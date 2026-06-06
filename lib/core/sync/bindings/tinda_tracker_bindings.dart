@@ -29,6 +29,15 @@ import '../remote/product_unit_conversion_remote_repository.dart';
 import '../remote/sale_remote_repository.dart';
 import '../remote/shelf_location_remote_repository.dart';
 import '../remote/utang_record_remote_repository.dart';
+import '../../../tinda_tracker/features/inventory/data/mappers/business_profile_mapper.dart';
+import '../../database/daos/tinda_tracker/business_profiles_dao.dart';
+import '../remote/business_profile_remote_repository.dart';
+import '../../../tinda_tracker/features/inventory/data/mappers/product_serial_number_mapper.dart';
+import '../../../tinda_tracker/features/inventory/data/mappers/product_recipe_ingredient_mapper.dart';
+import '../../database/daos/tinda_tracker/product_serial_numbers_dao.dart';
+import '../../database/daos/tinda_tracker/product_recipe_ingredients_dao.dart';
+import '../remote/product_serial_number_remote_repository.dart';
+import '../remote/product_recipe_ingredient_remote_repository.dart';
 
 /// Builds the `tinda_tracker` [SyncModule].
 ///
@@ -49,11 +58,31 @@ SyncModule buildTindaTrackerModule(TindaTrackerDao dao) {
   final UtangRecordsDao utang = dao.utangRecords;
   final SalesDao sales = dao.sales;
   final SaleItemsDao saleItems = dao.saleItems;
+  final BusinessProfilesDao businessProfiles = dao.businessProfiles;
+  final ProductSerialNumbersDao serialNumbers = dao.productSerialNumbers;
+  final ProductRecipeIngredientsDao recipeIngredients = dao.productRecipeIngredients;
 
   return SyncModule(
     key: 'tinda_tracker',
     runInTransaction: dao.database.transaction,
     entities: [
+      EntitySync<BusinessProfileRow>(
+        entityKey: 'business_profiles',
+        route: '/inventory/business-profiles',
+        pendingPush: businessProfiles.pendingPush,
+        markClean: businessProfiles.markClean,
+        maxUpdatedAt: businessProfiles.maxUpdatedAt,
+        toRemoteJson: (row) => businessProfileToRemoteJson(row.toDomain()),
+        applyRemote: (json) => businessProfiles.upsertFromRemote(
+          businessProfileCompanionFromRemoteJson(json),
+        ),
+        pushRemote: (p) => BusinessProfileRemoteRepository.instance.push(p),
+        pullRemote: ({required deviceId, since}) =>
+            BusinessProfileRemoteRepository.instance.pull(
+              deviceId: deviceId,
+              since: since,
+            ),
+      ),
       EntitySync<ProductCategoryRow>(
         entityKey: 'product_categories',
         route: '/inventory/categories',
@@ -153,6 +182,40 @@ SyncModule buildTindaTrackerModule(TindaTrackerDao dao) {
             ProductUnitConversionRemoteRepository.instance.push(p),
         pullRemote: ({required deviceId, since}) =>
             ProductUnitConversionRemoteRepository.instance.pull(
+              deviceId: deviceId,
+              since: since,
+            ),
+      ),
+      EntitySync<ProductSerialNumberRow>(
+        entityKey: 'product_serial_numbers',
+        route: '/inventory/product-serial-numbers',
+        pendingPush: serialNumbers.pendingPush,
+        markClean: serialNumbers.markClean,
+        maxUpdatedAt: serialNumbers.maxUpdatedAt,
+        toRemoteJson: (row) => productSerialNumberToRemoteJson(row.toDomain()),
+        applyRemote: (json) => serialNumbers.upsertFromRemote(
+          productSerialNumberCompanionFromRemoteJson(json),
+        ),
+        pushRemote: (p) => ProductSerialNumberRemoteRepository.instance.push(p),
+        pullRemote: ({required deviceId, since}) =>
+            ProductSerialNumberRemoteRepository.instance.pull(
+              deviceId: deviceId,
+              since: since,
+            ),
+      ),
+      EntitySync<ProductRecipeIngredientRow>(
+        entityKey: 'product_recipe_ingredients',
+        route: '/inventory/product-recipe-ingredients',
+        pendingPush: recipeIngredients.pendingPush,
+        markClean: recipeIngredients.markClean,
+        maxUpdatedAt: recipeIngredients.maxUpdatedAt,
+        toRemoteJson: (row) => productRecipeIngredientToRemoteJson(row.toDomain()),
+        applyRemote: (json) => recipeIngredients.upsertFromRemote(
+          productRecipeIngredientCompanionFromRemoteJson(json),
+        ),
+        pushRemote: (p) => ProductRecipeIngredientRemoteRepository.instance.push(p),
+        pullRemote: ({required deviceId, since}) =>
+            ProductRecipeIngredientRemoteRepository.instance.pull(
               deviceId: deviceId,
               since: since,
             ),

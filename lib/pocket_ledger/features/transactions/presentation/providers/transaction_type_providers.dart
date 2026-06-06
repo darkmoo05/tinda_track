@@ -7,7 +7,7 @@ import '../../domain/entities/transaction_type.dart';
 import '../../domain/repositories/transaction_type_repository.dart';
 
 final transactionTypesDaoProvider = Provider<TransactionTypesDao>(
-  (ref) => TransactionTypesDao(ref.watch(appDatabaseProvider)),
+  (ref) => TransactionTypesDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 final transactionTypeRepositoryProvider = Provider<TransactionTypeRepository>(
@@ -28,7 +28,7 @@ class TransactionTypesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(transactionTypeRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(type));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

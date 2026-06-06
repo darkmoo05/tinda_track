@@ -7,7 +7,7 @@ import '../../domain/entities/party.dart';
 import '../../domain/repositories/party_repository.dart';
 
 final partiesDaoProvider = Provider<PartiesDao>(
-  (ref) => PartiesDao(ref.watch(appDatabaseProvider)),
+  (ref) => PartiesDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 final partyRepositoryProvider = Provider<PartyRepository>(
@@ -26,7 +26,7 @@ class PartiesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(partyRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(party));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

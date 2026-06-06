@@ -86,6 +86,11 @@ class Products extends Table with SyncedRow {
   TextColumn get shelfLocationId =>
       text().nullable().references(ShelfLocations, #id)();
 
+  // Multi-industry dynamic attributes & extensions (Phase 2)
+  TextColumn get itemType => text().withDefault(const Constant('standard'))();
+  TextColumn get customAttributesJson =>
+      text().withDefault(const Constant('{}'))();
+
   @override
   Set<Column> get primaryKey => {id};
 
@@ -237,4 +242,56 @@ class SaleItems extends Table {
 
   @override
   String? get tableName => 'sale_items';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCT SERIAL NUMBER — Prisma `ProductSerialNumber` (table `product_serial_numbers`).
+// ─────────────────────────────────────────────────────────────────────────────
+@DataClassName('ProductSerialNumberRow')
+@TableIndex(name: 'product_serial_numbers_product_idx', columns: {#productId})
+@TableIndex(name: 'product_serial_numbers_is_dirty_idx', columns: {#isDirty})
+class ProductSerialNumbers extends Table with SyncedRow {
+  TextColumn get id => text()();
+  TextColumn get productId => text().references(Products, #id)();
+  TextColumn get serialNumber => text()();
+  TextColumn get status => text().withDefault(const Constant('AVAILABLE'))(); // AVAILABLE, SOLD, WASTE, RETURNED
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {productId, serialNumber},
+  ];
+
+  @override
+  String? get tableName => 'product_serial_numbers';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCT RECIPE INGREDIENT — Prisma `ProductRecipeIngredient` (table `product_recipe_ingredients`).
+// Maps a parent recipe/dish product to its ingredient products.
+// ─────────────────────────────────────────────────────────────────────────────
+@DataClassName('ProductRecipeIngredientRow')
+@TableIndex(name: 'product_recipe_ingredients_recipe_idx', columns: {#recipeProductId})
+@TableIndex(name: 'product_recipe_ingredients_is_dirty_idx', columns: {#isDirty})
+class ProductRecipeIngredients extends Table with SyncedRow {
+  TextColumn get id => text()();
+  @ReferenceName('recipeProductRefs')
+  TextColumn get recipeProductId => text().references(Products, #id)();
+
+  @ReferenceName('ingredientProductRefs')
+  TextColumn get ingredientProductId => text().references(Products, #id)();
+  RealColumn get quantityNeeded => real()(); // quantity of ingredient needed for 1 unit of recipe (in ingredient's baseUnit)
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {recipeProductId, ingredientProductId},
+  ];
+
+  @override
+  String? get tableName => 'product_recipe_ingredients';
 }

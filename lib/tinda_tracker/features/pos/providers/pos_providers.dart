@@ -1,8 +1,14 @@
+import 'package:tinda_track/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../inventory/data/local_inventory_repository.dart';
+import '../../../../core/database/app_database.dart';
+import '../../../../core/database/providers/database_providers.dart';
 import '../../inventory/data/models/inventory_product.dart';
 import '../data/models/cart_item.dart';
+
+enum CheckoutDisabledReason {
+  emptyCart,
+  stockIssue,
+}
 
 final posProductsProvider = FutureProvider.autoDispose<List<InventoryProduct>>((
   ref,
@@ -81,6 +87,12 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     });
   }
 
+  void updateItemSerials(String productId, List<String> serials) {
+    _mutateItem(productId, (item) {
+      return item.copyWith(selectedSerials: serials);
+    });
+  }
+
   void clear() => state = const [];
 
   List<String> unitOptionsFor(CartItem item) {
@@ -95,9 +107,16 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     return options;
   }
 
-  String? validationMessage(CartItem item) {
+  String? validationMessage(CartItem item, AppLocalizations? l10n) {
     if (item.computedBaseQuantity <= item.product.stockInBaseUnit) {
       return null;
+    }
+    if (l10n != null) {
+      return l10n.errInsufficientProductStock(
+        item.product.name,
+        item.computedBaseQuantity,
+        item.product.stockInBaseUnit,
+      );
     }
     return 'Kulang ang stocks para sa ${item.product.name}.';
   }
@@ -162,14 +181,23 @@ final canCheckoutProvider = Provider.autoDispose<bool>((ref) {
   return !isEmpty && !hasStockIssue;
 });
 
-final checkoutDisabledReasonProvider = Provider.autoDispose<String?>((ref) {
+final checkoutDisabledReasonProvider = Provider.autoDispose<CheckoutDisabledReason?>((ref) {
   final isEmpty = ref.watch(isCartEmptyProvider);
-  if (isEmpty) return 'Mag-add muna ng item bago mag-checkout.';
+  if (isEmpty) return CheckoutDisabledReason.emptyCart;
 
   final hasStockIssue = ref.watch(hasStockIssueProvider);
-  if (hasStockIssue) {
-    return 'Kulang ang stocks sa ilang item. Paki-adjust muna.';
-  }
+  if (hasStockIssue) return CheckoutDisabledReason.stockIssue;
 
   return null;
+});
+
+final availableSerialsProvider = FutureProvider.autoDispose.family<List<ProductSerialNumberRow>, String>((ref, productId) {
+  final dao = ref.watch(tindaTrackerDaoProvider).productSerialNumbers;
+  return dao.listAvailableForProduct(productId);
+});
+
+final productSerialsCountProvider = FutureProvider.autoDispose.family<int, String>((ref, productId) async {
+  final dao = ref.watch(tindaTrackerDaoProvider).productSerialNumbers;
+  final list = await dao.listForProduct(productId);
+  return list.length;
 });

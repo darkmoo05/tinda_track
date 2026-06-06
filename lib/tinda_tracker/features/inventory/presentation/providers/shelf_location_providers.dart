@@ -7,7 +7,7 @@ import '../../domain/entities/shelf_location.dart';
 import '../../domain/repositories/shelf_location_repository.dart';
 
 final shelfLocationsDaoProvider = Provider<ShelfLocationsDao>((ref) {
-  return ShelfLocationsDao(ref.watch(appDatabaseProvider));
+  return ShelfLocationsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final shelfLocationRepositoryProvider = Provider<ShelfLocationRepository>((
@@ -29,7 +29,7 @@ class ShelfLocationsNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(shelfLocationRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(location));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

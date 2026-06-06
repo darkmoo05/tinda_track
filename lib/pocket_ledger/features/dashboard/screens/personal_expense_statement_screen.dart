@@ -41,7 +41,7 @@ class _PersonalExpenseStatementScreenState
   void initState() {
     super.initState();
     _entriesFuture = DashboardRepository(
-      database: ref.read(appDatabaseProvider),
+      database: ref.read(currentAppDatabaseProvider),
     ).loadStatementEntries();
     _loadLastSeen();
   }
@@ -50,7 +50,7 @@ class _PersonalExpenseStatementScreenState
     setState(() {
       _didPersistLastSeen = false;
       _entriesFuture = DashboardRepository(
-        database: ref.read(appDatabaseProvider),
+        database: ref.read(currentAppDatabaseProvider),
       ).loadStatementEntries();
     });
   }

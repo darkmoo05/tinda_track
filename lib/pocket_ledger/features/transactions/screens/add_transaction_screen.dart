@@ -56,7 +56,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   final _notesController = TextEditingController();
   final TransactionRepository _transactionRepository =
       TransactionRepository.instance;
-  AppDatabase get _database => ref.read(appDatabaseProvider);
+  AppDatabase get _database => ref.read(currentAppDatabaseProvider);
   bool _missingRangeAlertVisible = false;
   bool _missingRangeAlertShownForCurrentInput = false;
   String? _lastScannedAccountName;
@@ -236,11 +236,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         : preview.onHandChange;
   }
 
-  double get _netCashToDrawer {
-    // QR Payment: no physical cash is exchanged.
-    if (_isQrPayment) return 0;
-    return _isOutflowSelection ? _amountToSend : _totalCollected;
-  }
+
 
   String get _chargeDestinationAccount {
     // Inflow: fee always goes to on-hand (store receives cash)
@@ -324,6 +320,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch partiesStreamProvider to keep it active and ensure cache matches database
+    ref.watch(partiesStreamProvider);
+
+    // Listen to partiesStreamProvider to automatically re-resolve the matched party
+    // when the database changes
+    ref.listen<AsyncValue<List<Party>>>(partiesStreamProvider, (previous, next) {
+      if (next.hasValue) {
+        _resolvePartyFromAccount(_accountController.text);
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: ArchitectAppBar(
@@ -358,20 +365,53 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       controller: _accountController,
                       label: context.l10n.accountNumber,
                       hint: context.l10n.searchOrEnterAccountNumber,
-                      suffixIcon: Icons.search_rounded,
-                      onSuffixPressed: _openAccountSearchPicker,
+                      isUnderline: true,
+                      suffixWidget: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: _openAccountSearchPicker,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.search,
+                                size: 18,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ReceiptScanButton(
+                            onDraftReady: _applyReceiptDraft,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.camera_alt_outlined,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                      ),
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       onChanged: _resolvePartyFromAccount,
                       isRequired: true,
                       hasError: _isAccountNumberMissing,
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ReceiptScanButton(
-                        onDraftReady: _applyReceiptDraft,
-                      ),
                     ),
                     if (_hasTypedAccount && _isRegisteredAccount) ...[
                       const SizedBox(height: 8),
@@ -398,27 +438,47 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       const SizedBox(height: 16),
                       _buildChargeHandlingSelector(),
                     ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionTitle('Additional Details'),
-                    const SizedBox(height: 12),
-                    _buildTextField(
-                      controller: _referenceController,
-                      label: context.l10n.referenceOptional,
-                      hint: context.l10n.enterReferenceNumber,
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Divider(color: AppColors.outlineVariant, thickness: 0.5),
                     ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _notesController,
-                      label: context.l10n.notesOptional,
-                      hint: context.l10n.additionalDetails,
-                      maxLines: 3,
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        dividerColor: Colors.transparent,
+                        hoverColor: Colors.transparent,
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                      ),
+                      child: ExpansionTile(
+                        title: Text(
+                          'Additional Details (Optional)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.onSurface.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(top: 8, bottom: 8),
+                        iconColor: AppColors.onSurfaceVariant,
+                        collapsedIconColor: AppColors.onSurfaceVariant,
+                        children: [
+                          _buildTextField(
+                            controller: _referenceController,
+                            label: context.l10n.referenceOptional,
+                            hint: context.l10n.enterReferenceNumber,
+                            isBorderless: true,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            controller: _notesController,
+                            label: context.l10n.notesOptional,
+                            hint: context.l10n.additionalDetails,
+                            maxLines: 3,
+                            isBorderless: true,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -436,31 +496,37 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildPartyFoundBanner(String name) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.secondary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.verified_rounded,
-            color: AppColors.secondary,
-            size: 16,
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8F5E9), // very soft light green
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFFC8E6C9),
+            width: 1.0,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.check_circle,
+              color: Color(0xFF2E7D32), // soft dark green
+              size: 14,
+            ),
+            const SizedBox(width: 6),
+            Text(
               context.l10n.verifiedAccountFound(name),
               style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.secondary,
-                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                color: Color(0xFF2E7D32),
+                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -483,17 +549,20 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         },
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.error.withValues(alpha: 0.12),
+            color: AppColors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppColors.outlineVariant.withValues(alpha: 0.5),
+            ),
           ),
           child: Row(
             children: [
               const Icon(
-                Icons.warning_amber_rounded,
-                color: AppColors.error,
-                size: 18,
+                Icons.info_outline_rounded,
+                color: AppColors.onSurfaceVariant,
+                size: 16,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -501,16 +570,19 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   context.l10n.accountNotInContacts,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
-                Icons.person_add_alt_1_rounded,
-                color: AppColors.error,
-                size: 16,
+              Text(
+                '+ Register',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
@@ -520,143 +592,271 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildCalculationPreview(BuildContext context) {
-    return _buildCard(
+    final activeColor = _selectedWalletColor;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 360;
-              return Row(
-                children: [
-                  const Icon(
-                    Icons.receipt_long_rounded,
-                    color: AppColors.primary,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      context.l10n.reviewTotals,
-                      maxLines: compact ? 2 : 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: AppColors.onSurface,
-                        fontWeight: FontWeight.w700,
-                      ),
+          // Receipt Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.receipt_long_rounded,
+                  color: activeColor,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    context.l10n.reviewTotals,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  if (compact)
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _showSummaryDetails = !_showSummaryDetails;
-                        });
-                      },
-                      tooltip: _showSummaryDetails
-                          ? context.l10n.hideDetails
-                          : context.l10n.showDetails,
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(
-                        _showSummaryDetails
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded,
-                      ),
-                    )
-                  else
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _showSummaryDetails = !_showSummaryDetails;
-                        });
-                      },
-                      child: Text(
-                        _showSummaryDetails
-                            ? context.l10n.hideDetails
-                            : context.l10n.showDetails,
-                      ),
-                    ),
-                ],
-              );
-            },
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _showSummaryDetails = !_showSummaryDetails;
+                    });
+                  },
+                  icon: Icon(
+                    _showSummaryDetails
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 16,
+                  ),
+                  label: Text(
+                    _showSummaryDetails ? 'Hide details' : 'Show details',
+                    style: const TextStyle(fontSize: 11.5),
+                  ),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: activeColor,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+
+          // Collapsible breakdown details
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
-            secondChild: Column(
-              children: [
-                _buildPreviewRow(
-                  context.l10n.whoPaysServiceFee,
-                  _chargeHandlingMode == null
-                      ? 'Select fee handling'
-                      : _chargeHandlingDisplayLabel,
-                ),
-                const SizedBox(height: 4),
-                _buildPreviewRow(
-                  context.l10n.usingWallet,
-                  _selectedWalletAccount,
-                ),
-                const SizedBox(height: 4),
-                _buildPreviewRow(
-                  context.l10n.serviceFee,
-                  '$_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
-                ),
-                const SizedBox(height: 4),
-                _buildPreviewRow(
-                  context.l10n.feeDestination,
-                  _chargeDestinationAccount,
-                ),
-                if (_matchedChargeBracket != null) ...[
-                  const SizedBox(height: 4),
+            secondChild: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
                   _buildPreviewRow(
-                    context.l10n.feeRange,
-                    '$_pesoLabel ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} - $_pesoLabel ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
+                    context.l10n.whoPaysServiceFee,
+                    _chargeHandlingMode == null
+                        ? 'Select fee handling'
+                        : _chargeHandlingDisplayLabel,
                   ),
+                  const SizedBox(height: 6),
+                  _buildPreviewRow(
+                    context.l10n.usingWallet,
+                    _selectedWalletAccount,
+                  ),
+                  const SizedBox(height: 6),
+                  _buildPreviewRow(
+                    context.l10n.feeDestination,
+                    _chargeDestinationAccount,
+                  ),
+                  if (_matchedChargeBracket != null) ...[
+                    const SizedBox(height: 6),
+                    _buildPreviewRow(
+                      context.l10n.feeRange,
+                      '$_pesoLabel ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} - $_pesoLabel ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
+                    ),
+                  ],
+                  const SizedBox(height: 12),
                 ],
-                const SizedBox(height: 4),
-              ],
+              ),
             ),
             crossFadeState: _showSummaryDetails
                 ? CrossFadeState.showSecond
                 : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 180),
           ),
-          _buildHighlightedPreviewRow(
-            _isOutflowSelection
-                ? context.l10n.amountCustomerSends
-                : context.l10n.amountSentToCustomerWallet,
-            '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
-            _selectedWalletColor,
-          ),
-          if (_enteredAmount > 0 && _matchedChargeBracket == null) ...[
-            const SizedBox(height: 8),
-            _buildNoBracketWarning(),
-          ],
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: AppColors.outlineVariant, thickness: 0.5),
-          ),
-          _buildCustomerPaysRow(context),
-          const SizedBox(height: 8),
-          _buildCashDrawerRow(context),
-          if (_showSummaryDetails) ...[
-            const SizedBox(height: 12),
-            Text(
-              _effectiveChargeHandlingMode == _ChargeHandlingMode.addOnTop
-                  ? context.l10n.feeAddedExample
-                  : context.l10n.feeDeductedExample,
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.onSurfaceVariant.withValues(alpha: 0.82),
-                fontStyle: FontStyle.italic,
-              ),
+
+          // Dotted Perforated Line
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: CustomPaint(
+              size: const Size(double.infinity, 1),
+              painter: DashedLinePainter(),
             ),
-          ],
+          ),
+
+          // Main receipt details
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildReceiptLine(
+                  'Principal Amount',
+                  '$_pesoLabel ${_enteredAmount.toStringAsFixed(2)}',
+                ),
+                const SizedBox(height: 8),
+                _buildReceiptLine(
+                  'Service Fee',
+                  '$_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
+                  valueColor: _chargeFee > 0 ? AppColors.error : null,
+                ),
+                const SizedBox(height: 14),
+
+                // Dashed separator for total
+                CustomPaint(
+                  size: const Size(double.infinity, 1),
+                  painter: DashedLinePainter(),
+                ),
+                const SizedBox(height: 14),
+
+                // Digital Wallet Impact Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _isOutflowSelection
+                                ? 'Total Charged to Wallet'
+                                : 'Total Sent to Wallet',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Physical Cash Handover Row (Large & Highlighted)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _isOutflowSelection
+                                ? 'Cash to Hand to Customer'
+                                : 'Cash to Collect from Customer',
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$_pesoLabel ${(_isOutflowSelection ? _amountToSend : _totalCollected).toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: activeColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                if (_enteredAmount > 0 && _matchedChargeBracket == null) ...[
+                  const SizedBox(height: 12),
+                  _buildNoBracketWarning(),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+
+  Widget _buildReceiptLine(String label, String value, {Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: valueColor ?? AppColors.onSurface,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
 
   Widget _buildPreviewRow(String label, String value) {
     return LayoutBuilder(
@@ -726,255 +926,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     );
   }
 
-  Widget _buildHighlightedPreviewRow(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 340;
-          if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.account_balance_wallet_rounded,
-                      size: 14,
-                      color: color,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: color,
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
-
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.account_balance_wallet_rounded,
-                      size: 14,
-                      color: color,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildCustomerPaysRow(BuildContext context) {
-    final value = '$_pesoLabel ${_totalCollected.toStringAsFixed(2)}';
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 340;
-        if (compact) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                context.l10n.customerPays,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.onSurface,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-            ],
-          );
-        }
-
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                context.l10n.customerPays,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.onSurface,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildCashDrawerRow(BuildContext context) {
-    final value = '$_pesoLabel ${_netCashToDrawer.toStringAsFixed(2)}';
-    final label = _isOutflowSelection
-        ? context.l10n.cashPaidOut
-        : context.l10n.cashAddedToDrawer;
-    final tooltip = _isOutflowSelection
-        ? context.l10n.cashPaidOutTooltip
-        : context.l10n.cashAddedToDrawerTooltip;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 340;
-        if (compact) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  Tooltip(
-                    message: tooltip,
-                    child: Icon(
-                      Icons.info_outline_rounded,
-                      size: 14,
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
-          );
-        }
-
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: tooltip,
-                    child: Icon(
-                      Icons.info_outline_rounded,
-                      size: 14,
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Widget _buildNoBracketWarning() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1011,6 +962,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         _showRequiredIndicators &&
         _canCustomizeFeeHandling &&
         _chargeHandlingMode == null;
+    final activeColor = _selectedWalletColor;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1030,107 +982,59 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             showErrorIndicator: showChargeHandlingError,
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<_ChargeHandlingMode>(
-            initialValue: _chargeHandlingMode,
-            isExpanded: true,
-            icon: const Icon(Icons.keyboard_arrow_down_rounded),
-            decoration: InputDecoration(
-              hintText: 'Select fee handling',
-              filled: true,
-              fillColor: AppColors.surfaceContainerLowest,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 14,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.55),
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                  color: showChargeHandlingError
-                      ? AppColors.error
-                      : AppColors.outlineVariant.withValues(alpha: 0.55),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: AppColors.primary,
-                  width: 1.2,
-                ),
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: showChargeHandlingError
+                    ? AppColors.error
+                    : AppColors.outlineVariant.withValues(alpha: 0.55),
               ),
             ),
-            items: [
-              DropdownMenuItem(
-                value: _ChargeHandlingMode.addOnTop,
-                child: Text(context.l10n.customerPaysFeeLabel),
-              ),
-              DropdownMenuItem(
-                value: _ChargeHandlingMode.deductFromEnteredAmount,
-                child: Text(context.l10n.deductedFromSentLabel),
-              ),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _chargeHandlingMode = value;
-              });
-            },
-            hint: Text(
-              'Select fee handling',
-              style: TextStyle(
-                color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
-              ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildFeeHandlingOption(
+                    label: context.l10n.customerPaysFeeLabel,
+                    selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
+                    activeColor: activeColor,
+                    onTap: () {
+                      setState(() {
+                        _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _buildFeeHandlingOption(
+                    label: context.l10n.deductedFromSentLabel,
+                    selected: _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount,
+                    activeColor: activeColor,
+                    onTap: () {
+                      setState(() {
+                        _chargeHandlingMode = _ChargeHandlingMode.deductFromEnteredAmount;
+                      });
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
-          if (_chargeHandlingMode == null) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: showChargeHandlingError
-                    ? AppColors.error.withValues(alpha: 0.08)
-                    : AppColors.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: showChargeHandlingError
-                      ? AppColors.error.withValues(alpha: 0.25)
-                      : AppColors.outlineVariant.withValues(alpha: 0.55),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.check_box_outline_blank_rounded,
-                    size: 16,
-                    color: showChargeHandlingError
-                        ? AppColors.error
-                        : AppColors.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Please choose a fee handling option.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: showChargeHandlingError
-                            ? AppColors.error
-                            : AppColors.onSurfaceVariant.withValues(
-                                alpha: 0.88,
-                              ),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+          if (showChargeHandlingError) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Please choose a fee handling option.',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.error,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             'Applicable fee: $_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
             style: const TextStyle(
@@ -1140,6 +1044,43 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFeeHandlingOption({
+    required String label,
+    required bool selected,
+    required Color activeColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 185),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? activeColor.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: selected ? activeColor : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              color: selected ? activeColor : AppColors.onSurfaceVariant,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1189,13 +1130,18 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    context.l10n.saveTransactionAction,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      letterSpacing: 0.5,
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        context.l10n.saveTransactionAction,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1222,363 +1168,260 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       child: child,
     );
   }
-
   Widget _buildTypeSelector() {
-    final selectedServiceLabel = _selectedServiceKey == null
-        ? 'Choose transaction type'
-        : _serviceLabel(_selectedServiceKey!);
     final showTypeError =
         _showRequiredIndicators && _selectedServiceKey == null;
+    final activeColor = _selectedWalletColor;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 360;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fieldLabel(
+          context.l10n.walletAndService,
+          isRequired: true,
+          showErrorIndicator: showTypeError,
+        ),
+        const SizedBox(height: 10),
+        
+        // Distinct Wallet Selector buttons side-by-side
+        Row(
           children: [
-            _fieldLabel(
-              context.l10n.walletAndService,
-              isRequired: true,
-              showErrorIndicator: showTypeError,
-            ),
-            const SizedBox(height: 8),
-            _buildSelectorStepCard(
-              compact: compact,
-              title: context.l10n.walletLabel,
-              subtitle: 'GCash or Maya',
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildWalletOptionButton(
-                      compact: compact,
-                      label: context.l10n.gcash,
-                      icon: Icons.account_balance_wallet_rounded,
-                      selected: _selectedWallet == _WalletSelection.gcash,
-                      onTap: () {
-                        setState(() {
-                          _selectedWalletSelection = _WalletSelection.gcash;
-                        });
-                      },
-                    ),
+            Expanded(
+              child: _buildWalletButton(
+                label: 'GCash',
+                selected: _selectedWalletSelection == _WalletSelection.gcash,
+                activeBgColor: const Color(0xFF005DAC),
+                activeTextColor: Colors.white,
+                activeBorderColor: const Color(0xFF005DAC),
+                logoWidget: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: _selectedWalletSelection == _WalletSelection.gcash 
+                        ? Colors.white 
+                        : const Color(0xFF005DAC),
+                    shape: BoxShape.circle,
                   ),
-                  SizedBox(width: compact ? 6 : 8),
-                  Expanded(
-                    child: _buildWalletOptionButton(
-                      compact: compact,
-                      label: context.l10n.mayaWalletOption,
-                      icon: Icons.account_balance_wallet_outlined,
-                      selected: _selectedWallet == _WalletSelection.maya,
-                      onTap: () {
-                        setState(() {
-                          _selectedWalletSelection = _WalletSelection.maya;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: compact ? 8 : 10),
-            _buildSelectorStepCard(
-              compact: compact,
-              title: context.l10n.transactionTypeLabel,
-              subtitle: 'Cash In, Cash Out, Load, Bills, or QR',
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedServiceKey,
-                isExpanded: true,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                decoration: InputDecoration(
-                  hintText: 'Choose transaction type',
-                  filled: true,
-                  fillColor: AppColors.surfaceContainerLowest,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 14,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: showTypeError
-                          ? AppColors.error
-                          : AppColors.outlineVariant.withValues(alpha: 0.55),
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: showTypeError
-                          ? AppColors.error
-                          : AppColors.outlineVariant.withValues(alpha: 0.55),
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: AppColors.primary,
-                      width: 1.2,
+                  alignment: Alignment.center,
+                  child: Text(
+                    'G',
+                    style: TextStyle(
+                      color: _selectedWalletSelection == _WalletSelection.gcash 
+                          ? const Color(0xFF005DAC) 
+                          : Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-                selectedItemBuilder: (context) => _serviceOptions
-                    .map(
-                      (serviceKey) => Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          _serviceLabel(serviceKey),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(growable: false),
-                items: _serviceOptions
-                    .map((serviceKey) {
-                      final selected = _selectedServiceKey == serviceKey;
-                      return DropdownMenuItem<String>(
-                        value: serviceKey,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 18,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: selected
-                                      ? AppColors.primary
-                                      : AppColors.outlineVariant,
-                                  width: 1.4,
-                                ),
-                                color: selected
-                                    ? AppColors.primary.withValues(alpha: 0.12)
-                                    : Colors.transparent,
-                              ),
-                              child: selected
-                                  ? const Icon(
-                                      Icons.check_rounded,
-                                      size: 13,
-                                      color: AppColors.primary,
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _serviceLabel(serviceKey),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    })
-                    .toList(growable: false),
-                onChanged: (value) {
+                onTap: () {
                   setState(() {
-                    _selectedServiceKey = value;
+                    _selectedWalletSelection = _WalletSelection.gcash;
                   });
+                  _onPrincipalChanged(_principalController.text);
                 },
-                hint: Text(
-                  'Choose transaction type',
-                  style: TextStyle(
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
-                ),
               ),
             ),
-            if (_selectedServiceKey == null) ...[
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: showTypeError
-                      ? AppColors.error.withValues(alpha: 0.08)
-                      : AppColors.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: showTypeError
-                        ? AppColors.error.withValues(alpha: 0.25)
-                        : AppColors.outlineVariant.withValues(alpha: 0.55),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildWalletButton(
+                label: 'Maya',
+                selected: _selectedWalletSelection == _WalletSelection.maya,
+                activeBgColor: Colors.white,
+                activeTextColor: const Color(0xFF106D20),
+                activeBorderColor: const Color(0xFF106D20),
+                logoWidget: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    shape: BoxShape.circle,
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.check_box_outline_blank_rounded,
-                      size: 16,
-                      color: showTypeError
-                          ? AppColors.error
-                          : AppColors.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Please choose a transaction type.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: showTypeError
-                              ? AppColors.error
-                              : AppColors.onSurfaceVariant.withValues(
-                                  alpha: 0.88,
-                                ),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            SizedBox(height: compact ? 8 : 10),
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(
-                horizontal: compact ? 10 : 12,
-                vertical: compact ? 8 : 10,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.18),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.check_circle_rounded,
-                    size: compact ? 14 : 16,
-                    color: AppColors.primary,
-                  ),
-                  SizedBox(width: compact ? 6 : 8),
-                  Expanded(
-                    child: Text(
-                      context.l10n.selectedWalletService(
-                        _selectedWalletAccount,
-                        selectedServiceLabel,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: compact ? 11.5 : 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'm',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
+                ),
+                onTap: () {
+                  setState(() {
+                    _selectedWalletSelection = _WalletSelection.maya;
+                  });
+                  _onPrincipalChanged(_principalController.text);
+                },
               ),
             ),
           ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSelectorStepCard({
-    required bool compact,
-    required String title,
-    required String subtitle,
-    required Widget child,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(compact ? 10 : 12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.outlineVariant.withValues(alpha: 0.55),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: compact ? 11.5 : 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
+        const SizedBox(height: 16),
+
+        // Custom vertical service selection chips row
+        SizedBox(
+          height: 80,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _serviceOptions.map((serviceKey) {
+                final isSelected = _selectedServiceKey == serviceKey;
+                final icon = _serviceIcon(serviceKey);
+                final label = _serviceLabel(serviceKey);
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedServiceKey = serviceKey;
+                      });
+                      _onPrincipalChanged(_principalController.text);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 68,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        color: isSelected 
+                            ? activeColor.withValues(alpha: 0.08) 
+                            : AppColors.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? activeColor : Colors.transparent,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: isSelected 
+                                  ? activeColor 
+                                  : Colors.grey.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              icon,
+                              size: 16,
+                              color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                label,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                  color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
+        ),
+        if (showTypeError) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Please choose a transaction type.',
             style: TextStyle(
-              fontSize: compact ? 10.5 : 11,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.92),
+              fontSize: 12,
+              color: AppColors.error,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(height: compact ? 8 : 10),
-          child,
         ],
-      ),
+      ],
     );
   }
 
-  Widget _buildWalletOptionButton({
-    required bool compact,
+  Widget _buildWalletButton({
     required String label,
-    required IconData icon,
     required bool selected,
+    required Color activeBgColor,
+    required Color activeTextColor,
+    required Color activeBorderColor,
+    required Widget logoWidget,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: EdgeInsets.symmetric(
-            horizontal: compact ? 8 : 12,
-            vertical: compact ? 9 : 10,
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: 48,
+        decoration: BoxDecoration(
+          color: selected ? activeBgColor : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? activeBorderColor : AppColors.outlineVariant,
+            width: selected ? 1.5 : 1.0,
           ),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.primary.withValues(alpha: 0.12)
-                : AppColors.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected
-                  ? AppColors.primary.withValues(alpha: 0.4)
-                  : AppColors.outlineVariant,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: compact ? 14 : 16,
-                color: selected
-                    ? AppColors.primary
-                    : AppColors.onSurfaceVariant,
-              ),
-              SizedBox(width: compact ? 4 : 6),
-              Expanded(
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: activeBorderColor.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            logoWidget,
+            const SizedBox(width: 8),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
                 child: Text(
                   label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: compact ? 11.5 : 12,
-                    fontWeight: FontWeight.w700,
-                    color: selected ? AppColors.primary : AppColors.onSurface,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: selected ? activeTextColor : AppColors.onSurfaceVariant,
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  IconData _serviceIcon(String serviceKey) {
+    switch (serviceKey) {
+      case 'cashin':
+        return Icons.payments_rounded;
+      case 'cashout':
+        return Icons.swap_vert_rounded;
+      case 'load':
+        return Icons.phone_android_rounded;
+      case 'paybills':
+        return Icons.receipt_rounded;
+      case 'qrpayment':
+        return Icons.qr_code_2_rounded;
+      default:
+        return Icons.payments_rounded;
+    }
   }
 
   Widget _buildTextField({
@@ -1588,13 +1431,55 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     String? prefixText,
     IconData? suffixIcon,
     Future<void> Function()? onSuffixPressed,
+    Widget? suffixWidget,
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     ValueChanged<String>? onChanged,
     int maxLines = 1,
     bool isRequired = false,
     bool hasError = false,
+    bool isUnderline = false,
+    bool isBorderless = false,
   }) {
+    InputDecoration decoration;
+    if (isUnderline) {
+      final borderSide = BorderSide(
+        color: hasError ? AppColors.error : AppColors.outlineVariant,
+        width: 1.0,
+      );
+      final activeBorderSide = BorderSide(
+        color: hasError ? AppColors.error : AppColors.primary,
+        width: 1.5,
+      );
+      final underlineBorder = UnderlineInputBorder(borderSide: borderSide);
+      final activeUnderlineBorder = UnderlineInputBorder(borderSide: activeBorderSide);
+
+      decoration = InputDecoration(
+        filled: false,
+        border: underlineBorder,
+        enabledBorder: underlineBorder,
+        focusedBorder: activeUnderlineBorder,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      );
+    } else if (isBorderless) {
+      final border = OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide.none,
+      );
+      decoration = InputDecoration(
+        filled: true,
+        fillColor: AppColors.surfaceContainerLow,
+        border: border,
+        enabledBorder: border,
+        focusedBorder: border,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      );
+    } else {
+      decoration = _inputDecoration(hasError: hasError);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1610,10 +1495,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           maxLines: maxLines,
           inputFormatters: inputFormatters,
           onChanged: onChanged,
-          decoration: _inputDecoration(hasError: hasError).copyWith(
+          decoration: decoration.copyWith(
             hintText: hint,
             prefixText: prefixText,
-            suffixIcon: suffixIcon == null
+            suffixIcon: suffixWidget ?? (suffixIcon == null
                 ? null
                 : IconButton(
                     icon: Icon(
@@ -1626,7 +1511,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                         : () async {
                             await onSuffixPressed();
                           },
-                  ),
+                  )),
           ),
         ),
       ],
@@ -1774,6 +1659,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     });
 
     final principal = _parseAmount(_principalController.text);
+    if (_selectedTypeKey == null) {
+      _missingRangeAlertShownForCurrentInput = false;
+      return;
+    }
     final hasRange = _matchedChargeBracket != null;
 
     if (principal <= 0 || hasRange) {
@@ -2383,10 +2272,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }) async {
     if (!mounted) return false;
 
-    // Use a proper StatefulWidget dialog so that mounted/setState
-    // are reliably scoped to the dialog's own element lifecycle,
-    // preventing the 'attached' RenderObject assertion after awaits.
-    final registeredAccount = await showDialog<String>(
+    final registeredParty = await showDialog<Party>(
       context: context,
       barrierDismissible: false,
       builder: (_) => _PartyRegistrationDialog(
@@ -2395,8 +2281,11 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       ),
     );
 
-    if (registeredAccount != null && mounted) {
-      _accountController.text = registeredAccount;
+    if (registeredParty != null && mounted) {
+      _accountController.text = registeredParty.accountNumber;
+      setState(() {
+        _matchedParty = registeredParty;
+      });
       return true;
     }
     return false;
@@ -2822,7 +2711,9 @@ class _PartyRegistrationDialogState
     );
 
     try {
-      await ref.read(partiesNotifierProvider.notifier).save(newParty);
+      final savedParty = await ref.read(partiesNotifierProvider.notifier).save(newParty);
+      if (!mounted) return;
+      Navigator.of(context).pop(savedParty);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -2831,9 +2722,6 @@ class _PartyRegistrationDialogState
       });
       return;
     }
-
-    if (!mounted) return;
-    Navigator.of(context).pop(normalizedAccount);
   }
 
   @override
@@ -3009,4 +2897,21 @@ class _PartyRegistrationDialogState
       ],
     );
   }
+}
+
+class DashedLinePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    double dashWidth = 5, dashSpace = 3, startX = 0;
+    final paint = Paint()
+      ..color = AppColors.outlineVariant.withValues(alpha: 0.8)
+      ..strokeWidth = 1.2;
+    while (startX < size.width) {
+      canvas.drawLine(Offset(startX, 0), Offset(startX + dashWidth, 0), paint);
+      startX += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

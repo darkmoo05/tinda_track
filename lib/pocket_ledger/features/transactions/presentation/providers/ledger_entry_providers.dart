@@ -7,7 +7,7 @@ import '../../domain/entities/ledger_entry.dart';
 import '../../domain/repositories/ledger_entry_repository.dart';
 
 final ledgerEntriesDaoProvider = Provider<LedgerEntriesDao>((ref) {
-  return LedgerEntriesDao(ref.watch(appDatabaseProvider));
+  return LedgerEntriesDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final ledgerEntryRepositoryProvider = Provider<LedgerEntryRepository>((ref) {
@@ -29,7 +29,7 @@ class LedgerEntriesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(ledgerEntryRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(entry));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

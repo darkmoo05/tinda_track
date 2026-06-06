@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import '../../network/api_client.dart';
+import '../app_database.dart';
 import '../connection/native.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/auth_repository_impl.dart';
@@ -87,47 +91,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final payload = _decodeJwt(token);
       final username = payload['username'] as String? ?? 'User';
       final role = payload['role'] as String? ?? 'OWNER';
+      // Restore the active username so the correct DB is opened on warm start.
+      ref.read(activeUsernameProvider.notifier).state = username;
       state = AuthState.authenticated(username: username, role: role);
     } else {
       state = const AuthState.unauthenticated();
-    }
-  }
-
-  Future<void> _checkAndWipeDatabaseOnUserMismatch(String newUsername) async {
-    try {
-      final lastUser = await _repository.getLastUsername();
-      if (lastUser != null && lastUser.trim().toLowerCase() != newUsername.trim().toLowerCase()) {
-        developer.log(
-          'Username mismatch detected ($lastUser vs $newUsername). Wiping local database.',
-          name: 'auth.user_mismatch',
-        );
-        // 1. Close database
-        final db = ref.read(appDatabaseProvider);
-        await db.close();
-
-        // 2. Delete database files
-        final file = await resolveDatabaseFile();
-        if (await file.exists()) {
-          await file.delete();
-        }
-        final walFile = File('${file.path}-wal');
-        if (await walFile.exists()) {
-          await walFile.delete();
-        }
-        final shmFile = File('${file.path}-shm');
-        if (await shmFile.exists()) {
-          await shmFile.delete();
-        }
-
-        // 3. Invalidate database provider
-        ref.invalidate(appDatabaseProvider);
-      }
-    } catch (e) {
-      developer.log(
-        'Error wiping database on cross-user login',
-        name: 'auth.user_mismatch',
-        error: e,
-      );
     }
   }
 
@@ -139,8 +107,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final name = user?['username'] as String? ?? username;
       final role = user?['role'] as String? ?? 'OWNER';
 
-      await _checkAndWipeDatabaseOnUserMismatch(name);
+      // Point the database layer at this user's personal DB file.
+      // Riverpod will open `tinda_track_user_<name>.sqlite` automatically.
+      ref.read(activeUsernameProvider.notifier).state = name;
+
       await _repository.saveLastUsername(name);
+
+      // Best-effort: delete DB files for other users that are fully synced.
+      unawaited(_cleanupSyncedUserDatabases(activeUsername: name));
 
       state = AuthState.authenticated(username: name, role: role);
       return true;
@@ -150,10 +124,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> register(String username, String password, {String role = 'OWNER'}) async {
+  Future<bool> register(
+    String username,
+    String password, {
+    String role = 'OWNER',
+    required String businessName,
+    required String businessType,
+    String defaultCurrency = 'PHP',
+  }) async {
     state = const AuthState.loading();
     try {
-      await _repository.register(username, password, role: role);
+      await _repository.register(
+        username,
+        password,
+        role: role,
+        businessName: businessName,
+        businessType: businessType,
+        defaultCurrency: defaultCurrency,
+      );
       // Automatically login after successful registration
       return await login(username, password);
     } catch (e) {
@@ -162,44 +150,118 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Logs the current user out.
+  ///
+  /// **Does not delete the local database.** The user's SQLite file is
+  /// preserved so that any unsynced offline data survives the session.
+  /// The file is only deleted later (on next login) after a confirmed sync
+  /// via [_cleanupSyncedUserDatabases].
   Future<void> logout() async {
     state = const AuthState.loading();
-    try {
-      // 1. Close the database connection
-      final db = ref.read(appDatabaseProvider);
-      await db.close();
 
-      // 2. Delete the local SQLite database files
-      final file = await resolveDatabaseFile();
-      if (await file.exists()) {
-        await file.delete();
-      }
-      final walFile = File('${file.path}-wal');
-      if (await walFile.exists()) {
-        await walFile.delete();
-      }
-      final shmFile = File('${file.path}-shm');
-      if (await shmFile.exists()) {
-        await shmFile.delete();
-      }
-    } catch (e) {
-      developer.log(
-        'Error wiping database on logout',
-        name: 'auth.logout',
-        error: e,
-      );
-    }
-
-    // 3. Clear auth token from secure storage
+    // 1. Clear auth token from secure storage — this is the only destructive step.
     await _repository.logout();
 
-    // 4. Invalidate database provider to recreate database next time it is read
-    ref.invalidate(appDatabaseProvider);
+    // 2. Reset the active username so the database provider is no longer pinned
+    //    to this user. The underlying DB connection will be disposed by Riverpod
+    //    when nothing else holds a reference to appDatabaseProvider(username).
+    ref.read(activeUsernameProvider.notifier).state = '';
 
     state = const AuthState.unauthenticated();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cleanup helper
+  // ---------------------------------------------------------------------------
+
+  /// Scans all per-user DB files in the app documents directory and deletes
+  /// any that belong to a user **other than** [activeUsername] AND whose
+  /// pending push count is zero (fully synced).
+  ///
+  /// Called on every successful login so stale files are eventually reclaimed
+  /// without ever risking unsynced data loss.
+  Future<void> _cleanupSyncedUserDatabases({
+    required String activeUsername,
+  }) async {
+    try {
+      final userFiles = await listUserDatabaseFiles();
+      final activeFile = await resolveDatabaseFileForUser(activeUsername);
+
+      for (final file in userFiles) {
+        // Skip the currently active user's DB — it is in use.
+        if (p.canonicalize(file.path) == p.canonicalize(activeFile.path)) continue;
+
+        // Open a temporary, isolated, one-off connection using NativeDatabase
+        // directly. This bypasses Drift's cache and prevents deadlocks or
+        // closing active connections.
+        final basename = file.path
+            .split(RegExp(r'[\\/]'))
+            .last
+            .replaceAll('.sqlite', '');
+        AppDatabase? tempDb;
+        try {
+          tempDb = AppDatabase.forExecutor(
+            NativeDatabase(file),
+          );
+
+          // Count dirty rows across all tables by querying the sync_state
+          // table's `pending_count` column which is maintained by the engine.
+          // Add a short timeout so a locked DB file doesn't block cleanup indefinitely.
+          final states = await tempDb.select(tempDb.syncState).get().timeout(
+            const Duration(seconds: 1),
+          );
+          final totalPending = states.fold<int>(
+            0,
+            (sum, row) => sum + row.pendingPushCount,
+          );
+
+          if (totalPending == 0) {
+            developer.log(
+              'Deleting fully-synced DB for former user: $basename',
+              name: 'auth.cleanup',
+            );
+            await tempDb.close().timeout(const Duration(seconds: 1));
+            tempDb = null;
+            await _deleteDbFiles(file);
+          }
+        } catch (e) {
+          developer.log(
+            'Could not inspect or clean up $basename: $e',
+            name: 'auth.cleanup',
+          );
+        } finally {
+          if (tempDb != null) {
+            try {
+              await tempDb.close().timeout(const Duration(seconds: 1));
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      // Non-fatal — cleanup is best-effort.
+      developer.log(
+        'Error during stale DB cleanup: $e',
+        name: 'auth.cleanup',
+      );
+    }
+  }
+
+  /// Deletes a SQLite database file together with its WAL and SHM sidecar files.
+  Future<void> _deleteDbFiles(File mainFile) async {
+    for (final path in [
+      mainFile.path,
+      '${mainFile.path}-wal',
+      '${mainFile.path}-shm',
+    ]) {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    }
   }
 }
 
 final authStateProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(ref.watch(authRepositoryProvider), ref);
 });
+
+
+

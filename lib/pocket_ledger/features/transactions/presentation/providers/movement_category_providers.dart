@@ -7,7 +7,7 @@ import '../../domain/entities/movement_category.dart';
 import '../../domain/repositories/movement_category_repository.dart';
 
 final movementCategoriesDaoProvider = Provider<MovementCategoriesDao>(
-  (ref) => MovementCategoriesDao(ref.watch(appDatabaseProvider)),
+  (ref) => MovementCategoriesDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 final movementCategoryRepositoryProvider = Provider<MovementCategoryRepository>(
@@ -28,7 +28,7 @@ class MovementCategoriesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(movementCategoryRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(category));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

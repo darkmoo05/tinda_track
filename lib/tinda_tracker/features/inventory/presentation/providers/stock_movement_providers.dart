@@ -7,7 +7,7 @@ import '../../domain/entities/stock_movement.dart';
 import '../../domain/repositories/stock_movement_repository.dart';
 
 final stockMovementsDaoProvider = Provider<StockMovementsDao>((ref) {
-  return StockMovementsDao(ref.watch(appDatabaseProvider));
+  return StockMovementsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final stockMovementRepositoryProvider = Provider<StockMovementRepository>((
@@ -36,7 +36,7 @@ class StockMovementsNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(stockMovementRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.record(movement));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 }

@@ -6,12 +6,14 @@ class CartItem {
   final String selectedUnitName;
   final double quantity;
   final double appliedPrice;
+  final List<String> selectedSerials;
 
   const CartItem({
     required this.product,
     required this.selectedUnitName,
     required this.quantity,
     required this.appliedPrice,
+    this.selectedSerials = const [],
   });
 
   factory CartItem.fromProduct(InventoryProduct product) {
@@ -20,6 +22,7 @@ class CartItem {
       selectedUnitName: product.baseUnit,
       quantity: 1,
       appliedPrice: product.sellingPrice,
+      selectedSerials: const [],
     );
   }
 
@@ -49,12 +52,14 @@ class CartItem {
     String? selectedUnitName,
     double? quantity,
     double? appliedPrice,
+    List<String>? selectedSerials,
   }) {
     return CartItem(
       product: product ?? this.product,
       selectedUnitName: selectedUnitName ?? this.selectedUnitName,
       quantity: quantity ?? this.quantity,
       appliedPrice: appliedPrice ?? this.appliedPrice,
+      selectedSerials: selectedSerials ?? this.selectedSerials,
     );
   }
 }

@@ -1525,4 +1525,161 @@ class AppLocalizationsCeb extends AppLocalizations {
   String categoryAndUnit(String category, String unit) {
     return 'Kategorya: $category  |  $unit';
   }
+
+  @override
+  String get errEmptyCart => 'Walay butang sa cart.';
+
+  @override
+  String get errNegativePaidAmount => 'Dili pwede nga negatibo ang bayad.';
+
+  @override
+  String errUnitConversionNotSet(String unit, String product) {
+    return 'Wala ma-set ang yunit conversion para sa yunit nga $unit sa produktong $product.';
+  }
+
+  @override
+  String errEmptyRecipeIngredients(String product) {
+    return 'Walay sangkap nga naka-set para sa recipe product: $product.';
+  }
+
+  @override
+  String errInsufficientIngredientStock(
+    String ingredient,
+    String product,
+    double needed,
+    double available,
+  ) {
+    return 'Kulang ang stock sa sangkap nga $ingredient para sa recipe product: $product. Gikinahanglan: $needed, naa ra: $available.';
+  }
+
+  @override
+  String errInsufficientProductStock(
+    String product,
+    double needed,
+    double available,
+  ) {
+    return 'Kulang ang stock para sa $product. Gikinahanglan: $needed, naa ra: $available.';
+  }
+
+  @override
+  String errSerialSelection(int required, String product, int selected) {
+    return 'Kinahanglan mopili og eksaktong $required serial number(s) para sa $product. Kasamtangang napili: $selected.';
+  }
+
+  @override
+  String errSerialNotAvailable(String serial) {
+    return 'Ang serial number nga \"$serial\" dili magamit o nabaligya na.';
+  }
+
+  @override
+  String errPaidAmountInsufficient(double paid, double total) {
+    return 'Kulang ang bayad sa customer. Bayad: $paid, Total: $total.';
+  }
+
+  @override
+  String get noIngredientsAvailable => 'Walay magamit nga sangkap';
+
+  @override
+  String get noIngredientsSet =>
+      'Walay sangkap nga naka-set. Pagdugang og mga sangkap sa ubos.';
+
+  @override
+  String get noSerialsRegistered => 'Walay serial number nga narehistro.';
+
+  @override
+  String get noBarcodeRead => 'Walay barcode nga nabasahan. Sulayi pag-usab.';
+
+  @override
+  String noProductForBarcode(String code) {
+    return 'Walay produkto nga na-link sa barcode nga \"$code\".';
+  }
+
+  @override
+  String get addItemsFirst =>
+      'Pagdugang og mga item sa cart sa dili pa mag-checkout.';
+
+  @override
+  String get cannotCheckoutNow =>
+      'Dili makapadayon sa checkout karon. Palihog susiha pag-usab.';
+
+  @override
+  String get insufficientPayment =>
+      'Kulang ang bayad. Palihog susiha pag-usab.';
+
+  @override
+  String checkoutFailed(String error) {
+    return 'Napakyas ang checkout: $error';
+  }
+
+  @override
+  String get failedToLoadProducts =>
+      'Napakyas sa pag-load sa mga produkto. Palihog sulayi pag-usab.';
+
+  @override
+  String get noProductsFound => 'Walay nakit-an nga mga produkto.';
+
+  @override
+  String get lowStockWarningEditAllowed =>
+      'Adunay mga item nga ubos ang stock. Pwede pa gihapon nimo kining usbon sa dili pa mag-checkout.';
+
+  @override
+  String get noSerialsAvailableForProduct =>
+      'Walay magamit nga serial number para sa kini nga produkto.';
+
+  @override
+  String get noMatchingProducts => 'Walay nakit-an nga parehas nga produkto.';
+
+  @override
+  String get scanDuplicateWarning =>
+      'Nabasahan na kini kaniadto lang. I-scan pag-usab human sa makadiyot.';
+
+  @override
+  String addedToQueue(String product) {
+    return 'Nadugang sa queue: $product';
+  }
+
+  @override
+  String saleCompleteWithChange(String change) {
+    return 'Nahuman ang pagbaligya! Sukli: $change';
+  }
+
+  @override
+  String selectSerialsRequired(int required, int selected) {
+    return 'Pumili og eksaktong $required ka serial number(s). Napili: $selected';
+  }
+
+  @override
+  String serialsLimitExceeded(int required) {
+    return 'Limitado hangtod sa $required ka serials ra.';
+  }
+
+  @override
+  String get continuousScan => 'Continuous scan';
+
+  @override
+  String get muteScanSound => 'I-mute ang tingog sa scan';
+
+  @override
+  String get enableScanSound => 'I-enable ang tingog sa scan';
+
+  @override
+  String get disableVibration => 'I-disable ang vibration';
+
+  @override
+  String get enableVibration => 'I-enable ang vibration';
+
+  @override
+  String get typeBarcodeManually => 'I-type ang barcode sa manwal';
+
+  @override
+  String get serialAlreadyAdded => 'Kining serial number gidugang na.';
+
+  @override
+  String stockMustMatchSerials(int stock, int count) {
+    return 'Ang stock quantity ($stock) kinahanglan katumbas sa gidaghanon sa available serial numbers ($count).';
+  }
+
+  @override
+  String get scanOrTypeSerial =>
+      'Mag-scan o mag-type ug serial number aron idugang.';
 }

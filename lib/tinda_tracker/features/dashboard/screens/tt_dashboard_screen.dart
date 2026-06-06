@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/app_theme.dart';
+import '../../inventory/providers/inventory_providers.dart';
 import '../../pos/data/pos_repository.dart';
 
 class TtDashboardScreen extends ConsumerStatefulWidget {
@@ -17,8 +18,10 @@ class TtDashboardScreen extends ConsumerStatefulWidget {
 
 class _TtDashboardScreenState extends ConsumerState<TtDashboardScreen> {
   late Future<DashboardStats> _statsFuture;
-  final _currency = NumberFormat.currency(symbol: '₱', decimalDigits: 2);
-  final _compact = NumberFormat.compactCurrency(symbol: '₱', decimalDigits: 0);
+  
+  String get _currencySymbol => ref.watch(businessProfileProvider).value?.defaultCurrency == 'USD' ? r'$' : '₱';
+  NumberFormat get _currency => NumberFormat.currency(symbol: _currencySymbol, decimalDigits: 2);
+  NumberFormat get _compact => NumberFormat.compactCurrency(symbol: _currencySymbol, decimalDigits: 0);
 
   @override
   void initState() {
@@ -145,9 +148,9 @@ class _TtDashboardScreenState extends ConsumerState<TtDashboardScreen> {
                       color: AppColors.onSurfaceVariant,
                     ),
                   ),
-                  const Text(
-                    'My Sari-Sari Store',
-                    style: TextStyle(
+                  Text(
+                    ref.watch(businessProfileProvider).value?.businessName ?? 'My Store',
+                    style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: AppColors.onSurface,

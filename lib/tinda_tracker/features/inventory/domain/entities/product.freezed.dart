@@ -39,6 +39,9 @@ mixin _$Product {
   DateTime? get expirationDate => throw _privateConstructorUsedError;
   String? get categoryId => throw _privateConstructorUsedError;
   String? get shelfLocationId => throw _privateConstructorUsedError;
+  String get itemType => throw _privateConstructorUsedError;
+  Map<String, dynamic> get customAttributes =>
+      throw _privateConstructorUsedError;
   SyncMetadata get sync => throw _privateConstructorUsedError;
 
   /// Serializes this Product to a JSON map.
@@ -74,6 +77,8 @@ abstract class $ProductCopyWith<$Res> {
     DateTime? expirationDate,
     String? categoryId,
     String? shelfLocationId,
+    String itemType,
+    Map<String, dynamic> customAttributes,
     SyncMetadata sync,
   });
 
@@ -112,6 +117,8 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? expirationDate = freezed,
     Object? categoryId = freezed,
     Object? shelfLocationId = freezed,
+    Object? itemType = null,
+    Object? customAttributes = null,
     Object? sync = null,
   }) {
     return _then(
@@ -184,6 +191,14 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
                 ? _value.shelfLocationId
                 : shelfLocationId // ignore: cast_nullable_to_non_nullable
                       as String?,
+            itemType: null == itemType
+                ? _value.itemType
+                : itemType // ignore: cast_nullable_to_non_nullable
+                      as String,
+            customAttributes: null == customAttributes
+                ? _value.customAttributes
+                : customAttributes // ignore: cast_nullable_to_non_nullable
+                      as Map<String, dynamic>,
             sync: null == sync
                 ? _value.sync
                 : sync // ignore: cast_nullable_to_non_nullable
@@ -231,6 +246,8 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
     DateTime? expirationDate,
     String? categoryId,
     String? shelfLocationId,
+    String itemType,
+    Map<String, dynamic> customAttributes,
     SyncMetadata sync,
   });
 
@@ -269,6 +286,8 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? expirationDate = freezed,
     Object? categoryId = freezed,
     Object? shelfLocationId = freezed,
+    Object? itemType = null,
+    Object? customAttributes = null,
     Object? sync = null,
   }) {
     return _then(
@@ -341,6 +360,14 @@ class __$$ProductImplCopyWithImpl<$Res>
             ? _value.shelfLocationId
             : shelfLocationId // ignore: cast_nullable_to_non_nullable
                   as String?,
+        itemType: null == itemType
+            ? _value.itemType
+            : itemType // ignore: cast_nullable_to_non_nullable
+                  as String,
+        customAttributes: null == customAttributes
+            ? _value._customAttributes
+            : customAttributes // ignore: cast_nullable_to_non_nullable
+                  as Map<String, dynamic>,
         sync: null == sync
             ? _value.sync
             : sync // ignore: cast_nullable_to_non_nullable
@@ -371,8 +398,10 @@ class _$ProductImpl implements _Product {
     this.expirationDate,
     this.categoryId,
     this.shelfLocationId,
+    this.itemType = 'standard',
+    final Map<String, dynamic> customAttributes = const <String, dynamic>{},
     required this.sync,
-  });
+  }) : _customAttributes = customAttributes;
 
   factory _$ProductImpl.fromJson(Map<String, dynamic> json) =>
       _$$ProductImplFromJson(json);
@@ -421,11 +450,23 @@ class _$ProductImpl implements _Product {
   @override
   final String? shelfLocationId;
   @override
+  @JsonKey()
+  final String itemType;
+  final Map<String, dynamic> _customAttributes;
+  @override
+  @JsonKey()
+  Map<String, dynamic> get customAttributes {
+    if (_customAttributes is EqualUnmodifiableMapView) return _customAttributes;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_customAttributes);
+  }
+
+  @override
   final SyncMetadata sync;
 
   @override
   String toString() {
-    return 'Product(id: $id, name: $name, sku: $sku, description: $description, category: $category, baseUnit: $baseUnit, costPrice: $costPrice, sellingPrice: $sellingPrice, stockInBaseUnit: $stockInBaseUnit, reorderPoint: $reorderPoint, isActive: $isActive, imageUrl: $imageUrl, imageLocalPath: $imageLocalPath, shelfLocation: $shelfLocation, expirationDate: $expirationDate, categoryId: $categoryId, shelfLocationId: $shelfLocationId, sync: $sync)';
+    return 'Product(id: $id, name: $name, sku: $sku, description: $description, category: $category, baseUnit: $baseUnit, costPrice: $costPrice, sellingPrice: $sellingPrice, stockInBaseUnit: $stockInBaseUnit, reorderPoint: $reorderPoint, isActive: $isActive, imageUrl: $imageUrl, imageLocalPath: $imageLocalPath, shelfLocation: $shelfLocation, expirationDate: $expirationDate, categoryId: $categoryId, shelfLocationId: $shelfLocationId, itemType: $itemType, customAttributes: $customAttributes, sync: $sync)';
   }
 
   @override
@@ -464,12 +505,18 @@ class _$ProductImpl implements _Product {
                 other.categoryId == categoryId) &&
             (identical(other.shelfLocationId, shelfLocationId) ||
                 other.shelfLocationId == shelfLocationId) &&
+            (identical(other.itemType, itemType) ||
+                other.itemType == itemType) &&
+            const DeepCollectionEquality().equals(
+              other._customAttributes,
+              _customAttributes,
+            ) &&
             (identical(other.sync, sync) || other.sync == sync));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     runtimeType,
     id,
     name,
@@ -488,8 +535,10 @@ class _$ProductImpl implements _Product {
     expirationDate,
     categoryId,
     shelfLocationId,
+    itemType,
+    const DeepCollectionEquality().hash(_customAttributes),
     sync,
-  );
+  ]);
 
   /// Create a copy of Product
   /// with the given fields replaced by the non-null parameter values.
@@ -525,6 +574,8 @@ abstract class _Product implements Product {
     final DateTime? expirationDate,
     final String? categoryId,
     final String? shelfLocationId,
+    final String itemType,
+    final Map<String, dynamic> customAttributes,
     required final SyncMetadata sync,
   }) = _$ProductImpl;
 
@@ -565,6 +616,10 @@ abstract class _Product implements Product {
   String? get categoryId;
   @override
   String? get shelfLocationId;
+  @override
+  String get itemType;
+  @override
+  Map<String, dynamic> get customAttributes;
   @override
   SyncMetadata get sync;
 

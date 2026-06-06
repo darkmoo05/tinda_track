@@ -14,6 +14,7 @@ import '../features/charges/screens/charges_screen.dart';
 import '../features/transactions/screens/add_transaction_screen.dart';
 import '../features/transactions/screens/add_owner_movement_screen.dart';
 import '../../shared/widgets/app_side_drawer.dart';
+import '../../shared/widgets/unsynced_banner.dart';
 import 'pocket_ledger_drawer_config.dart';
 
 class MainShell extends ConsumerStatefulWidget {
@@ -209,6 +210,14 @@ class _MainShellState extends ConsumerState<MainShell>
       ),
       body: Stack(
         children: [
+          // Unsynced data warning — only visible when a returning user has
+          // offline changes that weren't pushed before their last logout.
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: UnsyncedBanner(),
+          ),
           IndexedStack(
             index: _selectedIndex,
             children: [

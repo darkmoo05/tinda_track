@@ -628,5 +628,123 @@
       "category": { "type": "String" },
       "unit": { "type": "String" }
     }
-  }
+  },
+  "errEmptyCart": "No items in checkout queue. Add items before checking out.",
+  "errNegativePaidAmount": "Paid amount cannot be negative.",
+  "errUnitConversionNotSet": "Unit {unit} is not configured for {product}.",
+  "@errUnitConversionNotSet": {
+    "placeholders": {
+      "unit": { "type": "String" },
+      "product": { "type": "String" }
+    }
+  },
+  "errEmptyRecipeIngredients": "No ingredients configured for recipe {product}.",
+  "@errEmptyRecipeIngredients": {
+    "placeholders": {
+      "product": { "type": "String" }
+    }
+  },
+  "errInsufficientIngredientStock": "Insufficient stock for ingredient {ingredient} of {product}. Needed: {needed}, Available: {available}.",
+  "@errInsufficientIngredientStock": {
+    "placeholders": {
+      "ingredient": { "type": "String" },
+      "product": { "type": "String" },
+      "needed": { "type": "double" },
+      "available": { "type": "double" }
+    }
+  },
+  "errInsufficientProductStock": "Insufficient stock for {product}. Needed: {needed}, Available: {available}.",
+  "@errInsufficientProductStock": {
+    "placeholders": {
+      "product": { "type": "String" },
+      "needed": { "type": "double" },
+      "available": { "type": "double" }
+    }
+  },
+  "errSerialSelection": "Please select exactly {required} serial number(s) for {product}. Selected: {selected}.",
+  "@errSerialSelection": {
+    "placeholders": {
+      "required": { "type": "int" },
+      "product": { "type": "String" },
+      "selected": { "type": "int" }
+    }
+  },
+  "errSerialNotAvailable": "Serial number \"{serial}\" is not available.",
+  "@errSerialNotAvailable": {
+    "placeholders": {
+      "serial": { "type": "String" }
+    }
+  },
+  "errPaidAmountInsufficient": "Insufficient payment. Paid: {paid}, Total: {total}.",
+  "@errPaidAmountInsufficient": {
+    "placeholders": {
+      "paid": { "type": "double" },
+      "total": { "type": "double" }
+    }
+  },
+  "noIngredientsAvailable": "No ingredients available.",
+  "noIngredientsSet": "No ingredients set. Add ingredients below.",
+  "noSerialsRegistered": "No serial numbers registered.",
+  "noBarcodeRead": "No barcode detected. Try again.",
+  "noProductForBarcode": "No product linked to barcode \"{code}\".",
+  "@noProductForBarcode": {
+    "placeholders": {
+      "code": { "type": "String" }
+    }
+  },
+  "addItemsFirst": "Add items to the cart before checking out.",
+  "cannotCheckoutNow": "Cannot checkout now. Please check again.",
+  "insufficientPayment": "Insufficient payment. Please check again.",
+  "checkoutFailed": "Checkout failed: {error}",
+  "@checkoutFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "failedToLoadProducts": "Failed to load products. Please try again.",
+  "noProductsFound": "No products found.",
+  "lowStockWarningEditAllowed": "Some items are low on stock. You can still edit them before checkout.",
+  "noSerialsAvailableForProduct": "No available serial numbers for this product.",
+  "noMatchingProducts": "No matching products found.",
+  "scanDuplicateWarning": "This was scanned just recently. Scan again after a moment.",
+  "addedToQueue": "Added to queue: {product}",
+  "@addedToQueue": {
+    "placeholders": {
+      "product": { "type": "String" }
+    }
+  },
+  "saleCompleteWithChange": "Sale complete! Change: {change}",
+  "@saleCompleteWithChange": {
+    "placeholders": {
+      "change": { "type": "String" }
+    }
+  },
+  "selectSerialsRequired": "Please select exactly {required} serial number(s). Selected: {selected}",
+  "@selectSerialsRequired": {
+    "placeholders": {
+      "required": { "type": "int" },
+      "selected": { "type": "int" }
+    }
+  },
+  "serialsLimitExceeded": "Limit is up to {required} serials only.",
+  "@serialsLimitExceeded": {
+    "placeholders": {
+      "required": { "type": "int" }
+    }
+  },
+  "continuousScan": "Continuous scan",
+  "muteScanSound": "Mute scan sound",
+  "enableScanSound": "Enable scan sound",
+  "disableVibration": "Disable vibration",
+  "enableVibration": "Enable vibration",
+  "typeBarcodeManually": "Type barcode manually",
+  "serialAlreadyAdded": "This serial number has already been added.",
+  "stockMustMatchSerials": "Stock quantity ({stock}) must equal the number of available serial numbers ({count}).",
+  "@stockMustMatchSerials": {
+    "placeholders": {
+      "stock": { "type": "int" },
+      "count": { "type": "int" }
+    }
+  },
+  "scanOrTypeSerial": "Scan or type a serial number to add."
 }

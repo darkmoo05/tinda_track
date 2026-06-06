@@ -1,9 +1,15 @@
 /// Single canonical home for every database-related Riverpod provider.
 ///
 /// Feature code, sync code, and screens should import providers from
-/// **this file only**. The legacy `lib/core/di/database_providers.dart`
-/// re-exports the [appDatabaseProvider] from here for backwards
-/// compatibility.
+/// **this file only**.
+///
+/// ## Per-user database isolation
+/// Each logged-in user has their own SQLite file on disk.
+/// `activeUsernameProvider` holds the currently logged-in username.
+/// `appDatabaseProvider` is a family keyed by username that opens or reuses
+/// the correct per-user [AppDatabase].
+/// `currentAppDatabaseProvider` is a convenience alias that delegates to the
+/// family using the active username — all DAOs should watch this.
 ///
 /// Adding a new DAO? Add its provider here once, then expose it via the
 /// feature's own presentation/providers folder if it needs additional
@@ -39,78 +45,104 @@ import '../daos/tinda_tracker/sales_dao.dart';
 import '../daos/tinda_tracker/shelf_locations_dao.dart';
 import '../daos/tinda_tracker/stock_movements_dao.dart';
 import '../daos/tinda_tracker/utang_records_dao.dart';
+import '../daos/tinda_tracker/business_profiles_dao.dart';
 import '../daos/tinda_tracker_dao.dart';
 
 // ── Database ─────────────────────────────────────────────────────────────────
 
-/// Singleton-per-process [AppDatabase]. Disposed on container teardown.
-final appDatabaseProvider = Provider<AppDatabase>((ref) {
-  final db = AppDatabase();
+import '../connection/native.dart';
+
+/// Holds the username of the currently authenticated user.
+///
+/// Set to the real username string on login, and reset to an empty string on
+/// logout. All database providers derive their connection from this value.
+final activeUsernameProvider = StateProvider<String>((ref) => '');
+
+/// Per-user [AppDatabase] family.
+///
+/// Keyed by the sanitized username string. Riverpod automatically caches and
+/// disposes each instance when it is no longer watched.
+final appDatabaseProvider = Provider.family<AppDatabase, String>((ref, username) {
+  final db = username.isNotEmpty
+      ? AppDatabase.forExecutor(openAppConnectionForUser(username))
+      : AppDatabase(); // fallback for test / legacy migration path
   ref.onDispose(db.close);
   return db;
+});
+
+/// Convenience alias that automatically reads the active username and delegates
+/// to [appDatabaseProvider]. All DAOs watch this instead of the family directly
+/// so that switching users hot-swaps the underlying database with zero
+/// call-site changes.
+final currentAppDatabaseProvider = Provider<AppDatabase>((ref) {
+  final username = ref.watch(activeUsernameProvider);
+  return ref.watch(appDatabaseProvider(username));
 });
 
 // ── Shared DAOs ──────────────────────────────────────────────────────────────
 
 final databaseSyncStateDaoProvider = Provider<SyncStateDao>(
-  (ref) => SyncStateDao(ref.watch(appDatabaseProvider)),
+  (ref) => SyncStateDao(ref.watch(currentAppDatabaseProvider)),
 );
 final databaseAppMetaDaoProvider = Provider<AppMetaDao>(
-  (ref) => AppMetaDao(ref.watch(appDatabaseProvider)),
+  (ref) => AppMetaDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 // ── Pocket Ledger DAOs ───────────────────────────────────────────────────────
 
 final chargesDaoProvider = Provider<ChargesDao>(
-  (ref) => ChargesDao(ref.watch(appDatabaseProvider)),
+  (ref) => ChargesDao(ref.watch(currentAppDatabaseProvider)),
 );
 final partiesDaoProvider = Provider<PartiesDao>(
-  (ref) => PartiesDao(ref.watch(appDatabaseProvider)),
+  (ref) => PartiesDao(ref.watch(currentAppDatabaseProvider)),
 );
 final transactionTypesDaoProvider = Provider<TransactionTypesDao>(
-  (ref) => TransactionTypesDao(ref.watch(appDatabaseProvider)),
+  (ref) => TransactionTypesDao(ref.watch(currentAppDatabaseProvider)),
 );
 final movementCategoriesDaoProvider = Provider<MovementCategoriesDao>(
-  (ref) => MovementCategoriesDao(ref.watch(appDatabaseProvider)),
+  (ref) => MovementCategoriesDao(ref.watch(currentAppDatabaseProvider)),
 );
 final ledgerEntriesDaoProvider = Provider<LedgerEntriesDao>(
-  (ref) => LedgerEntriesDao(ref.watch(appDatabaseProvider)),
+  (ref) => LedgerEntriesDao(ref.watch(currentAppDatabaseProvider)),
 );
 final transactionsDaoProvider = Provider<TransactionsDao>(
-  (ref) => TransactionsDao(ref.watch(appDatabaseProvider)),
+  (ref) => TransactionsDao(ref.watch(currentAppDatabaseProvider)),
 );
 final feeTransactionsDaoProvider = Provider<FeeTransactionsDao>(
-  (ref) => FeeTransactionsDao(ref.watch(appDatabaseProvider)),
+  (ref) => FeeTransactionsDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 // ── Tinda Tracker DAOs ───────────────────────────────────────────────────────
 
 final productCategoriesDaoProvider = Provider<ProductCategoriesDao>(
-  (ref) => ProductCategoriesDao(ref.watch(appDatabaseProvider)),
+  (ref) => ProductCategoriesDao(ref.watch(currentAppDatabaseProvider)),
 );
 final shelfLocationsDaoProvider = Provider<ShelfLocationsDao>(
-  (ref) => ShelfLocationsDao(ref.watch(appDatabaseProvider)),
+  (ref) => ShelfLocationsDao(ref.watch(currentAppDatabaseProvider)),
 );
 final productsDaoProvider = Provider<ProductsDao>(
-  (ref) => ProductsDao(ref.watch(appDatabaseProvider)),
+  (ref) => ProductsDao(ref.watch(currentAppDatabaseProvider)),
 );
 final productUnitConversionsDaoProvider = Provider<ProductUnitConversionsDao>(
-  (ref) => ProductUnitConversionsDao(ref.watch(appDatabaseProvider)),
+  (ref) => ProductUnitConversionsDao(ref.watch(currentAppDatabaseProvider)),
 );
 final stockMovementsDaoProvider = Provider<StockMovementsDao>(
-  (ref) => StockMovementsDao(ref.watch(appDatabaseProvider)),
+  (ref) => StockMovementsDao(ref.watch(currentAppDatabaseProvider)),
 );
 final customersDaoProvider = Provider<CustomersDao>(
-  (ref) => CustomersDao(ref.watch(appDatabaseProvider)),
+  (ref) => CustomersDao(ref.watch(currentAppDatabaseProvider)),
 );
 final utangRecordsDaoProvider = Provider<UtangRecordsDao>(
-  (ref) => UtangRecordsDao(ref.watch(appDatabaseProvider)),
+  (ref) => UtangRecordsDao(ref.watch(currentAppDatabaseProvider)),
 );
 final salesDaoProvider = Provider<SalesDao>(
-  (ref) => SalesDao(ref.watch(appDatabaseProvider)),
+  (ref) => SalesDao(ref.watch(currentAppDatabaseProvider)),
 );
 final saleItemsDaoProvider = Provider<SaleItemsDao>(
-  (ref) => SaleItemsDao(ref.watch(appDatabaseProvider)),
+  (ref) => SaleItemsDao(ref.watch(currentAppDatabaseProvider)),
+);
+final businessProfilesDaoProvider = Provider<BusinessProfilesDao>(
+  (ref) => BusinessProfilesDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 // ── Grouped facade DAOs (preferred for new code) ─────────────────────────────
@@ -121,10 +153,10 @@ final saleItemsDaoProvider = Provider<SaleItemsDao>(
 // instance, so there is no double-bookkeeping.
 
 final pocketLedgerDaoProvider = Provider<PocketLedgerDao>(
-  (ref) => PocketLedgerDao(ref.watch(appDatabaseProvider)),
+  (ref) => PocketLedgerDao(ref.watch(currentAppDatabaseProvider)),
 );
 final tindaTrackerDaoProvider = Provider<TindaTrackerDao>(
-  (ref) => TindaTrackerDao(ref.watch(appDatabaseProvider)),
+  (ref) => TindaTrackerDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 // ── Central Repositories ─────────────────────────────────────────────────────
@@ -138,6 +170,6 @@ final localTransactionRepositoryProvider = Provider<TransactionRepository>((ref)
 });
 
 final localInventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
-  return InventoryRepositoryImpl(database: ref.watch(appDatabaseProvider));
+  return InventoryRepositoryImpl(database: ref.watch(currentAppDatabaseProvider));
 });
 

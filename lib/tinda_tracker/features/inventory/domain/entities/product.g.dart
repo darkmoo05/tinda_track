@@ -26,6 +26,10 @@ _$ProductImpl _$$ProductImplFromJson(Map<String, dynamic> json) =>
           : DateTime.parse(json['expirationDate'] as String),
       categoryId: json['categoryId'] as String?,
       shelfLocationId: json['shelfLocationId'] as String?,
+      itemType: json['itemType'] as String? ?? 'standard',
+      customAttributes:
+          json['customAttributes'] as Map<String, dynamic>? ??
+          const <String, dynamic>{},
       sync: SyncMetadata.fromJson(json['sync'] as Map<String, dynamic>),
     );
 
@@ -47,5 +51,7 @@ Map<String, dynamic> _$$ProductImplToJson(_$ProductImpl instance) =>
       'expirationDate': instance.expirationDate?.toIso8601String(),
       'categoryId': instance.categoryId,
       'shelfLocationId': instance.shelfLocationId,
+      'itemType': instance.itemType,
+      'customAttributes': instance.customAttributes,
       'sync': instance.sync,
     };

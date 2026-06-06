@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:vibration/vibration.dart';
 
+import 'package:tinda_track/l10n/app_localizations.dart';
+import '../data/exceptions/pos_exceptions.dart';
 import '../../../../core/app_theme.dart';
 import '../../../../core/network/api_client.dart';
 import '../../inventory/data/models/inventory_product.dart';
@@ -22,6 +24,53 @@ class PosScreen extends ConsumerStatefulWidget {
   ConsumerState<PosScreen> createState() => _PosScreenState();
 }
 
+String _getLocalizedErrorMessage(BuildContext context, dynamic error) {
+  final l10n = AppLocalizations.of(context)!;
+  if (error is CheckoutEmptyCartException) {
+    return l10n.errEmptyCart;
+  } else if (error is NegativePaidAmountException) {
+    return l10n.errNegativePaidAmount;
+  } else if (error is UnitConversionNotSetException) {
+    return l10n.errUnitConversionNotSet(error.unitName, error.productName);
+  } else if (error is EmptyRecipeIngredientsException) {
+    return l10n.errEmptyRecipeIngredients(error.productName);
+  } else if (error is InsufficientIngredientStockException) {
+    return l10n.errInsufficientIngredientStock(
+      error.ingredientName,
+      error.productName,
+      error.needed,
+      error.available,
+    );
+  } else if (error is InsufficientProductStockException) {
+    return l10n.errInsufficientProductStock(
+      error.productName,
+      error.needed,
+      error.available,
+    );
+  } else if (error is SerialSelectionException) {
+    return l10n.errSerialSelection(
+      error.requiredCount,
+      error.productName,
+      error.selectedCount,
+    );
+  } else if (error is SerialNotAvailableException) {
+    return l10n.errSerialNotAvailable(error.serialNumber);
+  } else if (error is PaidAmountInsufficientException) {
+    return l10n.errPaidAmountInsufficient(error.paidAmount, error.totalAmount);
+  }
+  return error.toString();
+}
+
+String _getCheckoutDisabledReasonMessage(BuildContext context, CheckoutDisabledReason reason) {
+  final l10n = AppLocalizations.of(context)!;
+  switch (reason) {
+    case CheckoutDisabledReason.emptyCart:
+      return l10n.addItemsFirst;
+    case CheckoutDisabledReason.stockIssue:
+      return l10n.lowStockWarningEditAllowed;
+  }
+}
+
 class _PosScreenState extends ConsumerState<PosScreen> {
   final _searchController = TextEditingController();
   final _currency = NumberFormat.currency(symbol: '₱', decimalDigits: 2);
@@ -30,6 +79,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   bool _isLaunchingScanner = false;
   bool _isGridView = true;
   bool _isProcessing = false;
+
+  // Standalone helper functions moved out of State class to be accessible by other widgets in this file.
 
   @override
   void initState() {
@@ -78,10 +129,11 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   Future<_ScanAddResult> _addItemFromScannedCode(String rawCode) async {
     final code = rawCode.trim();
+    final l10n = AppLocalizations.of(context)!;
     if (code.isEmpty) {
-      return const _ScanAddResult(
+      return _ScanAddResult(
         success: false,
-        message: 'Walang nabasang barcode. Subukan ulit.',
+        message: l10n.noBarcodeRead,
         historyLabel: 'Invalid code',
       );
     }
@@ -94,8 +146,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     if (isDuplicate) {
       return _ScanAddResult(
         success: false,
-        message:
-            'Nabasa na ito kanina lang. I-scan ulit pagkatapos ng sandali.',
+        message: l10n.scanDuplicateWarning,
         historyLabel: code,
       );
     }
@@ -109,7 +160,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     if (product == null) {
       return _ScanAddResult(
         success: false,
-        message: 'Walang product na naka-link sa barcode na "$code".',
+        message: l10n.noProductForBarcode(code),
         historyLabel: code,
       );
     }
@@ -129,14 +180,18 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     if (afterQty <= beforeQty) {
       return _ScanAddResult(
         success: false,
-        message: 'Kulang ang stocks para sa ${product.name}.',
+        message: l10n.errInsufficientProductStock(
+          product.name,
+          beforeQty + 1,
+          product.stockInBaseUnit,
+        ),
         historyLabel: code,
       );
     }
 
     return _ScanAddResult(
       success: true,
-      message: 'Na-add sa queue: ${product.name}',
+      message: l10n.addedToQueue(product.name),
       historyLabel: product.name,
     );
   }
@@ -147,8 +202,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mag-add muna ng item bago mag-checkout.'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.addItemsFirst),
         ),
       );
       return;
@@ -162,8 +217,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            disabledReason ??
-                'Hindi puwedeng mag-checkout ngayon. Paki-check ulit.',
+            disabledReason != null
+                ? _getCheckoutDisabledReasonMessage(context, disabledReason)
+                : AppLocalizations.of(context)!.cannotCheckoutNow,
           ),
         ),
       );
@@ -248,9 +304,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     final paid = double.tryParse(paidController.text) ?? 0;
                     if (paid < total) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(
+                        SnackBar(
                           content: Text(
-                            'Kulangan ang binayad. Paki-check ulit.',
+                            AppLocalizations.of(dialogContext)!.insufficientPayment,
                           ),
                         ),
                       );
@@ -292,7 +348,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         SnackBar(
           backgroundColor: AppColors.secondary,
           content: Text(
-            'Sale complete! Sukli: ${_currency.format(sale.changeAmount)}',
+            AppLocalizations.of(context)!.saleCompleteWithChange(_currency.format(sale.changeAmount)),
             style: const TextStyle(color: Colors.white),
           ),
         ),
@@ -302,7 +358,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       setState(() => _isProcessing = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Hindi natuloy ang checkout: $e')));
+      ).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context)!.checkoutFailed(_getLocalizedErrorMessage(context, e)))));
     }
   }
 
@@ -376,7 +432,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
               ),
               error: (e, _) => Center(
                 child: Text(
-                  'Hindi ma-load ang products ngayon. Paki-try ulit.',
+                  AppLocalizations.of(context)!.failedToLoadProducts,
                   style: const TextStyle(color: AppColors.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
@@ -384,10 +440,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
               data: (products) {
                 final filtered = _filterProducts(products);
                 if (filtered.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
-                      'Walang nahanap na products',
-                      style: TextStyle(color: AppColors.onSurfaceVariant),
+                      AppLocalizations.of(context)!.noMatchingProducts,
+                      style: const TextStyle(color: AppColors.onSurfaceVariant),
                     ),
                   );
                 }
@@ -735,14 +791,14 @@ class _CartSheet extends ConsumerWidget {
                   color: AppColors.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, color: AppColors.error),
-                    SizedBox(width: 8),
+                    const Icon(Icons.warning_amber_rounded, color: AppColors.error),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Kulang ang stocks sa ilang item. Pwede ka pa ring mag-edit bago mag-checkout.',
-                        style: TextStyle(color: AppColors.error),
+                        AppLocalizations.of(context)!.lowStockWarningEditAllowed,
+                        style: const TextStyle(color: AppColors.error),
                       ),
                     ),
                   ],
@@ -884,8 +940,8 @@ class _CartSheet extends ConsumerWidget {
                           ],
                         ),
                         Builder(
-                          builder: (_) {
-                            final message = notifier.validationMessage(item);
+                          builder: (context) {
+                            final message = notifier.validationMessage(item, AppLocalizations.of(context));
                             if (message == null) return const SizedBox.shrink();
                             return Padding(
                               padding: const EdgeInsets.only(top: 6),
@@ -908,6 +964,78 @@ class _CartSheet extends ConsumerWidget {
                                   ),
                                 ],
                               ),
+                            );
+                          },
+                        ),
+                        // -- Serial numbers selection block -------------------
+                        Builder(
+                          builder: (context) {
+                            final countAsync = ref.watch(productSerialsCountProvider(item.product.id));
+                            return countAsync.when(
+                              loading: () => const SizedBox.shrink(),
+                              error: (_, stackTrace) => const SizedBox.shrink(),
+                              data: (totalSerialsCount) {
+                                if (totalSerialsCount == 0) return const SizedBox.shrink();
+                                
+                                final requiredCount = item.computedBaseQuantity.toInt();
+                                final selectedCount = item.selectedSerials.length;
+                                final hasCorrectCount = selectedCount == requiredCount;
+                                
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Divider(height: 12),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.vpn_key_rounded,
+                                            size: 16,
+                                            color: hasCorrectCount ? Colors.green : AppColors.error,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Serials: $selectedCount of $requiredCount selected',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: hasCorrectCount ? Colors.green : AppColors.error,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          TextButton.icon(
+                                            style: TextButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              minimumSize: Size.zero,
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            ),
+                                            icon: const Icon(Icons.edit_rounded, size: 14),
+                                            label: const Text('Select Serials', style: TextStyle(fontSize: 12)),
+                                            onPressed: () => _openSerialSelectorDialog(context, ref, item),
+                                          ),
+                                        ],
+                                      ),
+                                      if (item.selectedSerials.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 4.0),
+                                          child: Wrap(
+                                            spacing: 4,
+                                            runSpacing: 4,
+                                            children: item.selectedSerials.map((sn) {
+                                              return Chip(
+                                                label: Text(sn, style: const TextStyle(fontSize: 10)),
+                                                padding: EdgeInsets.zero,
+                                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                visualDensity: VisualDensity.compact,
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -969,7 +1097,7 @@ class _CartSheet extends ConsumerWidget {
                   if (!canCheckout && checkoutDisabledReason != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      checkoutDisabledReason,
+                      _getCheckoutDisabledReasonMessage(context, checkoutDisabledReason),
                       style: const TextStyle(
                         color: AppColors.onSurfaceVariant,
                         fontSize: 12,
@@ -997,6 +1125,103 @@ class _CartSheet extends ConsumerWidget {
       }
     }
     return item.product.sellingPrice;
+  }
+
+  Future<void> _openSerialSelectorDialog(
+    BuildContext context,
+    WidgetRef ref,
+    CartItem item,
+  ) async {
+    final serialsAsync = await ref.read(availableSerialsProvider(item.product.id).future);
+    
+    if (serialsAsync.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.noSerialsAvailableForProduct)),
+        );
+      }
+      return;
+    }
+
+    final requiredCount = item.computedBaseQuantity.toInt();
+    final tempSelected = List<String>.from(item.selectedSerials);
+
+    if (context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              return AlertDialog(
+                backgroundColor: AppColors.surfaceContainerLowest,
+                title: Text('Select Serials for ${item.product.name}'),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppLocalizations.of(context)!.selectSerialsRequired(requiredCount, tempSelected.length),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: serialsAsync.length,
+                          itemBuilder: (ctx, index) {
+                            final s = serialsAsync[index];
+                            final isSelected = tempSelected.contains(s.serialNumber);
+                            
+                            return CheckboxListTile(
+                              title: Text(s.serialNumber),
+                              value: isSelected,
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  if (val == true) {
+                                    if (tempSelected.length < requiredCount) {
+                                      tempSelected.add(s.serialNumber);
+                                    } else {
+                                      ScaffoldMessenger.of(ctx).showSnackBar(
+                                        SnackBar(
+                                          content: Text(AppLocalizations.of(ctx)!.serialsLimitExceeded(requiredCount)),
+                                          duration: const Duration(seconds: 1),
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    tempSelected.remove(s.serialNumber);
+                                  }
+                                });
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.secondary),
+                    onPressed: () {
+                      ref.read(cartProvider.notifier).updateItemSerials(item.product.id, tempSelected);
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    }
   }
 }
 
@@ -1283,15 +1508,16 @@ class _PosBarcodeScannerScreenState extends State<_PosBarcodeScannerScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Scan Barcode'),
+        title: Text(l10n.scanBarcode),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Done', style: TextStyle(color: Colors.white)),
+            child: Text(l10n.done, style: const TextStyle(color: Colors.white)),
           ),
           IconButton(
             onPressed: () => _controller.toggleTorch(),
@@ -1360,9 +1586,9 @@ class _PosBarcodeScannerScreenState extends State<_PosBarcodeScannerScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'Continuous scan',
-                      style: TextStyle(color: Colors.white),
+                    Text(
+                      l10n.continuousScan,
+                      style: const TextStyle(color: Colors.white),
                     ),
                     const SizedBox(width: 8),
                     Switch.adaptive(
@@ -1374,8 +1600,8 @@ class _PosBarcodeScannerScreenState extends State<_PosBarcodeScannerScreen>
                     const SizedBox(width: 6),
                     IconButton(
                       tooltip: _soundEnabled
-                          ? 'Mute scan sound'
-                          : 'Enable scan sound',
+                          ? l10n.muteScanSound
+                          : l10n.enableScanSound,
                       visualDensity: VisualDensity.compact,
                       onPressed: () {
                         setState(() => _soundEnabled = !_soundEnabled);
@@ -1390,8 +1616,8 @@ class _PosBarcodeScannerScreenState extends State<_PosBarcodeScannerScreen>
                     ),
                     IconButton(
                       tooltip: _vibrationEnabled
-                          ? 'Disable vibration'
-                          : 'Enable vibration',
+                          ? l10n.disableVibration
+                          : l10n.enableVibration,
                       visualDensity: VisualDensity.compact,
                       onPressed: () {
                         setState(() => _vibrationEnabled = !_vibrationEnabled);
@@ -1519,7 +1745,7 @@ class _PosBarcodeScannerScreenState extends State<_PosBarcodeScannerScreen>
                             style: const TextStyle(color: Colors.white),
                             keyboardType: TextInputType.text,
                             decoration: InputDecoration(
-                              hintText: 'Type barcode manually',
+                              hintText: l10n.typeBarcodeManually,
                               hintStyle: const TextStyle(color: Colors.white70),
                               isDense: true,
                               filled: true,
@@ -1541,7 +1767,7 @@ class _PosBarcodeScannerScreenState extends State<_PosBarcodeScannerScreen>
                                   _manualCodeController.text,
                                   fromManual: true,
                                 ),
-                          child: const Text('Add'),
+                          child: Text(l10n.add),
                         ),
                       ],
                     ),

@@ -1516,4 +1516,157 @@ class AppLocalizationsEn extends AppLocalizations {
   String categoryAndUnit(String category, String unit) {
     return 'Category: $category  |  $unit';
   }
+
+  @override
+  String get errEmptyCart =>
+      'No items in checkout queue. Add items before checking out.';
+
+  @override
+  String get errNegativePaidAmount => 'Paid amount cannot be negative.';
+
+  @override
+  String errUnitConversionNotSet(String unit, String product) {
+    return 'Unit $unit is not configured for $product.';
+  }
+
+  @override
+  String errEmptyRecipeIngredients(String product) {
+    return 'No ingredients configured for recipe $product.';
+  }
+
+  @override
+  String errInsufficientIngredientStock(
+    String ingredient,
+    String product,
+    double needed,
+    double available,
+  ) {
+    return 'Insufficient stock for ingredient $ingredient of $product. Needed: $needed, Available: $available.';
+  }
+
+  @override
+  String errInsufficientProductStock(
+    String product,
+    double needed,
+    double available,
+  ) {
+    return 'Insufficient stock for $product. Needed: $needed, Available: $available.';
+  }
+
+  @override
+  String errSerialSelection(int required, String product, int selected) {
+    return 'Please select exactly $required serial number(s) for $product. Selected: $selected.';
+  }
+
+  @override
+  String errSerialNotAvailable(String serial) {
+    return 'Serial number \"$serial\" is not available.';
+  }
+
+  @override
+  String errPaidAmountInsufficient(double paid, double total) {
+    return 'Insufficient payment. Paid: $paid, Total: $total.';
+  }
+
+  @override
+  String get noIngredientsAvailable => 'No ingredients available.';
+
+  @override
+  String get noIngredientsSet => 'No ingredients set. Add ingredients below.';
+
+  @override
+  String get noSerialsRegistered => 'No serial numbers registered.';
+
+  @override
+  String get noBarcodeRead => 'No barcode detected. Try again.';
+
+  @override
+  String noProductForBarcode(String code) {
+    return 'No product linked to barcode \"$code\".';
+  }
+
+  @override
+  String get addItemsFirst => 'Add items to the cart before checking out.';
+
+  @override
+  String get cannotCheckoutNow => 'Cannot checkout now. Please check again.';
+
+  @override
+  String get insufficientPayment => 'Insufficient payment. Please check again.';
+
+  @override
+  String checkoutFailed(String error) {
+    return 'Checkout failed: $error';
+  }
+
+  @override
+  String get failedToLoadProducts =>
+      'Failed to load products. Please try again.';
+
+  @override
+  String get noProductsFound => 'No products found.';
+
+  @override
+  String get lowStockWarningEditAllowed =>
+      'Some items are low on stock. You can still edit them before checkout.';
+
+  @override
+  String get noSerialsAvailableForProduct =>
+      'No available serial numbers for this product.';
+
+  @override
+  String get noMatchingProducts => 'No matching products found.';
+
+  @override
+  String get scanDuplicateWarning =>
+      'This was scanned just recently. Scan again after a moment.';
+
+  @override
+  String addedToQueue(String product) {
+    return 'Added to queue: $product';
+  }
+
+  @override
+  String saleCompleteWithChange(String change) {
+    return 'Sale complete! Change: $change';
+  }
+
+  @override
+  String selectSerialsRequired(int required, int selected) {
+    return 'Please select exactly $required serial number(s). Selected: $selected';
+  }
+
+  @override
+  String serialsLimitExceeded(int required) {
+    return 'Limit is up to $required serials only.';
+  }
+
+  @override
+  String get continuousScan => 'Continuous scan';
+
+  @override
+  String get muteScanSound => 'Mute scan sound';
+
+  @override
+  String get enableScanSound => 'Enable scan sound';
+
+  @override
+  String get disableVibration => 'Disable vibration';
+
+  @override
+  String get enableVibration => 'Enable vibration';
+
+  @override
+  String get typeBarcodeManually => 'Type barcode manually';
+
+  @override
+  String get serialAlreadyAdded => 'This serial number has already been added.';
+
+  @override
+  String stockMustMatchSerials(int stock, int count) {
+    return 'Stock quantity ($stock) must equal the number of available serial numbers ($count).';
+  }
+
+  @override
+  String get scanOrTypeSerial => 'Scan or type a serial number to add.';
 }

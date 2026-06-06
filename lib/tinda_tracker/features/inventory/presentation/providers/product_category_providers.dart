@@ -7,7 +7,7 @@ import '../../domain/entities/product_category.dart';
 import '../../domain/repositories/product_category_repository.dart';
 
 final productCategoriesDaoProvider = Provider<ProductCategoriesDao>((ref) {
-  return ProductCategoriesDao(ref.watch(appDatabaseProvider));
+  return ProductCategoriesDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final productCategoryRepositoryProvider = Provider<ProductCategoryRepository>((
@@ -29,7 +29,7 @@ class ProductCategoriesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(productCategoryRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(category));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

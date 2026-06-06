@@ -8,16 +8,16 @@ import '../../domain/entities/sale.dart';
 import '../../domain/repositories/sale_repository.dart';
 
 final salesDaoProvider = Provider<SalesDao>((ref) {
-  return SalesDao(ref.watch(appDatabaseProvider));
+  return SalesDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final saleItemsDaoProvider = Provider<SaleItemsDao>((ref) {
-  return SaleItemsDao(ref.watch(appDatabaseProvider));
+  return SaleItemsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final saleRepositoryProvider = Provider<SaleRepository>((ref) {
   return SaleRepositoryImpl(
-    ref.watch(appDatabaseProvider),
+    ref.watch(currentAppDatabaseProvider),
     ref.watch(salesDaoProvider),
     ref.watch(saleItemsDaoProvider),
   );
@@ -41,7 +41,7 @@ class SalesNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(saleRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(sale));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 

@@ -8881,6 +8881,8 @@ mixin $ProductsTableToColumns implements Insertable<ProductRow> {
   int? get expirationDateMs;
   String? get categoryId;
   String? get shelfLocationId;
+  String get itemType;
+  String get customAttributesJson;
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -8919,6 +8921,8 @@ mixin $ProductsTableToColumns implements Insertable<ProductRow> {
     if (!nullToAbsent || shelfLocationId != null) {
       map['shelf_location_id'] = Variable<String>(shelfLocationId);
     }
+    map['item_type'] = Variable<String>(itemType);
+    map['custom_attributes_json'] = Variable<String>(customAttributesJson);
     return map;
   }
 }
@@ -9201,6 +9205,30 @@ class $ProductsTable extends Products
       'REFERENCES shelf_locations (id)',
     ),
   );
+  static const VerificationMeta _itemTypeMeta = const VerificationMeta(
+    'itemType',
+  );
+  @override
+  late final GeneratedColumn<String> itemType = GeneratedColumn<String>(
+    'item_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('standard'),
+  );
+  static const VerificationMeta _customAttributesJsonMeta =
+      const VerificationMeta('customAttributesJson');
+  @override
+  late final GeneratedColumn<String> customAttributesJson =
+      GeneratedColumn<String>(
+        'custom_attributes_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
   @override
   List<GeneratedColumn> get $columns => [
     syncId,
@@ -9226,6 +9254,8 @@ class $ProductsTable extends Products
     expirationDateMs,
     categoryId,
     shelfLocationId,
+    itemType,
+    customAttributesJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9418,6 +9448,21 @@ class $ProductsTable extends Products
         ),
       );
     }
+    if (data.containsKey('item_type')) {
+      context.handle(
+        _itemTypeMeta,
+        itemType.isAcceptableOrUnknown(data['item_type']!, _itemTypeMeta),
+      );
+    }
+    if (data.containsKey('custom_attributes_json')) {
+      context.handle(
+        _customAttributesJsonMeta,
+        customAttributesJson.isAcceptableOrUnknown(
+          data['custom_attributes_json']!,
+          _customAttributesJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -9523,6 +9568,14 @@ class $ProductsTable extends Products
         DriftSqlType.string,
         data['${effectivePrefix}shelf_location_id'],
       ),
+      itemType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}item_type'],
+      )!,
+      customAttributesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}custom_attributes_json'],
+      )!,
     );
   }
 
@@ -9579,6 +9632,10 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
   final String? categoryId;
   @override
   final String? shelfLocationId;
+  @override
+  final String itemType;
+  @override
+  final String customAttributesJson;
   const ProductRow({
     required this.syncId,
     required this.deviceId,
@@ -9603,6 +9660,8 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
     this.expirationDateMs,
     this.categoryId,
     this.shelfLocationId,
+    required this.itemType,
+    required this.customAttributesJson,
   });
   ProductsCompanion toCompanion(bool nullToAbsent) {
     return ProductsCompanion(
@@ -9641,6 +9700,8 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
       shelfLocationId: shelfLocationId == null && nullToAbsent
           ? const Value.absent()
           : Value(shelfLocationId),
+      itemType: Value(itemType),
+      customAttributesJson: Value(customAttributesJson),
     );
   }
 
@@ -9673,6 +9734,10 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
       expirationDateMs: serializer.fromJson<int?>(json['expirationDateMs']),
       categoryId: serializer.fromJson<String?>(json['categoryId']),
       shelfLocationId: serializer.fromJson<String?>(json['shelfLocationId']),
+      itemType: serializer.fromJson<String>(json['itemType']),
+      customAttributesJson: serializer.fromJson<String>(
+        json['customAttributesJson'],
+      ),
     );
   }
   @override
@@ -9702,6 +9767,8 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
       'expirationDateMs': serializer.toJson<int?>(expirationDateMs),
       'categoryId': serializer.toJson<String?>(categoryId),
       'shelfLocationId': serializer.toJson<String?>(shelfLocationId),
+      'itemType': serializer.toJson<String>(itemType),
+      'customAttributesJson': serializer.toJson<String>(customAttributesJson),
     };
   }
 
@@ -9729,6 +9796,8 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
     Value<int?> expirationDateMs = const Value.absent(),
     Value<String?> categoryId = const Value.absent(),
     Value<String?> shelfLocationId = const Value.absent(),
+    String? itemType,
+    String? customAttributesJson,
   }) => ProductRow(
     syncId: syncId ?? this.syncId,
     deviceId: deviceId ?? this.deviceId,
@@ -9761,6 +9830,8 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
     shelfLocationId: shelfLocationId.present
         ? shelfLocationId.value
         : this.shelfLocationId,
+    itemType: itemType ?? this.itemType,
+    customAttributesJson: customAttributesJson ?? this.customAttributesJson,
   );
   ProductRow copyWithCompanion(ProductsCompanion data) {
     return ProductRow(
@@ -9809,6 +9880,10 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
       shelfLocationId: data.shelfLocationId.present
           ? data.shelfLocationId.value
           : this.shelfLocationId,
+      itemType: data.itemType.present ? data.itemType.value : this.itemType,
+      customAttributesJson: data.customAttributesJson.present
+          ? data.customAttributesJson.value
+          : this.customAttributesJson,
     );
   }
 
@@ -9837,7 +9912,9 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
           ..write('shelfLocation: $shelfLocation, ')
           ..write('expirationDateMs: $expirationDateMs, ')
           ..write('categoryId: $categoryId, ')
-          ..write('shelfLocationId: $shelfLocationId')
+          ..write('shelfLocationId: $shelfLocationId, ')
+          ..write('itemType: $itemType, ')
+          ..write('customAttributesJson: $customAttributesJson')
           ..write(')'))
         .toString();
   }
@@ -9867,6 +9944,8 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
     expirationDateMs,
     categoryId,
     shelfLocationId,
+    itemType,
+    customAttributesJson,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -9894,7 +9973,9 @@ class ProductRow extends DataClass with $ProductsTableToColumns {
           other.shelfLocation == this.shelfLocation &&
           other.expirationDateMs == this.expirationDateMs &&
           other.categoryId == this.categoryId &&
-          other.shelfLocationId == this.shelfLocationId);
+          other.shelfLocationId == this.shelfLocationId &&
+          other.itemType == this.itemType &&
+          other.customAttributesJson == this.customAttributesJson);
 }
 
 class ProductsCompanion extends UpdateCompanion<ProductRow> {
@@ -9921,6 +10002,8 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
   final Value<int?> expirationDateMs;
   final Value<String?> categoryId;
   final Value<String?> shelfLocationId;
+  final Value<String> itemType;
+  final Value<String> customAttributesJson;
   final Value<int> rowid;
   const ProductsCompanion({
     this.syncId = const Value.absent(),
@@ -9946,6 +10029,8 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
     this.expirationDateMs = const Value.absent(),
     this.categoryId = const Value.absent(),
     this.shelfLocationId = const Value.absent(),
+    this.itemType = const Value.absent(),
+    this.customAttributesJson = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProductsCompanion.insert({
@@ -9972,6 +10057,8 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
     this.expirationDateMs = const Value.absent(),
     this.categoryId = const Value.absent(),
     this.shelfLocationId = const Value.absent(),
+    this.itemType = const Value.absent(),
+    this.customAttributesJson = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : syncId = Value(syncId),
        createdAtMs = Value(createdAtMs),
@@ -10004,6 +10091,8 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
     Expression<int>? expirationDateMs,
     Expression<String>? categoryId,
     Expression<String>? shelfLocationId,
+    Expression<String>? itemType,
+    Expression<String>? customAttributesJson,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -10030,6 +10119,9 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
       if (expirationDateMs != null) 'expiration_date_ms': expirationDateMs,
       if (categoryId != null) 'category_id': categoryId,
       if (shelfLocationId != null) 'shelf_location_id': shelfLocationId,
+      if (itemType != null) 'item_type': itemType,
+      if (customAttributesJson != null)
+        'custom_attributes_json': customAttributesJson,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -10058,6 +10150,8 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
     Value<int?>? expirationDateMs,
     Value<String?>? categoryId,
     Value<String?>? shelfLocationId,
+    Value<String>? itemType,
+    Value<String>? customAttributesJson,
     Value<int>? rowid,
   }) {
     return ProductsCompanion(
@@ -10084,6 +10178,8 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
       expirationDateMs: expirationDateMs ?? this.expirationDateMs,
       categoryId: categoryId ?? this.categoryId,
       shelfLocationId: shelfLocationId ?? this.shelfLocationId,
+      itemType: itemType ?? this.itemType,
+      customAttributesJson: customAttributesJson ?? this.customAttributesJson,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -10160,6 +10256,14 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
     if (shelfLocationId.present) {
       map['shelf_location_id'] = Variable<String>(shelfLocationId.value);
     }
+    if (itemType.present) {
+      map['item_type'] = Variable<String>(itemType.value);
+    }
+    if (customAttributesJson.present) {
+      map['custom_attributes_json'] = Variable<String>(
+        customAttributesJson.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -10192,6 +10296,8 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
           ..write('expirationDateMs: $expirationDateMs, ')
           ..write('categoryId: $categoryId, ')
           ..write('shelfLocationId: $shelfLocationId, ')
+          ..write('itemType: $itemType, ')
+          ..write('customAttributesJson: $customAttributesJson, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -14491,6 +14597,2040 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItemRow> {
   }
 }
 
+mixin $BusinessProfilesTableToColumns
+    implements Insertable<BusinessProfileRow> {
+  String get syncId;
+  String get deviceId;
+  bool get isDeleted;
+  bool get isDirty;
+  int get createdAtMs;
+  int get updatedAtMs;
+  String get id;
+  String get businessType;
+  String get businessName;
+  String get defaultCurrency;
+  String get preferencesJson;
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['sync_id'] = Variable<String>(syncId);
+    map['device_id'] = Variable<String>(deviceId);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['is_dirty'] = Variable<bool>(isDirty);
+    map['created_at_ms'] = Variable<int>(createdAtMs);
+    map['updated_at_ms'] = Variable<int>(updatedAtMs);
+    map['id'] = Variable<String>(id);
+    map['business_type'] = Variable<String>(businessType);
+    map['business_name'] = Variable<String>(businessName);
+    map['default_currency'] = Variable<String>(defaultCurrency);
+    map['preferences_json'] = Variable<String>(preferencesJson);
+    return map;
+  }
+}
+
+class $BusinessProfilesTable extends BusinessProfiles
+    with TableInfo<$BusinessProfilesTable, BusinessProfileRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BusinessProfilesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
+  @override
+  late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
+    'sync_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _isDirtyMeta = const VerificationMeta(
+    'isDirty',
+  );
+  @override
+  late final GeneratedColumn<bool> isDirty = GeneratedColumn<bool>(
+    'is_dirty',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_dirty" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMsMeta = const VerificationMeta(
+    'createdAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdAtMs = GeneratedColumn<int>(
+    'created_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
+    'updatedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAtMs = GeneratedColumn<int>(
+    'updated_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _businessTypeMeta = const VerificationMeta(
+    'businessType',
+  );
+  @override
+  late final GeneratedColumn<String> businessType = GeneratedColumn<String>(
+    'business_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _businessNameMeta = const VerificationMeta(
+    'businessName',
+  );
+  @override
+  late final GeneratedColumn<String> businessName = GeneratedColumn<String>(
+    'business_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _defaultCurrencyMeta = const VerificationMeta(
+    'defaultCurrency',
+  );
+  @override
+  late final GeneratedColumn<String> defaultCurrency = GeneratedColumn<String>(
+    'default_currency',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('PHP'),
+  );
+  static const VerificationMeta _preferencesJsonMeta = const VerificationMeta(
+    'preferencesJson',
+  );
+  @override
+  late final GeneratedColumn<String> preferencesJson = GeneratedColumn<String>(
+    'preferences_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    syncId,
+    deviceId,
+    isDeleted,
+    isDirty,
+    createdAtMs,
+    updatedAtMs,
+    id,
+    businessType,
+    businessName,
+    defaultCurrency,
+    preferencesJson,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'business_profiles';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BusinessProfileRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('sync_id')) {
+      context.handle(
+        _syncIdMeta,
+        syncId.isAcceptableOrUnknown(data['sync_id']!, _syncIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_syncIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('is_dirty')) {
+      context.handle(
+        _isDirtyMeta,
+        isDirty.isAcceptableOrUnknown(data['is_dirty']!, _isDirtyMeta),
+      );
+    }
+    if (data.containsKey('created_at_ms')) {
+      context.handle(
+        _createdAtMsMeta,
+        createdAtMs.isAcceptableOrUnknown(
+          data['created_at_ms']!,
+          _createdAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMsMeta);
+    }
+    if (data.containsKey('updated_at_ms')) {
+      context.handle(
+        _updatedAtMsMeta,
+        updatedAtMs.isAcceptableOrUnknown(
+          data['updated_at_ms']!,
+          _updatedAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMsMeta);
+    }
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('business_type')) {
+      context.handle(
+        _businessTypeMeta,
+        businessType.isAcceptableOrUnknown(
+          data['business_type']!,
+          _businessTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_businessTypeMeta);
+    }
+    if (data.containsKey('business_name')) {
+      context.handle(
+        _businessNameMeta,
+        businessName.isAcceptableOrUnknown(
+          data['business_name']!,
+          _businessNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_businessNameMeta);
+    }
+    if (data.containsKey('default_currency')) {
+      context.handle(
+        _defaultCurrencyMeta,
+        defaultCurrency.isAcceptableOrUnknown(
+          data['default_currency']!,
+          _defaultCurrencyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('preferences_json')) {
+      context.handle(
+        _preferencesJsonMeta,
+        preferencesJson.isAcceptableOrUnknown(
+          data['preferences_json']!,
+          _preferencesJsonMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BusinessProfileRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BusinessProfileRow(
+      syncId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      isDirty: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_dirty'],
+      )!,
+      createdAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at_ms'],
+      )!,
+      updatedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at_ms'],
+      )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_type'],
+      )!,
+      businessName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_name'],
+      )!,
+      defaultCurrency: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_currency'],
+      )!,
+      preferencesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}preferences_json'],
+      )!,
+    );
+  }
+
+  @override
+  $BusinessProfilesTable createAlias(String alias) {
+    return $BusinessProfilesTable(attachedDatabase, alias);
+  }
+}
+
+class BusinessProfileRow extends DataClass
+    with $BusinessProfilesTableToColumns {
+  @override
+  final String syncId;
+  @override
+  final String deviceId;
+  @override
+  final bool isDeleted;
+  @override
+  final bool isDirty;
+  @override
+  final int createdAtMs;
+  @override
+  final int updatedAtMs;
+  @override
+  final String id;
+  @override
+  final String businessType;
+  @override
+  final String businessName;
+  @override
+  final String defaultCurrency;
+  @override
+  final String preferencesJson;
+  const BusinessProfileRow({
+    required this.syncId,
+    required this.deviceId,
+    required this.isDeleted,
+    required this.isDirty,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    required this.id,
+    required this.businessType,
+    required this.businessName,
+    required this.defaultCurrency,
+    required this.preferencesJson,
+  });
+  BusinessProfilesCompanion toCompanion(bool nullToAbsent) {
+    return BusinessProfilesCompanion(
+      syncId: Value(syncId),
+      deviceId: Value(deviceId),
+      isDeleted: Value(isDeleted),
+      isDirty: Value(isDirty),
+      createdAtMs: Value(createdAtMs),
+      updatedAtMs: Value(updatedAtMs),
+      id: Value(id),
+      businessType: Value(businessType),
+      businessName: Value(businessName),
+      defaultCurrency: Value(defaultCurrency),
+      preferencesJson: Value(preferencesJson),
+    );
+  }
+
+  factory BusinessProfileRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BusinessProfileRow(
+      syncId: serializer.fromJson<String>(json['syncId']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      isDirty: serializer.fromJson<bool>(json['isDirty']),
+      createdAtMs: serializer.fromJson<int>(json['createdAtMs']),
+      updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
+      id: serializer.fromJson<String>(json['id']),
+      businessType: serializer.fromJson<String>(json['businessType']),
+      businessName: serializer.fromJson<String>(json['businessName']),
+      defaultCurrency: serializer.fromJson<String>(json['defaultCurrency']),
+      preferencesJson: serializer.fromJson<String>(json['preferencesJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'syncId': serializer.toJson<String>(syncId),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'isDirty': serializer.toJson<bool>(isDirty),
+      'createdAtMs': serializer.toJson<int>(createdAtMs),
+      'updatedAtMs': serializer.toJson<int>(updatedAtMs),
+      'id': serializer.toJson<String>(id),
+      'businessType': serializer.toJson<String>(businessType),
+      'businessName': serializer.toJson<String>(businessName),
+      'defaultCurrency': serializer.toJson<String>(defaultCurrency),
+      'preferencesJson': serializer.toJson<String>(preferencesJson),
+    };
+  }
+
+  BusinessProfileRow copyWith({
+    String? syncId,
+    String? deviceId,
+    bool? isDeleted,
+    bool? isDirty,
+    int? createdAtMs,
+    int? updatedAtMs,
+    String? id,
+    String? businessType,
+    String? businessName,
+    String? defaultCurrency,
+    String? preferencesJson,
+  }) => BusinessProfileRow(
+    syncId: syncId ?? this.syncId,
+    deviceId: deviceId ?? this.deviceId,
+    isDeleted: isDeleted ?? this.isDeleted,
+    isDirty: isDirty ?? this.isDirty,
+    createdAtMs: createdAtMs ?? this.createdAtMs,
+    updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+    id: id ?? this.id,
+    businessType: businessType ?? this.businessType,
+    businessName: businessName ?? this.businessName,
+    defaultCurrency: defaultCurrency ?? this.defaultCurrency,
+    preferencesJson: preferencesJson ?? this.preferencesJson,
+  );
+  BusinessProfileRow copyWithCompanion(BusinessProfilesCompanion data) {
+    return BusinessProfileRow(
+      syncId: data.syncId.present ? data.syncId.value : this.syncId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
+      createdAtMs: data.createdAtMs.present
+          ? data.createdAtMs.value
+          : this.createdAtMs,
+      updatedAtMs: data.updatedAtMs.present
+          ? data.updatedAtMs.value
+          : this.updatedAtMs,
+      id: data.id.present ? data.id.value : this.id,
+      businessType: data.businessType.present
+          ? data.businessType.value
+          : this.businessType,
+      businessName: data.businessName.present
+          ? data.businessName.value
+          : this.businessName,
+      defaultCurrency: data.defaultCurrency.present
+          ? data.defaultCurrency.value
+          : this.defaultCurrency,
+      preferencesJson: data.preferencesJson.present
+          ? data.preferencesJson.value
+          : this.preferencesJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BusinessProfileRow(')
+          ..write('syncId: $syncId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('createdAtMs: $createdAtMs, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('id: $id, ')
+          ..write('businessType: $businessType, ')
+          ..write('businessName: $businessName, ')
+          ..write('defaultCurrency: $defaultCurrency, ')
+          ..write('preferencesJson: $preferencesJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    syncId,
+    deviceId,
+    isDeleted,
+    isDirty,
+    createdAtMs,
+    updatedAtMs,
+    id,
+    businessType,
+    businessName,
+    defaultCurrency,
+    preferencesJson,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BusinessProfileRow &&
+          other.syncId == this.syncId &&
+          other.deviceId == this.deviceId &&
+          other.isDeleted == this.isDeleted &&
+          other.isDirty == this.isDirty &&
+          other.createdAtMs == this.createdAtMs &&
+          other.updatedAtMs == this.updatedAtMs &&
+          other.id == this.id &&
+          other.businessType == this.businessType &&
+          other.businessName == this.businessName &&
+          other.defaultCurrency == this.defaultCurrency &&
+          other.preferencesJson == this.preferencesJson);
+}
+
+class BusinessProfilesCompanion extends UpdateCompanion<BusinessProfileRow> {
+  final Value<String> syncId;
+  final Value<String> deviceId;
+  final Value<bool> isDeleted;
+  final Value<bool> isDirty;
+  final Value<int> createdAtMs;
+  final Value<int> updatedAtMs;
+  final Value<String> id;
+  final Value<String> businessType;
+  final Value<String> businessName;
+  final Value<String> defaultCurrency;
+  final Value<String> preferencesJson;
+  final Value<int> rowid;
+  const BusinessProfilesCompanion({
+    this.syncId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    this.createdAtMs = const Value.absent(),
+    this.updatedAtMs = const Value.absent(),
+    this.id = const Value.absent(),
+    this.businessType = const Value.absent(),
+    this.businessName = const Value.absent(),
+    this.defaultCurrency = const Value.absent(),
+    this.preferencesJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BusinessProfilesCompanion.insert({
+    required String syncId,
+    this.deviceId = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    required int createdAtMs,
+    required int updatedAtMs,
+    required String id,
+    required String businessType,
+    required String businessName,
+    this.defaultCurrency = const Value.absent(),
+    this.preferencesJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : syncId = Value(syncId),
+       createdAtMs = Value(createdAtMs),
+       updatedAtMs = Value(updatedAtMs),
+       id = Value(id),
+       businessType = Value(businessType),
+       businessName = Value(businessName);
+  static Insertable<BusinessProfileRow> custom({
+    Expression<String>? syncId,
+    Expression<String>? deviceId,
+    Expression<bool>? isDeleted,
+    Expression<bool>? isDirty,
+    Expression<int>? createdAtMs,
+    Expression<int>? updatedAtMs,
+    Expression<String>? id,
+    Expression<String>? businessType,
+    Expression<String>? businessName,
+    Expression<String>? defaultCurrency,
+    Expression<String>? preferencesJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (syncId != null) 'sync_id': syncId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (isDirty != null) 'is_dirty': isDirty,
+      if (createdAtMs != null) 'created_at_ms': createdAtMs,
+      if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
+      if (id != null) 'id': id,
+      if (businessType != null) 'business_type': businessType,
+      if (businessName != null) 'business_name': businessName,
+      if (defaultCurrency != null) 'default_currency': defaultCurrency,
+      if (preferencesJson != null) 'preferences_json': preferencesJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BusinessProfilesCompanion copyWith({
+    Value<String>? syncId,
+    Value<String>? deviceId,
+    Value<bool>? isDeleted,
+    Value<bool>? isDirty,
+    Value<int>? createdAtMs,
+    Value<int>? updatedAtMs,
+    Value<String>? id,
+    Value<String>? businessType,
+    Value<String>? businessName,
+    Value<String>? defaultCurrency,
+    Value<String>? preferencesJson,
+    Value<int>? rowid,
+  }) {
+    return BusinessProfilesCompanion(
+      syncId: syncId ?? this.syncId,
+      deviceId: deviceId ?? this.deviceId,
+      isDeleted: isDeleted ?? this.isDeleted,
+      isDirty: isDirty ?? this.isDirty,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      id: id ?? this.id,
+      businessType: businessType ?? this.businessType,
+      businessName: businessName ?? this.businessName,
+      defaultCurrency: defaultCurrency ?? this.defaultCurrency,
+      preferencesJson: preferencesJson ?? this.preferencesJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (syncId.present) {
+      map['sync_id'] = Variable<String>(syncId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (isDirty.present) {
+      map['is_dirty'] = Variable<bool>(isDirty.value);
+    }
+    if (createdAtMs.present) {
+      map['created_at_ms'] = Variable<int>(createdAtMs.value);
+    }
+    if (updatedAtMs.present) {
+      map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
+    }
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessType.present) {
+      map['business_type'] = Variable<String>(businessType.value);
+    }
+    if (businessName.present) {
+      map['business_name'] = Variable<String>(businessName.value);
+    }
+    if (defaultCurrency.present) {
+      map['default_currency'] = Variable<String>(defaultCurrency.value);
+    }
+    if (preferencesJson.present) {
+      map['preferences_json'] = Variable<String>(preferencesJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BusinessProfilesCompanion(')
+          ..write('syncId: $syncId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('createdAtMs: $createdAtMs, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('id: $id, ')
+          ..write('businessType: $businessType, ')
+          ..write('businessName: $businessName, ')
+          ..write('defaultCurrency: $defaultCurrency, ')
+          ..write('preferencesJson: $preferencesJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+mixin $ProductSerialNumbersTableToColumns
+    implements Insertable<ProductSerialNumberRow> {
+  String get syncId;
+  String get deviceId;
+  bool get isDeleted;
+  bool get isDirty;
+  int get createdAtMs;
+  int get updatedAtMs;
+  String get id;
+  String get productId;
+  String get serialNumber;
+  String get status;
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['sync_id'] = Variable<String>(syncId);
+    map['device_id'] = Variable<String>(deviceId);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['is_dirty'] = Variable<bool>(isDirty);
+    map['created_at_ms'] = Variable<int>(createdAtMs);
+    map['updated_at_ms'] = Variable<int>(updatedAtMs);
+    map['id'] = Variable<String>(id);
+    map['product_id'] = Variable<String>(productId);
+    map['serial_number'] = Variable<String>(serialNumber);
+    map['status'] = Variable<String>(status);
+    return map;
+  }
+}
+
+class $ProductSerialNumbersTable extends ProductSerialNumbers
+    with TableInfo<$ProductSerialNumbersTable, ProductSerialNumberRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductSerialNumbersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
+  @override
+  late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
+    'sync_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _isDirtyMeta = const VerificationMeta(
+    'isDirty',
+  );
+  @override
+  late final GeneratedColumn<bool> isDirty = GeneratedColumn<bool>(
+    'is_dirty',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_dirty" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMsMeta = const VerificationMeta(
+    'createdAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdAtMs = GeneratedColumn<int>(
+    'created_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
+    'updatedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAtMs = GeneratedColumn<int>(
+    'updated_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _serialNumberMeta = const VerificationMeta(
+    'serialNumber',
+  );
+  @override
+  late final GeneratedColumn<String> serialNumber = GeneratedColumn<String>(
+    'serial_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('AVAILABLE'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    syncId,
+    deviceId,
+    isDeleted,
+    isDirty,
+    createdAtMs,
+    updatedAtMs,
+    id,
+    productId,
+    serialNumber,
+    status,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_serial_numbers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProductSerialNumberRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('sync_id')) {
+      context.handle(
+        _syncIdMeta,
+        syncId.isAcceptableOrUnknown(data['sync_id']!, _syncIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_syncIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('is_dirty')) {
+      context.handle(
+        _isDirtyMeta,
+        isDirty.isAcceptableOrUnknown(data['is_dirty']!, _isDirtyMeta),
+      );
+    }
+    if (data.containsKey('created_at_ms')) {
+      context.handle(
+        _createdAtMsMeta,
+        createdAtMs.isAcceptableOrUnknown(
+          data['created_at_ms']!,
+          _createdAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMsMeta);
+    }
+    if (data.containsKey('updated_at_ms')) {
+      context.handle(
+        _updatedAtMsMeta,
+        updatedAtMs.isAcceptableOrUnknown(
+          data['updated_at_ms']!,
+          _updatedAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMsMeta);
+    }
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('serial_number')) {
+      context.handle(
+        _serialNumberMeta,
+        serialNumber.isAcceptableOrUnknown(
+          data['serial_number']!,
+          _serialNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_serialNumberMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {productId, serialNumber},
+  ];
+  @override
+  ProductSerialNumberRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductSerialNumberRow(
+      syncId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      isDirty: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_dirty'],
+      )!,
+      createdAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at_ms'],
+      )!,
+      updatedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at_ms'],
+      )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      serialNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}serial_number'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+    );
+  }
+
+  @override
+  $ProductSerialNumbersTable createAlias(String alias) {
+    return $ProductSerialNumbersTable(attachedDatabase, alias);
+  }
+}
+
+class ProductSerialNumberRow extends DataClass
+    with $ProductSerialNumbersTableToColumns {
+  @override
+  final String syncId;
+  @override
+  final String deviceId;
+  @override
+  final bool isDeleted;
+  @override
+  final bool isDirty;
+  @override
+  final int createdAtMs;
+  @override
+  final int updatedAtMs;
+  @override
+  final String id;
+  @override
+  final String productId;
+  @override
+  final String serialNumber;
+  @override
+  final String status;
+  const ProductSerialNumberRow({
+    required this.syncId,
+    required this.deviceId,
+    required this.isDeleted,
+    required this.isDirty,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    required this.id,
+    required this.productId,
+    required this.serialNumber,
+    required this.status,
+  });
+  ProductSerialNumbersCompanion toCompanion(bool nullToAbsent) {
+    return ProductSerialNumbersCompanion(
+      syncId: Value(syncId),
+      deviceId: Value(deviceId),
+      isDeleted: Value(isDeleted),
+      isDirty: Value(isDirty),
+      createdAtMs: Value(createdAtMs),
+      updatedAtMs: Value(updatedAtMs),
+      id: Value(id),
+      productId: Value(productId),
+      serialNumber: Value(serialNumber),
+      status: Value(status),
+    );
+  }
+
+  factory ProductSerialNumberRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductSerialNumberRow(
+      syncId: serializer.fromJson<String>(json['syncId']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      isDirty: serializer.fromJson<bool>(json['isDirty']),
+      createdAtMs: serializer.fromJson<int>(json['createdAtMs']),
+      updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
+      id: serializer.fromJson<String>(json['id']),
+      productId: serializer.fromJson<String>(json['productId']),
+      serialNumber: serializer.fromJson<String>(json['serialNumber']),
+      status: serializer.fromJson<String>(json['status']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'syncId': serializer.toJson<String>(syncId),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'isDirty': serializer.toJson<bool>(isDirty),
+      'createdAtMs': serializer.toJson<int>(createdAtMs),
+      'updatedAtMs': serializer.toJson<int>(updatedAtMs),
+      'id': serializer.toJson<String>(id),
+      'productId': serializer.toJson<String>(productId),
+      'serialNumber': serializer.toJson<String>(serialNumber),
+      'status': serializer.toJson<String>(status),
+    };
+  }
+
+  ProductSerialNumberRow copyWith({
+    String? syncId,
+    String? deviceId,
+    bool? isDeleted,
+    bool? isDirty,
+    int? createdAtMs,
+    int? updatedAtMs,
+    String? id,
+    String? productId,
+    String? serialNumber,
+    String? status,
+  }) => ProductSerialNumberRow(
+    syncId: syncId ?? this.syncId,
+    deviceId: deviceId ?? this.deviceId,
+    isDeleted: isDeleted ?? this.isDeleted,
+    isDirty: isDirty ?? this.isDirty,
+    createdAtMs: createdAtMs ?? this.createdAtMs,
+    updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+    id: id ?? this.id,
+    productId: productId ?? this.productId,
+    serialNumber: serialNumber ?? this.serialNumber,
+    status: status ?? this.status,
+  );
+  ProductSerialNumberRow copyWithCompanion(ProductSerialNumbersCompanion data) {
+    return ProductSerialNumberRow(
+      syncId: data.syncId.present ? data.syncId.value : this.syncId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
+      createdAtMs: data.createdAtMs.present
+          ? data.createdAtMs.value
+          : this.createdAtMs,
+      updatedAtMs: data.updatedAtMs.present
+          ? data.updatedAtMs.value
+          : this.updatedAtMs,
+      id: data.id.present ? data.id.value : this.id,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      serialNumber: data.serialNumber.present
+          ? data.serialNumber.value
+          : this.serialNumber,
+      status: data.status.present ? data.status.value : this.status,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductSerialNumberRow(')
+          ..write('syncId: $syncId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('createdAtMs: $createdAtMs, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('serialNumber: $serialNumber, ')
+          ..write('status: $status')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    syncId,
+    deviceId,
+    isDeleted,
+    isDirty,
+    createdAtMs,
+    updatedAtMs,
+    id,
+    productId,
+    serialNumber,
+    status,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductSerialNumberRow &&
+          other.syncId == this.syncId &&
+          other.deviceId == this.deviceId &&
+          other.isDeleted == this.isDeleted &&
+          other.isDirty == this.isDirty &&
+          other.createdAtMs == this.createdAtMs &&
+          other.updatedAtMs == this.updatedAtMs &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.serialNumber == this.serialNumber &&
+          other.status == this.status);
+}
+
+class ProductSerialNumbersCompanion
+    extends UpdateCompanion<ProductSerialNumberRow> {
+  final Value<String> syncId;
+  final Value<String> deviceId;
+  final Value<bool> isDeleted;
+  final Value<bool> isDirty;
+  final Value<int> createdAtMs;
+  final Value<int> updatedAtMs;
+  final Value<String> id;
+  final Value<String> productId;
+  final Value<String> serialNumber;
+  final Value<String> status;
+  final Value<int> rowid;
+  const ProductSerialNumbersCompanion({
+    this.syncId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    this.createdAtMs = const Value.absent(),
+    this.updatedAtMs = const Value.absent(),
+    this.id = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.serialNumber = const Value.absent(),
+    this.status = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProductSerialNumbersCompanion.insert({
+    required String syncId,
+    this.deviceId = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    required int createdAtMs,
+    required int updatedAtMs,
+    required String id,
+    required String productId,
+    required String serialNumber,
+    this.status = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : syncId = Value(syncId),
+       createdAtMs = Value(createdAtMs),
+       updatedAtMs = Value(updatedAtMs),
+       id = Value(id),
+       productId = Value(productId),
+       serialNumber = Value(serialNumber);
+  static Insertable<ProductSerialNumberRow> custom({
+    Expression<String>? syncId,
+    Expression<String>? deviceId,
+    Expression<bool>? isDeleted,
+    Expression<bool>? isDirty,
+    Expression<int>? createdAtMs,
+    Expression<int>? updatedAtMs,
+    Expression<String>? id,
+    Expression<String>? productId,
+    Expression<String>? serialNumber,
+    Expression<String>? status,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (syncId != null) 'sync_id': syncId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (isDirty != null) 'is_dirty': isDirty,
+      if (createdAtMs != null) 'created_at_ms': createdAtMs,
+      if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
+      if (id != null) 'id': id,
+      if (productId != null) 'product_id': productId,
+      if (serialNumber != null) 'serial_number': serialNumber,
+      if (status != null) 'status': status,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProductSerialNumbersCompanion copyWith({
+    Value<String>? syncId,
+    Value<String>? deviceId,
+    Value<bool>? isDeleted,
+    Value<bool>? isDirty,
+    Value<int>? createdAtMs,
+    Value<int>? updatedAtMs,
+    Value<String>? id,
+    Value<String>? productId,
+    Value<String>? serialNumber,
+    Value<String>? status,
+    Value<int>? rowid,
+  }) {
+    return ProductSerialNumbersCompanion(
+      syncId: syncId ?? this.syncId,
+      deviceId: deviceId ?? this.deviceId,
+      isDeleted: isDeleted ?? this.isDeleted,
+      isDirty: isDirty ?? this.isDirty,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      serialNumber: serialNumber ?? this.serialNumber,
+      status: status ?? this.status,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (syncId.present) {
+      map['sync_id'] = Variable<String>(syncId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (isDirty.present) {
+      map['is_dirty'] = Variable<bool>(isDirty.value);
+    }
+    if (createdAtMs.present) {
+      map['created_at_ms'] = Variable<int>(createdAtMs.value);
+    }
+    if (updatedAtMs.present) {
+      map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
+    }
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (serialNumber.present) {
+      map['serial_number'] = Variable<String>(serialNumber.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductSerialNumbersCompanion(')
+          ..write('syncId: $syncId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('createdAtMs: $createdAtMs, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('serialNumber: $serialNumber, ')
+          ..write('status: $status, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+mixin $ProductRecipeIngredientsTableToColumns
+    implements Insertable<ProductRecipeIngredientRow> {
+  String get syncId;
+  String get deviceId;
+  bool get isDeleted;
+  bool get isDirty;
+  int get createdAtMs;
+  int get updatedAtMs;
+  String get id;
+  String get recipeProductId;
+  String get ingredientProductId;
+  double get quantityNeeded;
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['sync_id'] = Variable<String>(syncId);
+    map['device_id'] = Variable<String>(deviceId);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['is_dirty'] = Variable<bool>(isDirty);
+    map['created_at_ms'] = Variable<int>(createdAtMs);
+    map['updated_at_ms'] = Variable<int>(updatedAtMs);
+    map['id'] = Variable<String>(id);
+    map['recipe_product_id'] = Variable<String>(recipeProductId);
+    map['ingredient_product_id'] = Variable<String>(ingredientProductId);
+    map['quantity_needed'] = Variable<double>(quantityNeeded);
+    return map;
+  }
+}
+
+class $ProductRecipeIngredientsTable extends ProductRecipeIngredients
+    with TableInfo<$ProductRecipeIngredientsTable, ProductRecipeIngredientRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductRecipeIngredientsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
+  @override
+  late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
+    'sync_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _isDirtyMeta = const VerificationMeta(
+    'isDirty',
+  );
+  @override
+  late final GeneratedColumn<bool> isDirty = GeneratedColumn<bool>(
+    'is_dirty',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_dirty" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMsMeta = const VerificationMeta(
+    'createdAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdAtMs = GeneratedColumn<int>(
+    'created_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
+    'updatedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAtMs = GeneratedColumn<int>(
+    'updated_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _recipeProductIdMeta = const VerificationMeta(
+    'recipeProductId',
+  );
+  @override
+  late final GeneratedColumn<String> recipeProductId = GeneratedColumn<String>(
+    'recipe_product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _ingredientProductIdMeta =
+      const VerificationMeta('ingredientProductId');
+  @override
+  late final GeneratedColumn<String> ingredientProductId =
+      GeneratedColumn<String>(
+        'ingredient_product_id',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES products (id)',
+        ),
+      );
+  static const VerificationMeta _quantityNeededMeta = const VerificationMeta(
+    'quantityNeeded',
+  );
+  @override
+  late final GeneratedColumn<double> quantityNeeded = GeneratedColumn<double>(
+    'quantity_needed',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    syncId,
+    deviceId,
+    isDeleted,
+    isDirty,
+    createdAtMs,
+    updatedAtMs,
+    id,
+    recipeProductId,
+    ingredientProductId,
+    quantityNeeded,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_recipe_ingredients';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProductRecipeIngredientRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('sync_id')) {
+      context.handle(
+        _syncIdMeta,
+        syncId.isAcceptableOrUnknown(data['sync_id']!, _syncIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_syncIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('is_dirty')) {
+      context.handle(
+        _isDirtyMeta,
+        isDirty.isAcceptableOrUnknown(data['is_dirty']!, _isDirtyMeta),
+      );
+    }
+    if (data.containsKey('created_at_ms')) {
+      context.handle(
+        _createdAtMsMeta,
+        createdAtMs.isAcceptableOrUnknown(
+          data['created_at_ms']!,
+          _createdAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMsMeta);
+    }
+    if (data.containsKey('updated_at_ms')) {
+      context.handle(
+        _updatedAtMsMeta,
+        updatedAtMs.isAcceptableOrUnknown(
+          data['updated_at_ms']!,
+          _updatedAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMsMeta);
+    }
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('recipe_product_id')) {
+      context.handle(
+        _recipeProductIdMeta,
+        recipeProductId.isAcceptableOrUnknown(
+          data['recipe_product_id']!,
+          _recipeProductIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_recipeProductIdMeta);
+    }
+    if (data.containsKey('ingredient_product_id')) {
+      context.handle(
+        _ingredientProductIdMeta,
+        ingredientProductId.isAcceptableOrUnknown(
+          data['ingredient_product_id']!,
+          _ingredientProductIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_ingredientProductIdMeta);
+    }
+    if (data.containsKey('quantity_needed')) {
+      context.handle(
+        _quantityNeededMeta,
+        quantityNeeded.isAcceptableOrUnknown(
+          data['quantity_needed']!,
+          _quantityNeededMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_quantityNeededMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {recipeProductId, ingredientProductId},
+  ];
+  @override
+  ProductRecipeIngredientRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductRecipeIngredientRow(
+      syncId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      isDirty: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_dirty'],
+      )!,
+      createdAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at_ms'],
+      )!,
+      updatedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at_ms'],
+      )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      recipeProductId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipe_product_id'],
+      )!,
+      ingredientProductId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ingredient_product_id'],
+      )!,
+      quantityNeeded: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}quantity_needed'],
+      )!,
+    );
+  }
+
+  @override
+  $ProductRecipeIngredientsTable createAlias(String alias) {
+    return $ProductRecipeIngredientsTable(attachedDatabase, alias);
+  }
+}
+
+class ProductRecipeIngredientRow extends DataClass
+    with $ProductRecipeIngredientsTableToColumns {
+  @override
+  final String syncId;
+  @override
+  final String deviceId;
+  @override
+  final bool isDeleted;
+  @override
+  final bool isDirty;
+  @override
+  final int createdAtMs;
+  @override
+  final int updatedAtMs;
+  @override
+  final String id;
+  @override
+  final String recipeProductId;
+  @override
+  final String ingredientProductId;
+  @override
+  final double quantityNeeded;
+  const ProductRecipeIngredientRow({
+    required this.syncId,
+    required this.deviceId,
+    required this.isDeleted,
+    required this.isDirty,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    required this.id,
+    required this.recipeProductId,
+    required this.ingredientProductId,
+    required this.quantityNeeded,
+  });
+  ProductRecipeIngredientsCompanion toCompanion(bool nullToAbsent) {
+    return ProductRecipeIngredientsCompanion(
+      syncId: Value(syncId),
+      deviceId: Value(deviceId),
+      isDeleted: Value(isDeleted),
+      isDirty: Value(isDirty),
+      createdAtMs: Value(createdAtMs),
+      updatedAtMs: Value(updatedAtMs),
+      id: Value(id),
+      recipeProductId: Value(recipeProductId),
+      ingredientProductId: Value(ingredientProductId),
+      quantityNeeded: Value(quantityNeeded),
+    );
+  }
+
+  factory ProductRecipeIngredientRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductRecipeIngredientRow(
+      syncId: serializer.fromJson<String>(json['syncId']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      isDirty: serializer.fromJson<bool>(json['isDirty']),
+      createdAtMs: serializer.fromJson<int>(json['createdAtMs']),
+      updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
+      id: serializer.fromJson<String>(json['id']),
+      recipeProductId: serializer.fromJson<String>(json['recipeProductId']),
+      ingredientProductId: serializer.fromJson<String>(
+        json['ingredientProductId'],
+      ),
+      quantityNeeded: serializer.fromJson<double>(json['quantityNeeded']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'syncId': serializer.toJson<String>(syncId),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'isDirty': serializer.toJson<bool>(isDirty),
+      'createdAtMs': serializer.toJson<int>(createdAtMs),
+      'updatedAtMs': serializer.toJson<int>(updatedAtMs),
+      'id': serializer.toJson<String>(id),
+      'recipeProductId': serializer.toJson<String>(recipeProductId),
+      'ingredientProductId': serializer.toJson<String>(ingredientProductId),
+      'quantityNeeded': serializer.toJson<double>(quantityNeeded),
+    };
+  }
+
+  ProductRecipeIngredientRow copyWith({
+    String? syncId,
+    String? deviceId,
+    bool? isDeleted,
+    bool? isDirty,
+    int? createdAtMs,
+    int? updatedAtMs,
+    String? id,
+    String? recipeProductId,
+    String? ingredientProductId,
+    double? quantityNeeded,
+  }) => ProductRecipeIngredientRow(
+    syncId: syncId ?? this.syncId,
+    deviceId: deviceId ?? this.deviceId,
+    isDeleted: isDeleted ?? this.isDeleted,
+    isDirty: isDirty ?? this.isDirty,
+    createdAtMs: createdAtMs ?? this.createdAtMs,
+    updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+    id: id ?? this.id,
+    recipeProductId: recipeProductId ?? this.recipeProductId,
+    ingredientProductId: ingredientProductId ?? this.ingredientProductId,
+    quantityNeeded: quantityNeeded ?? this.quantityNeeded,
+  );
+  ProductRecipeIngredientRow copyWithCompanion(
+    ProductRecipeIngredientsCompanion data,
+  ) {
+    return ProductRecipeIngredientRow(
+      syncId: data.syncId.present ? data.syncId.value : this.syncId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
+      createdAtMs: data.createdAtMs.present
+          ? data.createdAtMs.value
+          : this.createdAtMs,
+      updatedAtMs: data.updatedAtMs.present
+          ? data.updatedAtMs.value
+          : this.updatedAtMs,
+      id: data.id.present ? data.id.value : this.id,
+      recipeProductId: data.recipeProductId.present
+          ? data.recipeProductId.value
+          : this.recipeProductId,
+      ingredientProductId: data.ingredientProductId.present
+          ? data.ingredientProductId.value
+          : this.ingredientProductId,
+      quantityNeeded: data.quantityNeeded.present
+          ? data.quantityNeeded.value
+          : this.quantityNeeded,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductRecipeIngredientRow(')
+          ..write('syncId: $syncId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('createdAtMs: $createdAtMs, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('id: $id, ')
+          ..write('recipeProductId: $recipeProductId, ')
+          ..write('ingredientProductId: $ingredientProductId, ')
+          ..write('quantityNeeded: $quantityNeeded')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    syncId,
+    deviceId,
+    isDeleted,
+    isDirty,
+    createdAtMs,
+    updatedAtMs,
+    id,
+    recipeProductId,
+    ingredientProductId,
+    quantityNeeded,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductRecipeIngredientRow &&
+          other.syncId == this.syncId &&
+          other.deviceId == this.deviceId &&
+          other.isDeleted == this.isDeleted &&
+          other.isDirty == this.isDirty &&
+          other.createdAtMs == this.createdAtMs &&
+          other.updatedAtMs == this.updatedAtMs &&
+          other.id == this.id &&
+          other.recipeProductId == this.recipeProductId &&
+          other.ingredientProductId == this.ingredientProductId &&
+          other.quantityNeeded == this.quantityNeeded);
+}
+
+class ProductRecipeIngredientsCompanion
+    extends UpdateCompanion<ProductRecipeIngredientRow> {
+  final Value<String> syncId;
+  final Value<String> deviceId;
+  final Value<bool> isDeleted;
+  final Value<bool> isDirty;
+  final Value<int> createdAtMs;
+  final Value<int> updatedAtMs;
+  final Value<String> id;
+  final Value<String> recipeProductId;
+  final Value<String> ingredientProductId;
+  final Value<double> quantityNeeded;
+  final Value<int> rowid;
+  const ProductRecipeIngredientsCompanion({
+    this.syncId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    this.createdAtMs = const Value.absent(),
+    this.updatedAtMs = const Value.absent(),
+    this.id = const Value.absent(),
+    this.recipeProductId = const Value.absent(),
+    this.ingredientProductId = const Value.absent(),
+    this.quantityNeeded = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProductRecipeIngredientsCompanion.insert({
+    required String syncId,
+    this.deviceId = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    required int createdAtMs,
+    required int updatedAtMs,
+    required String id,
+    required String recipeProductId,
+    required String ingredientProductId,
+    required double quantityNeeded,
+    this.rowid = const Value.absent(),
+  }) : syncId = Value(syncId),
+       createdAtMs = Value(createdAtMs),
+       updatedAtMs = Value(updatedAtMs),
+       id = Value(id),
+       recipeProductId = Value(recipeProductId),
+       ingredientProductId = Value(ingredientProductId),
+       quantityNeeded = Value(quantityNeeded);
+  static Insertable<ProductRecipeIngredientRow> custom({
+    Expression<String>? syncId,
+    Expression<String>? deviceId,
+    Expression<bool>? isDeleted,
+    Expression<bool>? isDirty,
+    Expression<int>? createdAtMs,
+    Expression<int>? updatedAtMs,
+    Expression<String>? id,
+    Expression<String>? recipeProductId,
+    Expression<String>? ingredientProductId,
+    Expression<double>? quantityNeeded,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (syncId != null) 'sync_id': syncId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (isDirty != null) 'is_dirty': isDirty,
+      if (createdAtMs != null) 'created_at_ms': createdAtMs,
+      if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
+      if (id != null) 'id': id,
+      if (recipeProductId != null) 'recipe_product_id': recipeProductId,
+      if (ingredientProductId != null)
+        'ingredient_product_id': ingredientProductId,
+      if (quantityNeeded != null) 'quantity_needed': quantityNeeded,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProductRecipeIngredientsCompanion copyWith({
+    Value<String>? syncId,
+    Value<String>? deviceId,
+    Value<bool>? isDeleted,
+    Value<bool>? isDirty,
+    Value<int>? createdAtMs,
+    Value<int>? updatedAtMs,
+    Value<String>? id,
+    Value<String>? recipeProductId,
+    Value<String>? ingredientProductId,
+    Value<double>? quantityNeeded,
+    Value<int>? rowid,
+  }) {
+    return ProductRecipeIngredientsCompanion(
+      syncId: syncId ?? this.syncId,
+      deviceId: deviceId ?? this.deviceId,
+      isDeleted: isDeleted ?? this.isDeleted,
+      isDirty: isDirty ?? this.isDirty,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      id: id ?? this.id,
+      recipeProductId: recipeProductId ?? this.recipeProductId,
+      ingredientProductId: ingredientProductId ?? this.ingredientProductId,
+      quantityNeeded: quantityNeeded ?? this.quantityNeeded,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (syncId.present) {
+      map['sync_id'] = Variable<String>(syncId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (isDirty.present) {
+      map['is_dirty'] = Variable<bool>(isDirty.value);
+    }
+    if (createdAtMs.present) {
+      map['created_at_ms'] = Variable<int>(createdAtMs.value);
+    }
+    if (updatedAtMs.present) {
+      map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
+    }
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (recipeProductId.present) {
+      map['recipe_product_id'] = Variable<String>(recipeProductId.value);
+    }
+    if (ingredientProductId.present) {
+      map['ingredient_product_id'] = Variable<String>(
+        ingredientProductId.value,
+      );
+    }
+    if (quantityNeeded.present) {
+      map['quantity_needed'] = Variable<double>(quantityNeeded.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductRecipeIngredientsCompanion(')
+          ..write('syncId: $syncId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('createdAtMs: $createdAtMs, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('id: $id, ')
+          ..write('recipeProductId: $recipeProductId, ')
+          ..write('ingredientProductId: $ingredientProductId, ')
+          ..write('quantityNeeded: $quantityNeeded, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   _$AppDatabase.connect(DatabaseConnection c) : super.connect(c);
@@ -14520,6 +16660,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $UtangRecordsTable utangRecords = $UtangRecordsTable(this);
   late final $SalesTable sales = $SalesTable(this);
   late final $SaleItemsTable saleItems = $SaleItemsTable(this);
+  late final $BusinessProfilesTable businessProfiles = $BusinessProfilesTable(
+    this,
+  );
+  late final $ProductSerialNumbersTable productSerialNumbers =
+      $ProductSerialNumbersTable(this);
+  late final $ProductRecipeIngredientsTable productRecipeIngredients =
+      $ProductRecipeIngredientsTable(this);
   late final Index chargesIsDirtyIdx = Index(
     'charges_is_dirty_idx',
     'CREATE INDEX charges_is_dirty_idx ON charges (is_dirty)',
@@ -14660,6 +16807,26 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'sale_items_is_dirty_idx',
     'CREATE INDEX sale_items_is_dirty_idx ON sale_items (is_dirty)',
   );
+  late final Index businessProfilesIsDirtyIdx = Index(
+    'business_profiles_is_dirty_idx',
+    'CREATE INDEX business_profiles_is_dirty_idx ON business_profiles (is_dirty)',
+  );
+  late final Index productSerialNumbersProductIdx = Index(
+    'product_serial_numbers_product_idx',
+    'CREATE INDEX product_serial_numbers_product_idx ON product_serial_numbers (product_id)',
+  );
+  late final Index productSerialNumbersIsDirtyIdx = Index(
+    'product_serial_numbers_is_dirty_idx',
+    'CREATE INDEX product_serial_numbers_is_dirty_idx ON product_serial_numbers (is_dirty)',
+  );
+  late final Index productRecipeIngredientsRecipeIdx = Index(
+    'product_recipe_ingredients_recipe_idx',
+    'CREATE INDEX product_recipe_ingredients_recipe_idx ON product_recipe_ingredients (recipe_product_id)',
+  );
+  late final Index productRecipeIngredientsIsDirtyIdx = Index(
+    'product_recipe_ingredients_is_dirty_idx',
+    'CREATE INDEX product_recipe_ingredients_is_dirty_idx ON product_recipe_ingredients (is_dirty)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -14683,6 +16850,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     utangRecords,
     sales,
     saleItems,
+    businessProfiles,
+    productSerialNumbers,
+    productRecipeIngredients,
     chargesIsDirtyIdx,
     chargesTransactionTypeKeyIdx,
     partiesIsDirtyIdx,
@@ -14718,6 +16888,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     saleItemsSaleIdIdx,
     saleItemsProductIdIdx,
     saleItemsIsDirtyIdx,
+    businessProfilesIsDirtyIdx,
+    productSerialNumbersProductIdx,
+    productSerialNumbersIsDirtyIdx,
+    productRecipeIngredientsRecipeIdx,
+    productRecipeIngredientsIsDirtyIdx,
   ];
 }
 
@@ -18968,6 +21143,8 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<int?> expirationDateMs,
       Value<String?> categoryId,
       Value<String?> shelfLocationId,
+      Value<String> itemType,
+      Value<String> customAttributesJson,
       Value<int> rowid,
     });
 typedef $$ProductsTableUpdateCompanionBuilder =
@@ -18995,6 +21172,8 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<int?> expirationDateMs,
       Value<String?> categoryId,
       Value<String?> shelfLocationId,
+      Value<String> itemType,
+      Value<String> customAttributesJson,
       Value<int> rowid,
     });
 
@@ -19102,6 +21281,93 @@ final class $$ProductsTableReferences
     ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_saleItemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $ProductSerialNumbersTable,
+    List<ProductSerialNumberRow>
+  >
+  _productSerialNumbersRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.productSerialNumbers,
+        aliasName: $_aliasNameGenerator(
+          db.products.id,
+          db.productSerialNumbers.productId,
+        ),
+      );
+
+  $$ProductSerialNumbersTableProcessedTableManager
+  get productSerialNumbersRefs {
+    final manager = $$ProductSerialNumbersTableTableManager(
+      $_db,
+      $_db.productSerialNumbers,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _productSerialNumbersRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $ProductRecipeIngredientsTable,
+    List<ProductRecipeIngredientRow>
+  >
+  _recipeProductRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.productRecipeIngredients,
+    aliasName: $_aliasNameGenerator(
+      db.products.id,
+      db.productRecipeIngredients.recipeProductId,
+    ),
+  );
+
+  $$ProductRecipeIngredientsTableProcessedTableManager get recipeProductRefs {
+    final manager =
+        $$ProductRecipeIngredientsTableTableManager(
+          $_db,
+          $_db.productRecipeIngredients,
+        ).filter(
+          (f) => f.recipeProductId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_recipeProductRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $ProductRecipeIngredientsTable,
+    List<ProductRecipeIngredientRow>
+  >
+  _ingredientProductRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.productRecipeIngredients,
+        aliasName: $_aliasNameGenerator(
+          db.products.id,
+          db.productRecipeIngredients.ingredientProductId,
+        ),
+      );
+
+  $$ProductRecipeIngredientsTableProcessedTableManager
+  get ingredientProductRefs {
+    final manager =
+        $$ProductRecipeIngredientsTableTableManager(
+          $_db,
+          $_db.productRecipeIngredients,
+        ).filter(
+          (f) =>
+              f.ingredientProductId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _ingredientProductRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -19219,6 +21485,16 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<int> get expirationDateMs => $composableBuilder(
     column: $table.expirationDateMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get itemType => $composableBuilder(
+    column: $table.itemType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get customAttributesJson => $composableBuilder(
+    column: $table.customAttributesJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19343,6 +21619,85 @@ class $$ProductsTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> productSerialNumbersRefs(
+    Expression<bool> Function($$ProductSerialNumbersTableFilterComposer f) f,
+  ) {
+    final $$ProductSerialNumbersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productSerialNumbers,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductSerialNumbersTableFilterComposer(
+            $db: $db,
+            $table: $db.productSerialNumbers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> recipeProductRefs(
+    Expression<bool> Function($$ProductRecipeIngredientsTableFilterComposer f)
+    f,
+  ) {
+    final $$ProductRecipeIngredientsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.productRecipeIngredients,
+          getReferencedColumn: (t) => t.recipeProductId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ProductRecipeIngredientsTableFilterComposer(
+                $db: $db,
+                $table: $db.productRecipeIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> ingredientProductRefs(
+    Expression<bool> Function($$ProductRecipeIngredientsTableFilterComposer f)
+    f,
+  ) {
+    final $$ProductRecipeIngredientsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.productRecipeIngredients,
+          getReferencedColumn: (t) => t.ingredientProductId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ProductRecipeIngredientsTableFilterComposer(
+                $db: $db,
+                $table: $db.productRecipeIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ProductsTableOrderingComposer
@@ -19456,6 +21811,16 @@ class $$ProductsTableOrderingComposer
 
   ColumnOrderings<int> get expirationDateMs => $composableBuilder(
     column: $table.expirationDateMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get itemType => $composableBuilder(
+    column: $table.itemType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get customAttributesJson => $composableBuilder(
+    column: $table.customAttributesJson,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -19596,6 +21961,14 @@ class $$ProductsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get itemType =>
+      $composableBuilder(column: $table.itemType, builder: (column) => column);
+
+  GeneratedColumn<String> get customAttributesJson => $composableBuilder(
+    column: $table.customAttributesJson,
+    builder: (column) => column,
+  );
+
   $$ProductCategoriesTableAnnotationComposer get categoryId {
     final $$ProductCategoriesTableAnnotationComposer composer =
         $composerBuilder(
@@ -19718,6 +22091,86 @@ class $$ProductsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> productSerialNumbersRefs<T extends Object>(
+    Expression<T> Function($$ProductSerialNumbersTableAnnotationComposer a) f,
+  ) {
+    final $$ProductSerialNumbersTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.productSerialNumbers,
+          getReferencedColumn: (t) => t.productId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ProductSerialNumbersTableAnnotationComposer(
+                $db: $db,
+                $table: $db.productSerialNumbers,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> recipeProductRefs<T extends Object>(
+    Expression<T> Function($$ProductRecipeIngredientsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$ProductRecipeIngredientsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.productRecipeIngredients,
+          getReferencedColumn: (t) => t.recipeProductId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ProductRecipeIngredientsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.productRecipeIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> ingredientProductRefs<T extends Object>(
+    Expression<T> Function($$ProductRecipeIngredientsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$ProductRecipeIngredientsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.productRecipeIngredients,
+          getReferencedColumn: (t) => t.ingredientProductId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ProductRecipeIngredientsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.productRecipeIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ProductsTableTableManager
@@ -19739,6 +22192,9 @@ class $$ProductsTableTableManager
             bool productUnitConversionsRefs,
             bool stockMovementsRefs,
             bool saleItemsRefs,
+            bool productSerialNumbersRefs,
+            bool recipeProductRefs,
+            bool ingredientProductRefs,
           })
         > {
   $$ProductsTableTableManager(_$AppDatabase db, $ProductsTable table)
@@ -19777,6 +22233,8 @@ class $$ProductsTableTableManager
                 Value<int?> expirationDateMs = const Value.absent(),
                 Value<String?> categoryId = const Value.absent(),
                 Value<String?> shelfLocationId = const Value.absent(),
+                Value<String> itemType = const Value.absent(),
+                Value<String> customAttributesJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProductsCompanion(
                 syncId: syncId,
@@ -19802,6 +22260,8 @@ class $$ProductsTableTableManager
                 expirationDateMs: expirationDateMs,
                 categoryId: categoryId,
                 shelfLocationId: shelfLocationId,
+                itemType: itemType,
+                customAttributesJson: customAttributesJson,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -19829,6 +22289,8 @@ class $$ProductsTableTableManager
                 Value<int?> expirationDateMs = const Value.absent(),
                 Value<String?> categoryId = const Value.absent(),
                 Value<String?> shelfLocationId = const Value.absent(),
+                Value<String> itemType = const Value.absent(),
+                Value<String> customAttributesJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProductsCompanion.insert(
                 syncId: syncId,
@@ -19854,6 +22316,8 @@ class $$ProductsTableTableManager
                 expirationDateMs: expirationDateMs,
                 categoryId: categoryId,
                 shelfLocationId: shelfLocationId,
+                itemType: itemType,
+                customAttributesJson: customAttributesJson,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -19871,6 +22335,9 @@ class $$ProductsTableTableManager
                 productUnitConversionsRefs = false,
                 stockMovementsRefs = false,
                 saleItemsRefs = false,
+                productSerialNumbersRefs = false,
+                recipeProductRefs = false,
+                ingredientProductRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -19878,6 +22345,9 @@ class $$ProductsTableTableManager
                     if (productUnitConversionsRefs) db.productUnitConversions,
                     if (stockMovementsRefs) db.stockMovements,
                     if (saleItemsRefs) db.saleItems,
+                    if (productSerialNumbersRefs) db.productSerialNumbers,
+                    if (recipeProductRefs) db.productRecipeIngredients,
+                    if (ingredientProductRefs) db.productRecipeIngredients,
                   ],
                   addJoins:
                       <
@@ -19989,6 +22459,69 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (productSerialNumbersRefs)
+                        await $_getPrefetchedData<
+                          ProductRow,
+                          $ProductsTable,
+                          ProductSerialNumberRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._productSerialNumbersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).productSerialNumbersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (recipeProductRefs)
+                        await $_getPrefetchedData<
+                          ProductRow,
+                          $ProductsTable,
+                          ProductRecipeIngredientRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._recipeProductRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).recipeProductRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.recipeProductId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (ingredientProductRefs)
+                        await $_getPrefetchedData<
+                          ProductRow,
+                          $ProductsTable,
+                          ProductRecipeIngredientRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._ingredientProductRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ingredientProductRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.ingredientProductId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -20015,6 +22548,9 @@ typedef $$ProductsTableProcessedTableManager =
         bool productUnitConversionsRefs,
         bool stockMovementsRefs,
         bool saleItemsRefs,
+        bool productSerialNumbersRefs,
+        bool recipeProductRefs,
+        bool ingredientProductRefs,
       })
     >;
 typedef $$ProductUnitConversionsTableCreateCompanionBuilder =
@@ -22779,6 +25315,1326 @@ typedef $$SaleItemsTableProcessedTableManager =
       SaleItemRow,
       PrefetchHooks Function({bool saleId, bool productId})
     >;
+typedef $$BusinessProfilesTableCreateCompanionBuilder =
+    BusinessProfilesCompanion Function({
+      required String syncId,
+      Value<String> deviceId,
+      Value<bool> isDeleted,
+      Value<bool> isDirty,
+      required int createdAtMs,
+      required int updatedAtMs,
+      required String id,
+      required String businessType,
+      required String businessName,
+      Value<String> defaultCurrency,
+      Value<String> preferencesJson,
+      Value<int> rowid,
+    });
+typedef $$BusinessProfilesTableUpdateCompanionBuilder =
+    BusinessProfilesCompanion Function({
+      Value<String> syncId,
+      Value<String> deviceId,
+      Value<bool> isDeleted,
+      Value<bool> isDirty,
+      Value<int> createdAtMs,
+      Value<int> updatedAtMs,
+      Value<String> id,
+      Value<String> businessType,
+      Value<String> businessName,
+      Value<String> defaultCurrency,
+      Value<String> preferencesJson,
+      Value<int> rowid,
+    });
+
+class $$BusinessProfilesTableFilterComposer
+    extends Composer<_$AppDatabase, $BusinessProfilesTable> {
+  $$BusinessProfilesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get businessType => $composableBuilder(
+    column: $table.businessType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get businessName => $composableBuilder(
+    column: $table.businessName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultCurrency => $composableBuilder(
+    column: $table.defaultCurrency,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get preferencesJson => $composableBuilder(
+    column: $table.preferencesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BusinessProfilesTableOrderingComposer
+    extends Composer<_$AppDatabase, $BusinessProfilesTable> {
+  $$BusinessProfilesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get businessType => $composableBuilder(
+    column: $table.businessType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get businessName => $composableBuilder(
+    column: $table.businessName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get defaultCurrency => $composableBuilder(
+    column: $table.defaultCurrency,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get preferencesJson => $composableBuilder(
+    column: $table.preferencesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BusinessProfilesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BusinessProfilesTable> {
+  $$BusinessProfilesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get syncId =>
+      $composableBuilder(column: $table.syncId, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDirty =>
+      $composableBuilder(column: $table.isDirty, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get businessType => $composableBuilder(
+    column: $table.businessType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get businessName => $composableBuilder(
+    column: $table.businessName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultCurrency => $composableBuilder(
+    column: $table.defaultCurrency,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get preferencesJson => $composableBuilder(
+    column: $table.preferencesJson,
+    builder: (column) => column,
+  );
+}
+
+class $$BusinessProfilesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BusinessProfilesTable,
+          BusinessProfileRow,
+          $$BusinessProfilesTableFilterComposer,
+          $$BusinessProfilesTableOrderingComposer,
+          $$BusinessProfilesTableAnnotationComposer,
+          $$BusinessProfilesTableCreateCompanionBuilder,
+          $$BusinessProfilesTableUpdateCompanionBuilder,
+          (
+            BusinessProfileRow,
+            BaseReferences<
+              _$AppDatabase,
+              $BusinessProfilesTable,
+              BusinessProfileRow
+            >,
+          ),
+          BusinessProfileRow,
+          PrefetchHooks Function()
+        > {
+  $$BusinessProfilesTableTableManager(
+    _$AppDatabase db,
+    $BusinessProfilesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BusinessProfilesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BusinessProfilesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BusinessProfilesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> syncId = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                Value<int> createdAtMs = const Value.absent(),
+                Value<int> updatedAtMs = const Value.absent(),
+                Value<String> id = const Value.absent(),
+                Value<String> businessType = const Value.absent(),
+                Value<String> businessName = const Value.absent(),
+                Value<String> defaultCurrency = const Value.absent(),
+                Value<String> preferencesJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BusinessProfilesCompanion(
+                syncId: syncId,
+                deviceId: deviceId,
+                isDeleted: isDeleted,
+                isDirty: isDirty,
+                createdAtMs: createdAtMs,
+                updatedAtMs: updatedAtMs,
+                id: id,
+                businessType: businessType,
+                businessName: businessName,
+                defaultCurrency: defaultCurrency,
+                preferencesJson: preferencesJson,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String syncId,
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                required int createdAtMs,
+                required int updatedAtMs,
+                required String id,
+                required String businessType,
+                required String businessName,
+                Value<String> defaultCurrency = const Value.absent(),
+                Value<String> preferencesJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BusinessProfilesCompanion.insert(
+                syncId: syncId,
+                deviceId: deviceId,
+                isDeleted: isDeleted,
+                isDirty: isDirty,
+                createdAtMs: createdAtMs,
+                updatedAtMs: updatedAtMs,
+                id: id,
+                businessType: businessType,
+                businessName: businessName,
+                defaultCurrency: defaultCurrency,
+                preferencesJson: preferencesJson,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BusinessProfilesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BusinessProfilesTable,
+      BusinessProfileRow,
+      $$BusinessProfilesTableFilterComposer,
+      $$BusinessProfilesTableOrderingComposer,
+      $$BusinessProfilesTableAnnotationComposer,
+      $$BusinessProfilesTableCreateCompanionBuilder,
+      $$BusinessProfilesTableUpdateCompanionBuilder,
+      (
+        BusinessProfileRow,
+        BaseReferences<
+          _$AppDatabase,
+          $BusinessProfilesTable,
+          BusinessProfileRow
+        >,
+      ),
+      BusinessProfileRow,
+      PrefetchHooks Function()
+    >;
+typedef $$ProductSerialNumbersTableCreateCompanionBuilder =
+    ProductSerialNumbersCompanion Function({
+      required String syncId,
+      Value<String> deviceId,
+      Value<bool> isDeleted,
+      Value<bool> isDirty,
+      required int createdAtMs,
+      required int updatedAtMs,
+      required String id,
+      required String productId,
+      required String serialNumber,
+      Value<String> status,
+      Value<int> rowid,
+    });
+typedef $$ProductSerialNumbersTableUpdateCompanionBuilder =
+    ProductSerialNumbersCompanion Function({
+      Value<String> syncId,
+      Value<String> deviceId,
+      Value<bool> isDeleted,
+      Value<bool> isDirty,
+      Value<int> createdAtMs,
+      Value<int> updatedAtMs,
+      Value<String> id,
+      Value<String> productId,
+      Value<String> serialNumber,
+      Value<String> status,
+      Value<int> rowid,
+    });
+
+final class $$ProductSerialNumbersTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ProductSerialNumbersTable,
+          ProductSerialNumberRow
+        > {
+  $$ProductSerialNumbersTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.productSerialNumbers.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ProductSerialNumbersTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductSerialNumbersTable> {
+  $$ProductSerialNumbersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get serialNumber => $composableBuilder(
+    column: $table.serialNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductSerialNumbersTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductSerialNumbersTable> {
+  $$ProductSerialNumbersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get serialNumber => $composableBuilder(
+    column: $table.serialNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductSerialNumbersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductSerialNumbersTable> {
+  $$ProductSerialNumbersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get syncId =>
+      $composableBuilder(column: $table.syncId, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDirty =>
+      $composableBuilder(column: $table.isDirty, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get serialNumber => $composableBuilder(
+    column: $table.serialNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductSerialNumbersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProductSerialNumbersTable,
+          ProductSerialNumberRow,
+          $$ProductSerialNumbersTableFilterComposer,
+          $$ProductSerialNumbersTableOrderingComposer,
+          $$ProductSerialNumbersTableAnnotationComposer,
+          $$ProductSerialNumbersTableCreateCompanionBuilder,
+          $$ProductSerialNumbersTableUpdateCompanionBuilder,
+          (ProductSerialNumberRow, $$ProductSerialNumbersTableReferences),
+          ProductSerialNumberRow,
+          PrefetchHooks Function({bool productId})
+        > {
+  $$ProductSerialNumbersTableTableManager(
+    _$AppDatabase db,
+    $ProductSerialNumbersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductSerialNumbersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProductSerialNumbersTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ProductSerialNumbersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> syncId = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                Value<int> createdAtMs = const Value.absent(),
+                Value<int> updatedAtMs = const Value.absent(),
+                Value<String> id = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<String> serialNumber = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProductSerialNumbersCompanion(
+                syncId: syncId,
+                deviceId: deviceId,
+                isDeleted: isDeleted,
+                isDirty: isDirty,
+                createdAtMs: createdAtMs,
+                updatedAtMs: updatedAtMs,
+                id: id,
+                productId: productId,
+                serialNumber: serialNumber,
+                status: status,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String syncId,
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                required int createdAtMs,
+                required int updatedAtMs,
+                required String id,
+                required String productId,
+                required String serialNumber,
+                Value<String> status = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProductSerialNumbersCompanion.insert(
+                syncId: syncId,
+                deviceId: deviceId,
+                isDeleted: isDeleted,
+                isDirty: isDirty,
+                createdAtMs: createdAtMs,
+                updatedAtMs: updatedAtMs,
+                id: id,
+                productId: productId,
+                serialNumber: serialNumber,
+                status: status,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ProductSerialNumbersTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({productId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (productId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.productId,
+                                referencedTable:
+                                    $$ProductSerialNumbersTableReferences
+                                        ._productIdTable(db),
+                                referencedColumn:
+                                    $$ProductSerialNumbersTableReferences
+                                        ._productIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ProductSerialNumbersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProductSerialNumbersTable,
+      ProductSerialNumberRow,
+      $$ProductSerialNumbersTableFilterComposer,
+      $$ProductSerialNumbersTableOrderingComposer,
+      $$ProductSerialNumbersTableAnnotationComposer,
+      $$ProductSerialNumbersTableCreateCompanionBuilder,
+      $$ProductSerialNumbersTableUpdateCompanionBuilder,
+      (ProductSerialNumberRow, $$ProductSerialNumbersTableReferences),
+      ProductSerialNumberRow,
+      PrefetchHooks Function({bool productId})
+    >;
+typedef $$ProductRecipeIngredientsTableCreateCompanionBuilder =
+    ProductRecipeIngredientsCompanion Function({
+      required String syncId,
+      Value<String> deviceId,
+      Value<bool> isDeleted,
+      Value<bool> isDirty,
+      required int createdAtMs,
+      required int updatedAtMs,
+      required String id,
+      required String recipeProductId,
+      required String ingredientProductId,
+      required double quantityNeeded,
+      Value<int> rowid,
+    });
+typedef $$ProductRecipeIngredientsTableUpdateCompanionBuilder =
+    ProductRecipeIngredientsCompanion Function({
+      Value<String> syncId,
+      Value<String> deviceId,
+      Value<bool> isDeleted,
+      Value<bool> isDirty,
+      Value<int> createdAtMs,
+      Value<int> updatedAtMs,
+      Value<String> id,
+      Value<String> recipeProductId,
+      Value<String> ingredientProductId,
+      Value<double> quantityNeeded,
+      Value<int> rowid,
+    });
+
+final class $$ProductRecipeIngredientsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ProductRecipeIngredientsTable,
+          ProductRecipeIngredientRow
+        > {
+  $$ProductRecipeIngredientsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProductsTable _recipeProductIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(
+          db.productRecipeIngredients.recipeProductId,
+          db.products.id,
+        ),
+      );
+
+  $$ProductsTableProcessedTableManager get recipeProductId {
+    final $_column = $_itemColumn<String>('recipe_product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_recipeProductIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _ingredientProductIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(
+          db.productRecipeIngredients.ingredientProductId,
+          db.products.id,
+        ),
+      );
+
+  $$ProductsTableProcessedTableManager get ingredientProductId {
+    final $_column = $_itemColumn<String>('ingredient_product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_ingredientProductIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ProductRecipeIngredientsTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductRecipeIngredientsTable> {
+  $$ProductRecipeIngredientsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get quantityNeeded => $composableBuilder(
+    column: $table.quantityNeeded,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProductsTableFilterComposer get recipeProductId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recipeProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get ingredientProductId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ingredientProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductRecipeIngredientsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductRecipeIngredientsTable> {
+  $$ProductRecipeIngredientsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get quantityNeeded => $composableBuilder(
+    column: $table.quantityNeeded,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProductsTableOrderingComposer get recipeProductId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recipeProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get ingredientProductId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ingredientProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductRecipeIngredientsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductRecipeIngredientsTable> {
+  $$ProductRecipeIngredientsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get syncId =>
+      $composableBuilder(column: $table.syncId, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDirty =>
+      $composableBuilder(column: $table.isDirty, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get quantityNeeded => $composableBuilder(
+    column: $table.quantityNeeded,
+    builder: (column) => column,
+  );
+
+  $$ProductsTableAnnotationComposer get recipeProductId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recipeProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get ingredientProductId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ingredientProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductRecipeIngredientsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProductRecipeIngredientsTable,
+          ProductRecipeIngredientRow,
+          $$ProductRecipeIngredientsTableFilterComposer,
+          $$ProductRecipeIngredientsTableOrderingComposer,
+          $$ProductRecipeIngredientsTableAnnotationComposer,
+          $$ProductRecipeIngredientsTableCreateCompanionBuilder,
+          $$ProductRecipeIngredientsTableUpdateCompanionBuilder,
+          (
+            ProductRecipeIngredientRow,
+            $$ProductRecipeIngredientsTableReferences,
+          ),
+          ProductRecipeIngredientRow,
+          PrefetchHooks Function({
+            bool recipeProductId,
+            bool ingredientProductId,
+          })
+        > {
+  $$ProductRecipeIngredientsTableTableManager(
+    _$AppDatabase db,
+    $ProductRecipeIngredientsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductRecipeIngredientsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ProductRecipeIngredientsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ProductRecipeIngredientsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> syncId = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                Value<int> createdAtMs = const Value.absent(),
+                Value<int> updatedAtMs = const Value.absent(),
+                Value<String> id = const Value.absent(),
+                Value<String> recipeProductId = const Value.absent(),
+                Value<String> ingredientProductId = const Value.absent(),
+                Value<double> quantityNeeded = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProductRecipeIngredientsCompanion(
+                syncId: syncId,
+                deviceId: deviceId,
+                isDeleted: isDeleted,
+                isDirty: isDirty,
+                createdAtMs: createdAtMs,
+                updatedAtMs: updatedAtMs,
+                id: id,
+                recipeProductId: recipeProductId,
+                ingredientProductId: ingredientProductId,
+                quantityNeeded: quantityNeeded,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String syncId,
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                required int createdAtMs,
+                required int updatedAtMs,
+                required String id,
+                required String recipeProductId,
+                required String ingredientProductId,
+                required double quantityNeeded,
+                Value<int> rowid = const Value.absent(),
+              }) => ProductRecipeIngredientsCompanion.insert(
+                syncId: syncId,
+                deviceId: deviceId,
+                isDeleted: isDeleted,
+                isDirty: isDirty,
+                createdAtMs: createdAtMs,
+                updatedAtMs: updatedAtMs,
+                id: id,
+                recipeProductId: recipeProductId,
+                ingredientProductId: ingredientProductId,
+                quantityNeeded: quantityNeeded,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ProductRecipeIngredientsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({recipeProductId = false, ingredientProductId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (recipeProductId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.recipeProductId,
+                                    referencedTable:
+                                        $$ProductRecipeIngredientsTableReferences
+                                            ._recipeProductIdTable(db),
+                                    referencedColumn:
+                                        $$ProductRecipeIngredientsTableReferences
+                                            ._recipeProductIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (ingredientProductId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.ingredientProductId,
+                                    referencedTable:
+                                        $$ProductRecipeIngredientsTableReferences
+                                            ._ingredientProductIdTable(db),
+                                    referencedColumn:
+                                        $$ProductRecipeIngredientsTableReferences
+                                            ._ingredientProductIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$ProductRecipeIngredientsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProductRecipeIngredientsTable,
+      ProductRecipeIngredientRow,
+      $$ProductRecipeIngredientsTableFilterComposer,
+      $$ProductRecipeIngredientsTableOrderingComposer,
+      $$ProductRecipeIngredientsTableAnnotationComposer,
+      $$ProductRecipeIngredientsTableCreateCompanionBuilder,
+      $$ProductRecipeIngredientsTableUpdateCompanionBuilder,
+      (ProductRecipeIngredientRow, $$ProductRecipeIngredientsTableReferences),
+      ProductRecipeIngredientRow,
+      PrefetchHooks Function({bool recipeProductId, bool ingredientProductId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -22822,4 +26678,13 @@ class $AppDatabaseManager {
       $$SalesTableTableManager(_db, _db.sales);
   $$SaleItemsTableTableManager get saleItems =>
       $$SaleItemsTableTableManager(_db, _db.saleItems);
+  $$BusinessProfilesTableTableManager get businessProfiles =>
+      $$BusinessProfilesTableTableManager(_db, _db.businessProfiles);
+  $$ProductSerialNumbersTableTableManager get productSerialNumbers =>
+      $$ProductSerialNumbersTableTableManager(_db, _db.productSerialNumbers);
+  $$ProductRecipeIngredientsTableTableManager get productRecipeIngredients =>
+      $$ProductRecipeIngredientsTableTableManager(
+        _db,
+        _db.productRecipeIngredients,
+      );
 }

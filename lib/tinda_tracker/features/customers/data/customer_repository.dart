@@ -1,4 +1,4 @@
-﻿import 'package:drift/drift.dart' show Variable;
+import 'package:drift/drift.dart' show Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -9,11 +9,11 @@ import 'customer_model.dart';
 
 /// Riverpod provider for the local-first customer repository.
 final customerRepositoryProvider = Provider<CustomerRepository>((ref) {
-  return CustomerRepository(database: ref.watch(appDatabaseProvider));
+  return CustomerRepository(database: ref.watch(currentAppDatabaseProvider));
 });
 
 /// Local-first customer repository (Drift-backed). Background push is handled
-/// by `SyncOrchestrator` via `is_dirty` flags — this layer only writes to
+/// by SyncOrchestrator via is_dirty flags - this layer only writes to
 /// SQLite.
 class CustomerRepository {
   CustomerRepository({required AppDatabase database})
@@ -62,7 +62,7 @@ class CustomerRepository {
     final records = utangRows
         .map((r) => TtUtangRecord.fromLocalDb(r, customerId))
         .toList();
-    // Customers table no longer carries a `balance` column; derive it from
+    // Customers table no longer carries a balance column; derive it from
     // utang records and inject for the legacy fromLocalDb factory.
     final balance = records.fold<double>(0, (sum, r) => sum + r.amount);
     final rowWithBalance = <String, Object?>{...row, 'balance': balance};
@@ -99,7 +99,7 @@ class CustomerRepository {
       'id, name, phone, address, notes, '
       'sync_id, device_id, is_deleted, is_dirty, '
       'created_at_ms, updated_at_ms'
-      ') VALUES (?,?,?,?,?,?,?,0,1,?,?)',
+      ') VALUES (?,?,?,?,?,?,0,1,?,?)',
       [
         id,
         name,

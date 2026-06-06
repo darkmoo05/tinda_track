@@ -9,8 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
+import 'core/database/app_database.dart';
+import 'package:drift/drift.dart';
+import 'core/database/daos/app_meta_dao.dart';
 import 'core/database/migrations/legacy_sqflite_importer.dart';
-import 'core/database/providers/database_providers.dart';
 import 'core/database/providers/auth_providers.dart';
 import 'shared/screens/login_screen.dart';
 import 'core/network/api_client.dart';
@@ -38,6 +40,7 @@ void _enforceImmersiveMode() {
 }
 
 Future<void> main() async {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   WidgetsFlutterBinding.ensureInitialized();
 
   await SentryFlutter.init(
@@ -86,10 +89,14 @@ Future<void> main() async {
 }
 
 Future<void> _runStartupMigrations(ProviderContainer container) async {
+  // The legacy importer runs against the legacy (pre-per-user) DB file.
+  // We open it directly rather than through the family provider because at
+  // startup there is no logged-in user yet.
+  AppDatabase? legacyDb;
   try {
-    final db = container.read(appDatabaseProvider);
-    final appMeta = container.read(appMetaDaoProvider);
-    await LegacyImporter(db, appMeta).runIfNeeded();
+    legacyDb = AppDatabase(); // opens legacy tinda_track_drift.sqlite
+    final appMeta = AppMetaDao(legacyDb);
+    await LegacyImporter(legacyDb, appMeta).runIfNeeded();
   } catch (e, st) {
     // BUG-13 fix: the importer marks `failed` so it retries next launch, but
     // we MUST leave a developer-log breadcrumb — a silent `catch (_) {}`
@@ -100,6 +107,8 @@ Future<void> _runStartupMigrations(ProviderContainer container) async {
       error: e,
       stackTrace: st,
     );
+  } finally {
+    await legacyDb?.close();
   }
 
   // Hydrate the live ApiClient base URL from the persisted setting (or the
@@ -229,14 +238,12 @@ class _StartupSyncGateState extends ConsumerState<StartupSyncGate> {
     } catch (_) {
       // Startup should continue even if first sync attempt fails.
     } finally {
-      if (!mounted) {
-        return;
-      }
       loading.close();
-      setState(() {
-        _ready = true;
-      });
     }
+    if (!mounted) return;
+    setState(() {
+      _ready = true;
+    });
   }
 
   @override

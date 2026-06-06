@@ -7,7 +7,7 @@ import '../../domain/entities/fee_transaction.dart';
 import '../../domain/repositories/fee_transaction_repository.dart';
 
 final feeTransactionsDaoProvider = Provider<FeeTransactionsDao>((ref) {
-  return FeeTransactionsDao(ref.watch(appDatabaseProvider));
+  return FeeTransactionsDao(ref.watch(currentAppDatabaseProvider));
 });
 
 final feeTransactionRepositoryProvider = Provider<FeeTransactionRepository>((
@@ -31,7 +31,7 @@ class FeeTransactionsNotifier extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncLoading();
     final repo = ref.read(feeTransactionRepositoryProvider);
     final result = await AsyncValue.guard(() => repo.save(fee));
-    state = result.whenData((_) => null);
+    state = result.whenData((_) {});
     return result.requireValue;
   }
 
