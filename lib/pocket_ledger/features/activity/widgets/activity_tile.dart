@@ -9,6 +9,8 @@ class ArchitectActivityTile extends StatelessWidget {
   final String time;
   final IconData icon;
   final Color iconColor;
+  final Color? amountColor;
+  final String? runningBalance;
   final VoidCallback? onTap;
 
   const ArchitectActivityTile({
@@ -20,6 +22,8 @@ class ArchitectActivityTile extends StatelessWidget {
     required this.time,
     required this.icon,
     required this.iconColor,
+    this.amountColor,
+    this.runningBalance,
     this.onTap,
   });
 
@@ -156,11 +160,11 @@ class ArchitectActivityTile extends StatelessWidget {
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
-                                color: isTopUp
+                                color: amountColor ?? (isTopUp
                                     ? AppColors.primary
                                     : (isIncome
                                           ? AppColors.secondary
-                                          : AppColors.error),
+                                          : AppColors.error)),
                               ),
                             ),
                           ),
@@ -172,6 +176,19 @@ class ArchitectActivityTile extends StatelessWidget {
                               color: AppColors.onSurfaceVariant,
                             ),
                           ),
+                          if (runningBalance != null &&
+                              runningBalance!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              runningBalance!,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurfaceVariant
+                                    .withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ],

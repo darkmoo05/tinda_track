@@ -67,7 +67,7 @@ class PartyHealthHero extends StatelessWidget {
               const SizedBox(width: 12),
               _buildMetricPill(
                 '${verificationRate.toStringAsFixed(1)}% Verified',
-                const Color(0xFF4DB6AC).withValues(alpha: 0.3),
+                AppColors.tealAccent.withValues(alpha: 0.3),
               ),
             ],
           ),
@@ -133,7 +133,7 @@ class PartyHealthHero extends StatelessWidget {
               minHeight: 8,
               backgroundColor: Colors.white.withValues(alpha: 0.18),
               valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF80CBC4),
+                AppColors.tealLight,
               ),
             ),
           ),

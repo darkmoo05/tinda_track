@@ -319,7 +319,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF1565C0), AppColors.primaryContainer],
+          colors: [AppColors.primaryContainer, AppColors.primary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -932,7 +932,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
       chipIcon = Icons.account_balance_wallet_rounded;
       destLabel = context.l10n.gcash;
     } else {
-      chipColor = const Color(0xFF8E6C00);
+      chipColor = AppColors.onHand;
       chipIcon = Icons.payments_outlined;
       destLabel = context.l10n.onHand;
     }
@@ -1159,7 +1159,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
     final isWithdrawal = entry.movementType == 'Fee Withdrawal';
     final Color color = isWithdrawal
         ? AppColors.error
-        : const Color(0xFFF59E0B);
+        : AppColors.warning;
     final IconData icon = isWithdrawal
         ? Icons.savings_rounded
         : Icons.swap_horiz_rounded;

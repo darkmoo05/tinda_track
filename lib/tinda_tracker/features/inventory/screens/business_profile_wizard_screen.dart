@@ -354,7 +354,7 @@ class _BusinessProfileWizardScreenState
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _currency,
+              initialValue: _currency,
               dropdownColor: const Color(0xFF1E1E24),
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(

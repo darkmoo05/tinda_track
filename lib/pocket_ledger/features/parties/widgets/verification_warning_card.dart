@@ -22,12 +22,12 @@ class VerificationWarningCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFCC99).withValues(alpha: 0.4),
+              color: AppColors.warningContainer.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
               Icons.contact_page_outlined,
-              color: Color(0xFF8B4513),
+              color: AppColors.warningText,
               size: 20,
             ),
           ),

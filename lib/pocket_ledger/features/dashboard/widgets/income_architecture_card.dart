@@ -5,11 +5,11 @@ import '../../../../core/app_theme.dart';
 enum _TimePeriod { week, month, year }
 
 // Neon palette for crypto-vibe glassmorphism card
-const _kGcashNeon = Color(0xFF3D9BFF); // electric blue
-const _kMayaNeon = Color(0xFF39FF95); // neon green
-const _kCashNeon = Color(0xFFFFD060); // gold
-const _kCardDark = Color(0xFF0A1628); // deep navy
-const _kCardDeep = Color(0xFF1C0E38); // deep indigo
+const _kGcashNeon = AppColors.gcashNeon; // electric blue
+const _kMayaNeon = AppColors.mayaNeon; // neon green
+const _kCashNeon = AppColors.cashNeon; // gold
+const _kCardDark = AppColors.darkNavy; // deep navy
+const _kCardDeep = AppColors.darkIndigo; // deep indigo
 
 class IncomeArchitectureCard extends StatefulWidget {
   const IncomeArchitectureCard({
@@ -487,7 +487,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
   ) {
     final gcashColor = _isDarkMode ? _kGcashNeon : AppColors.primary;
     final mayaColor = _isDarkMode ? _kMayaNeon : AppColors.secondary;
-    final cashColor = _isDarkMode ? _kCashNeon : const Color(0xFF8E6C00);
+    final cashColor = _isDarkMode ? _kCashNeon : AppColors.onHand;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -513,8 +513,8 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
               ? Colors.white.withValues(alpha: 0.30)
               : AppColors.onSurfaceVariant)
         : isPositive
-        ? (_isDarkMode ? const Color(0xFF39FF95) : AppColors.secondary)
-        : (_isDarkMode ? const Color(0xFFFF6B6B) : const Color(0xFFBA1A1A));
+        ? (_isDarkMode ? AppColors.mayaNeon : AppColors.secondary)
+        : (_isDarkMode ? AppColors.errorLight : AppColors.error);
 
     final labelTextColor = _isDarkMode
         ? Colors.white.withValues(alpha: 0.88)
@@ -579,7 +579,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     // Theme-aware color palette
     final gcashColor = _isDarkMode ? _kGcashNeon : AppColors.primary;
     final mayaColor = _isDarkMode ? _kMayaNeon : AppColors.secondary;
-    final cashColor = _isDarkMode ? _kCashNeon : const Color(0xFF8E6C00);
+    final cashColor = _isDarkMode ? _kCashNeon : AppColors.onHand;
     final gridColor = _isDarkMode
         ? Colors.white.withValues(alpha: 0.06)
         : AppColors.outlineVariant.withValues(alpha: 0.24);
@@ -682,7 +682,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
         enabled: true,
         handleBuiltInTouches: true,
         touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (_) => const Color(0xFF0D1F35),
+          getTooltipColor: (_) => AppColors.tooltipDark,
           tooltipRoundedRadius: 12,
           tooltipPadding: const EdgeInsets.symmetric(
             horizontal: 14,

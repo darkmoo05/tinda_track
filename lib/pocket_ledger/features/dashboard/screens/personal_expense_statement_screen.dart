@@ -235,7 +235,7 @@ class _PersonalExpenseStatementScreenState
     return ScreenHeaderCard(
       title: 'Borrowed Funds Statement',
       subtitle: 'Outstanding balance · ${_fmt(summary.totalOutstanding)}',
-      gradientColors: const [Color(0xFFB71C1C), Color(0xFFE53935)],
+      gradientColors: const [AppColors.errorDeep, AppColors.error],
     );
   }
 
@@ -263,7 +263,7 @@ class _PersonalExpenseStatementScreenState
             title: 'Borrowed Funds',
             summary: summary.personal,
             accent: AppColors.primary,
-            cardColor: const Color(0xFFEBF3FF),
+            cardColor: AppColors.softBlueBackground,
           ),
         ],
       ),
@@ -864,7 +864,7 @@ class _PersonalExpenseStatementScreenState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F6FB),
+        color: AppColors.lightBlueBackground,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.outlineVariant),
       ),

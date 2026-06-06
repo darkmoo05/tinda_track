@@ -415,8 +415,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   DropdownButtonFormField<String>(
-                                    value: _businessType,
-                                    dropdownColor: const Color(0xFF1E1E24),
+                                    initialValue: _businessType,
+                                    dropdownColor: surfaceColor,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: InputDecoration(
                                       prefixIcon: Icon(

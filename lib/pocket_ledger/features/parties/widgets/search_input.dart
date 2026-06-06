@@ -15,7 +15,7 @@ class ArchitectSearchInput extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFEEEEF0), // Matching the gray from screenshot
+        color: AppColors.lightGrey, // Matching the gray from screenshot
         borderRadius: BorderRadius.circular(12),
       ),
       child: TextField(

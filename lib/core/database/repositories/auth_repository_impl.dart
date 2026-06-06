@@ -9,7 +9,7 @@ class AuthRepositoryImpl implements AuthRepository {
     FlutterSecureStorage? secureStorage,
   })  : _apiClient = apiClient,
         _secureStorage = secureStorage ?? const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
+          aOptions: AndroidOptions(),
           iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
         );
 

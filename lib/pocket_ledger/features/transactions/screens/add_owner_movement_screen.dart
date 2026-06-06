@@ -1061,8 +1061,8 @@ class _AddOwnerMovementScreenState
   Widget _buildSaveButton() {
     final color = _isInflow ? AppColors.secondary : AppColors.error;
     final endColor = _isInflow
-        ? const Color(0xFF388E3C)
-        : const Color(0xFFD32F2F);
+        ? AppColors.successMedium
+        : AppColors.errorDeep;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1582,7 +1582,7 @@ class _AddOwnerMovementScreenState
     }
 
     Color deltaColor(double v) {
-      if (v > 0) return const Color(0xFF2E7D32);
+      if (v > 0) return AppColors.success;
       if (v < 0) return AppColors.error;
       return AppColors.onSurfaceVariant;
     }
@@ -2448,7 +2448,7 @@ class _AddOwnerMovementScreenState
               ),
             ],
           ),
-          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          backgroundColor: isError ? AppColors.error : AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -2696,33 +2696,33 @@ class _AddOwnerMovementScreenState
             final String displayText = option == 'On-hand Cash' ? 'Cash' : option;
 
             if (option == 'GCash') {
-              activeColor = const Color(0xFF005DAC);
+              activeColor = AppColors.gcash;
               logoBgColor = Colors.white;
               logoWidget = const Text(
                 'G',
                 style: TextStyle(
-                  color: Color(0xFF005DAC),
+                  color: AppColors.gcash,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
               );
             } else if (option == 'Maya Wallet') {
-              activeColor = const Color(0xFF106D20);
+              activeColor = AppColors.maya;
               logoBgColor = Colors.black;
               logoWidget = const Text(
                 'm',
                 style: TextStyle(
-                  color: Color(0xFF106D20),
+                  color: AppColors.maya,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
               );
             } else {
-              activeColor = const Color(0xFFD4AF37);
-              logoBgColor = const Color(0xFFFFF8E7);
+              activeColor = AppColors.onHandGold;
+              logoBgColor = AppColors.onHandLight;
               logoWidget = const Icon(
                 Icons.payments_rounded,
-                color: Color(0xFFD4AF37),
+                color: AppColors.onHandGold,
                 size: 12,
               );
             }
@@ -3079,7 +3079,7 @@ class _ManageCategoriesSheetState
               ),
             ],
           ),
-          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          backgroundColor: isError ? AppColors.error : AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),

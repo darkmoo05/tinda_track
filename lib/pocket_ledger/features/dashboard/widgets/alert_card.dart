@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/app_theme.dart';
 
 class ArchitectAlertCard extends StatelessWidget {
   final String title;
@@ -19,7 +20,7 @@ class ArchitectAlertCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFE0BD), // Tonal Orange from screenshot
+        color: AppColors.warningLight, // Tonal Orange from screenshot
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -28,14 +29,12 @@ class ArchitectAlertCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(
-                0xFFD48A3E,
-              ).withValues(alpha: 0.2), // Darker orange icon container
+              color: AppColors.warningOrange.withValues(alpha: 0.2), // Darker orange icon container
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.warning_amber_rounded,
-              color: Color(0xFF8B4513),
+              color: AppColors.warningText,
               size: 24,
             ),
           ),
@@ -48,7 +47,7 @@ class ArchitectAlertCard extends StatelessWidget {
                   title,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF4A2C00),
+                    color: AppColors.warningTextDark,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -56,7 +55,7 @@ class ArchitectAlertCard extends StatelessWidget {
                   message,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF4A2C00),
+                    color: AppColors.warningTextDark,
                   ),
                 ),
               ],
@@ -70,7 +69,7 @@ class ArchitectAlertCard extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
                 decoration: TextDecoration.underline,
-                color: Color(0xFF4A2C00),
+                color: AppColors.warningTextDark,
               ),
             ),
           ),

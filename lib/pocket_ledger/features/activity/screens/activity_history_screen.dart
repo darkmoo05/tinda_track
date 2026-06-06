@@ -38,7 +38,8 @@ class ActivityHistoryScreen extends ConsumerStatefulWidget {
       _ActivityHistoryScreenState();
 }
 
-class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
+class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
+    with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   AppDatabase get _database => ref.read(currentAppDatabaseProvider);
   final TextEditingController _searchController = TextEditingController();
@@ -49,6 +50,9 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
   );
   final DateFormat _fullDateFormat = DateFormat('dd MMM yyyy');
   final DateFormat _timeFormat = DateFormat('HH:mm');
+
+  late TabController _tabController;
+  String _activeDatePreset = 'All';
 
   Timer? _debounce;
   bool _isLoading = true;
@@ -64,74 +68,172 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabSelection);
     _selectedWalletFilter = _walletFilterFromPerspective(
       widget.initialWalletPerspective,
     );
     _loadHistory();
   }
 
+  void _handleTabSelection() {
+    if (_tabController.indexIsChanging) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabSelection);
+    _tabController.dispose();
     _searchController.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
+  Future<void> _quickExportReport(_ReportFileType type) async {
+    final now = DateTime.now();
+    final start = _beginDateFilter ?? DateTime(now.year, now.month, 1);
+    final end = _endDateFilter ?? now;
+    await _generateGeneralLedgerReport(
+      _LedgerReportRequest(
+        beginDate: start,
+        endDate: end,
+        fileType: type,
+      ),
+    );
+  }
+
+  Widget _buildSample3HeroBanner() {
+    final now = DateTime.now();
+    final start = _beginDateFilter ?? DateTime(now.year, now.month, 1);
+    final end = _endDateFilter ?? now;
+    final dateRangeText = _beginDateFilter == null && _endDateFilter == null
+        ? context.l10n.walletHistorySubtitle
+        : '${_fullDateFormat.format(start)} - ${_fullDateFormat.format(end)}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+      child: ScreenHeaderCard(
+        title: context.l10n.movements,
+        subtitle: dateRangeText,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildQuickIconButton(
+              icon: Icons.picture_as_pdf_rounded,
+              tooltip: 'Export PDF',
+              onTap: () => _quickExportReport(_ReportFileType.pdf),
+              bgColor: Colors.red.withValues(alpha: 0.2),
+            ),
+            const SizedBox(width: 8),
+            _buildQuickIconButton(
+              icon: Icons.table_chart_rounded,
+              tooltip: 'Export Excel',
+              onTap: () => _quickExportReport(_ReportFileType.excel),
+              bgColor: Colors.green.withValues(alpha: 0.2),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+    required Color bgColor,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(icon, color: Colors.white, size: 18),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        key: _scaffoldKey,
-        appBar: ArchitectAppBar(
-          title: context.l10n.appTitle,
-          onSettingsPressed: widget.openDrawer,
-        ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTabBar(),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        _buildHistoryList(
-                          _transactions,
-                          _txDisplayList,
-                          showWalletFilters: true,
-                        ),
-                        _buildHistoryList(
-                          _ownerMovements,
-                          _movDisplayList,
-                          showWalletFilters: false,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+    return Scaffold(
+      key: _scaffoldKey,
+      appBar: ArchitectAppBar(
+        title: context.l10n.appTitle,
+        onSettingsPressed: widget.openDrawer,
       ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSample3HeroBanner(),
+                _buildTabBar(),
+                _buildSearchAndFilters(),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildHistoryList(
+                        _transactions,
+                        _txDisplayList,
+                        showWalletFilters: true,
+                      ),
+                      _buildHistoryList(
+                        _ownerMovements,
+                        _movDisplayList,
+                        showWalletFilters: false,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
   Widget _buildTabBar() {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.surfaceContainerLow, width: 1),
-        ),
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
       ),
       child: TabBar(
+        controller: _tabController,
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        indicatorColor: Colors.transparent,
         labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
-        indicatorColor: AppColors.primary,
-        indicatorWeight: 3,
+        unselectedLabelColor: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
         labelStyle: const TextStyle(
           fontWeight: FontWeight.bold,
-          fontSize: 12,
-          letterSpacing: 1.0,
+          fontSize: 13,
         ),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
+        indicator: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            )
+          ],
+        ),
+        padding: const EdgeInsets.all(4),
         tabs: [
           Tab(
             child: FittedBox(
@@ -150,290 +252,288 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
     );
   }
 
-  Widget _buildHistoryList(
-    List<_HistoryRow> allItems,
-    List<Object> displayList, {
-    required bool showWalletFilters,
-  }) {
-    if (allItems.isNotEmpty && displayList.isEmpty) {
-      return ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 20),
-          _buildSearchAndFilter(showWalletFilters: showWalletFilters),
-          const SizedBox(height: 20),
-          _buildEmptyState(
-            title: context.l10n.noMatchingTransactions,
-            message: context.l10n.trySearchingBy,
-          ),
-          const SizedBox(height: 100),
-        ],
-      );
-    }
-
-    if (allItems.isEmpty) {
-      return ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 20),
-          _buildEmptyState(
-            title: context.l10n.noHistoryYet,
-            message: context.l10n.newEntriesWillAppear,
-          ),
-          const SizedBox(height: 100),
-        ],
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
-      itemCount: displayList.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 20),
-              _buildSearchAndFilter(showWalletFilters: showWalletFilters),
-              const SizedBox(height: 20),
-            ],
-          );
-        }
-        final item = displayList[index - 1];
-        if (item is String) {
-          return ArchitectDateHeader(label: item);
-        }
-        return _buildTile(item as _HistoryRow);
-      },
-    );
-  }
-
-  Widget _buildEmptyState({required String title, required String message}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.history_rounded,
-            size: 32,
-            color: AppColors.onSurfaceVariant,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return ScreenHeaderCard(
-      title: context.l10n.movements,
-      subtitle: context.l10n.walletHistorySubtitle,
-      trailing: OutlinedButton.icon(
-        onPressed: _openLedgerReportSheet,
-        icon: const Icon(Icons.download_rounded, size: 18, color: Colors.white),
-        label: Text(
-          context.l10n.reports,
-          style: const TextStyle(color: Colors.white),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Colors.white54),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchAndFilter({required bool showWalletFilters}) {
+  Widget _buildSearchAndFilters() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppColors.outlineVariant.withValues(alpha: 0.4),
+        // Search bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.outlineVariant.withValues(alpha: 0.4),
+              ),
             ),
-          ),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (value) {
-              final newQuery = value.trim().toLowerCase();
-              if (newQuery == _searchQuery) return;
-              setState(() => _searchQuery = newQuery);
-              _debounce?.cancel();
-              _debounce = Timer(
-                const Duration(milliseconds: 300),
-                _applyFilters,
-              );
-            },
-            decoration: InputDecoration(
-              hintText: context.l10n.searchAccountRefParty,
-              hintStyle: const TextStyle(
-                fontSize: 14,
-                color: AppColors.onSurfaceVariant,
-              ),
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                size: 20,
-                color: AppColors.onSurfaceVariant,
-              ),
-              suffixIcon: _searchQuery.isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: () {
-                        _searchController.clear();
-                        _debounce?.cancel();
-                        setState(() => _searchQuery = '');
-                        _applyFilters();
-                      },
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        size: 18,
-                        color: AppColors.onSurfaceVariant,
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                final newQuery = value.trim().toLowerCase();
+                if (newQuery == _searchQuery) return;
+                setState(() => _searchQuery = newQuery);
+                _debounce?.cancel();
+                _debounce = Timer(
+                  const Duration(milliseconds: 300),
+                  _applyFilters,
+                );
+              },
+              decoration: InputDecoration(
+                hintText: context.l10n.searchAccountRefParty,
+                hintStyle: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  size: 20,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                suffixIcon: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          _debounce?.cancel();
+                          setState(() => _searchQuery = '');
+                          _applyFilters();
+                        },
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: AppColors.onSurfaceVariant,
+                        ),
                       ),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+        ),
+
+        // Date Presets horizontal scroll
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            children: [
+              _buildPresetChip('All'),
+              const SizedBox(width: 8),
+              _buildPresetChip('Today'),
+              const SizedBox(width: 8),
+              _buildPresetChip('Yesterday'),
+              const SizedBox(width: 8),
+              _buildPresetChip('This Week'),
+              const SizedBox(width: 8),
+              _buildPresetChip('Custom 📅'),
+            ],
+          ),
+        ),
+
+        // Wallet filters (if Transactions is active)
+        if (_tabController.index == 0) ...[
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                _buildWalletFilterChip(
+                  label: context.l10n.filterAll,
+                  icon: Icons.grid_view_rounded,
+                  color: AppColors.primary,
+                  walletKey: null,
+                ),
+                const SizedBox(width: 8),
+                _buildWalletFilterChip(
+                  label: context.l10n.gcash,
+                  icon: Icons.account_balance_wallet_outlined,
+                  color: AppColors.primary,
+                  walletKey: 'gcash',
+                ),
+                const SizedBox(width: 8),
+                _buildWalletFilterChip(
+                  label: context.l10n.maya,
+                  icon: Icons.wallet_rounded,
+                  color: AppColors.secondary,
+                  walletKey: 'maya',
+                ),
+                const SizedBox(width: 8),
+                _buildWalletFilterChip(
+                  label: context.l10n.onHand,
+                  icon: Icons.payments_outlined,
+                  color: AppColors.onHand,
+                  walletKey: 'on_hand',
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // Custom Date Range Picker buttons (if custom is selected)
+        if (_activeDatePreset == 'Custom 📅') ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickBeginDateFilter,
+                    icon: const Icon(Icons.event_available_rounded, size: 16),
+                    label: Text(
+                      _beginDateFilter == null
+                          ? context.l10n.beginningDate
+                          : _fullDateFormat.format(_beginDateFilter!),
                     ),
-              border: InputBorder.none,
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickEndDateFilter,
+                    icon: const Icon(Icons.event_rounded, size: 16),
+                    label: Text(
+                      _endDateFilter == null
+                          ? context.l10n.endDate
+                          : _fullDateFormat.format(_endDateFilter!),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ),
-        if (showWalletFilters) ...[
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildWalletFilterChip(
-                label: context.l10n.filterAll,
-                icon: Icons.grid_view_rounded,
-                color: AppColors.primary,
-                walletKey: null,
-              ),
-              _buildWalletFilterChip(
-                label: context.l10n.gcash,
-                icon: Icons.account_balance_wallet_outlined,
-                color: AppColors.primary,
-                walletKey: 'gcash',
-              ),
-              _buildWalletFilterChip(
-                label: context.l10n.maya,
-                icon: Icons.wallet_rounded,
-                color: AppColors.secondary,
-                walletKey: 'maya',
-              ),
-              _buildWalletFilterChip(
-                label: context.l10n.onHand,
-                icon: Icons.payments_outlined,
-                color: const Color(0xFF8E6C00),
-                walletKey: 'on_hand',
-              ),
-            ],
           ),
         ],
-        if (_beginDateFilter != null || _endDateFilter != null) ...[
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (_beginDateFilter != null)
-                Chip(
-                  label: Text(
-                    '${context.l10n.beginningDate}: ${_fullDateFormat.format(_beginDateFilter!)}',
+
+        // Active custom date range chips to easily clear them
+        if (_activeDatePreset == 'Custom 📅' &&
+            (_beginDateFilter != null || _endDateFilter != null)) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (_beginDateFilter != null)
+                  Chip(
+                    label: Text(
+                      '${context.l10n.beginningDate}: ${_fullDateFormat.format(_beginDateFilter!)}',
+                    ),
+                    labelStyle: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                    side: BorderSide.none,
+                    deleteIcon: const Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                    onDeleted: () {
+                      setState(() {
+                        _beginDateFilter = null;
+                      });
+                      _applyFilters();
+                    },
                   ),
-                  labelStyle: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
+                if (_endDateFilter != null)
+                  Chip(
+                    label: Text(
+                      '${context.l10n.endDate}: ${_fullDateFormat.format(_endDateFilter!)}',
+                    ),
+                    labelStyle: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                    side: BorderSide.none,
+                    deleteIcon: const Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                    onDeleted: () {
+                      setState(() {
+                        _endDateFilter = null;
+                      });
+                      _applyFilters();
+                    },
                   ),
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                  side: BorderSide.none,
-                  deleteIcon: const Icon(
-                    Icons.close_rounded,
-                    size: 18,
-                    color: AppColors.primary,
-                  ),
-                  onDeleted: () {
-                    _beginDateFilter = null;
-                    _applyFilters();
-                  },
-                ),
-              if (_endDateFilter != null)
-                Chip(
-                  label: Text(
-                    '${context.l10n.endDate}: ${_fullDateFormat.format(_endDateFilter!)}',
-                  ),
-                  labelStyle: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                  side: BorderSide.none,
-                  deleteIcon: const Icon(
-                    Icons.close_rounded,
-                    size: 18,
-                    color: AppColors.primary,
-                  ),
-                  onDeleted: () {
-                    _endDateFilter = null;
-                    _applyFilters();
-                  },
-                ),
-            ],
+              ],
+            ),
           ),
         ],
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _pickBeginDateFilter,
-                icon: const Icon(Icons.event_available_rounded, size: 16),
-                label: Text(
-                  _beginDateFilter == null
-                      ? context.l10n.beginningDate
-                      : _fullDateFormat.format(_beginDateFilter!),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _pickEndDateFilter,
-                icon: const Icon(Icons.event_rounded, size: 16),
-                label: Text(
-                  _endDateFilter == null
-                      ? context.l10n.endDate
-                      : _fullDateFormat.format(_endDateFilter!),
-                ),
-              ),
-            ),
-          ],
-        ),
+        const SizedBox(height: 8),
       ],
     );
+  }
+
+  Widget _buildPresetChip(String presetName) {
+    final isSelected = _activeDatePreset == presetName;
+    return ChoiceChip(
+      selected: isSelected,
+      onSelected: (_) => _selectDatePreset(presetName),
+      showCheckmark: false,
+      label: Text(
+        presetName,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          color: isSelected ? AppColors.primary : AppColors.onSurfaceVariant,
+        ),
+      ),
+      selectedColor: AppColors.primary.withValues(alpha: 0.08),
+      backgroundColor: AppColors.surfaceContainerLow,
+      side: BorderSide(
+        color: isSelected ? AppColors.primary : Colors.transparent,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
+  void _selectDatePreset(String preset) {
+    setState(() {
+      _activeDatePreset = preset;
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      if (preset == 'All') {
+        _beginDateFilter = null;
+        _endDateFilter = null;
+      } else if (preset == 'Today') {
+        _beginDateFilter = today;
+        _endDateFilter = today;
+      } else if (preset == 'Yesterday') {
+        final yesterday = today.subtract(const Duration(days: 1));
+        _beginDateFilter = yesterday;
+        _endDateFilter = yesterday;
+      } else if (preset == 'This Week') {
+        final daysToSubtract = today.weekday - 1;
+        _beginDateFilter = today.subtract(Duration(days: daysToSubtract));
+        _endDateFilter = today;
+      }
+      // If 'Custom 📅', we don't modify date filters immediately
+    });
+    _applyFilters();
   }
 
   Widget _buildWalletFilterChip({
@@ -478,74 +578,133 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
     );
   }
 
+  Widget _buildHistoryList(
+    List<_HistoryRow> allItems,
+    List<Object> displayList, {
+    required bool showWalletFilters,
+  }) {
+    if (allItems.isNotEmpty && displayList.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        children: [
+          _buildEmptyState(
+            title: context.l10n.noMatchingTransactions,
+            message: context.l10n.trySearchingBy,
+          ),
+        ],
+      );
+    }
+
+    if (allItems.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        children: [
+          _buildEmptyState(
+            title: context.l10n.noHistoryYet,
+            message: context.l10n.newEntriesWillAppear,
+          ),
+        ],
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 100),
+      itemCount: displayList.length,
+      itemBuilder: (context, index) {
+        final item = displayList[index];
+        if (item is String) {
+          return ArchitectDateHeader(label: item);
+        }
+        return _buildTile(item as _HistoryRow);
+      },
+    );
+  }
+
+  Widget _buildEmptyState({required String title, required String message}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.history_rounded,
+            size: 32,
+            color: AppColors.onSurfaceVariant,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<_HistoryRow> _filterItems(
     List<_HistoryRow> items, {
     required bool applyWalletFilter,
   }) {
-    final hideTopUpRowsInTransactionsView =
-        applyWalletFilter && _selectedWalletFilter == null;
-
-    if (_searchQuery.isEmpty &&
-        _beginDateFilter == null &&
-        _endDateFilter == null &&
-        _selectedWalletFilter == null) {
-      if (!hideTopUpRowsInTransactionsView) {
-        return items;
+    return items.where((item) {
+      // 1. Transaction tab perspective filtering
+      if (applyWalletFilter && !_isTransactionPerspectiveRow(item)) {
+        return false;
       }
 
-      return items
-          .where((item) => !_isTopUpPerspectiveRow(item))
-          .toList(growable: false);
-    }
+      // 2. Search query filter
+      if (_searchQuery.isNotEmpty) {
+        final fields = [
+          item.title,
+          item.tag,
+          item.reference,
+          item.rawReference,
+          item.accountNumber ?? '',
+          item.walletAccount,
+          item.note,
+        ];
+        final matchesSearch = fields.any((field) =>
+            field.toLowerCase().contains(_searchQuery));
+        if (!matchesSearch) return false;
+      }
 
-    return items
-        .where((item) {
-          final fields = [
-            item.title,
-            item.tag,
-            item.reference,
-            item.rawReference,
-            item.accountNumber ?? '',
-            item.walletAccount,
-            item.note,
-          ];
+      // 3. Date range filters
+      final itemDate = DateTime(
+        item.createdAt.year,
+        item.createdAt.month,
+        item.createdAt.day,
+      );
+      if (_beginDateFilter != null && itemDate.isBefore(_beginDateFilter!)) {
+        return false;
+      }
+      if (_endDateFilter != null && itemDate.isAfter(_endDateFilter!)) {
+        return false;
+      }
 
-          final matchesSearch =
-              _searchQuery.isEmpty ||
-              fields.any((field) => field.toLowerCase().contains(_searchQuery));
-          final itemDate = DateTime(
-            item.createdAt.year,
-            item.createdAt.month,
-            item.createdAt.day,
-          );
-          final matchesBeginDate =
-              _beginDateFilter == null || !itemDate.isBefore(_beginDateFilter!);
-          final matchesEndDate =
-              _endDateFilter == null || !itemDate.isAfter(_endDateFilter!);
-          final matchesWallet =
-              !applyWalletFilter ||
-              _selectedWalletFilter == null ||
-              _matchesWalletPerspective(item, _selectedWalletFilter!);
-          final matchesTopUpVisibility =
-              !hideTopUpRowsInTransactionsView || !_isTopUpPerspectiveRow(item);
+      // 4. Wallet perspective filter
+      if (applyWalletFilter && _selectedWalletFilter != null) {
+        final matchesWallet = _matchesWalletPerspective(item, _selectedWalletFilter!);
+        if (!matchesWallet) return false;
+      }
 
-          return matchesSearch &&
-              matchesBeginDate &&
-              matchesEndDate &&
-              matchesWallet &&
-              matchesTopUpVisibility;
-        })
-        .toList(growable: false);
+      return true;
+    }).toList(growable: false);
   }
 
-  bool _isTopUpPerspectiveRow(_HistoryRow item) {
-    if (item.entryType != 'owner_movement') {
-      return false;
-    }
 
-    final movementType = (item.ownerMovementType ?? '').trim().toLowerCase();
-    return movementType == 'top-up' || movementType == 'initial capital';
-  }
 
   bool _isCashTransferPerspectiveRow(_HistoryRow item) {
     if (item.entryType != 'owner_movement') {
@@ -641,6 +800,10 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
   }
 
   bool _isTransactionPerspectiveRow(_HistoryRow item) {
+    if (_selectedWalletFilter == null) {
+      return item.entryType == 'transaction';
+    }
+
     if (item.entryType == 'transaction') {
       return true;
     }
@@ -777,15 +940,44 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
   Widget _buildTile(_HistoryRow item) {
     final displayAmount = _resolveDisplayAmount(item);
     final isWalletOutflow = _isWalletOutflow(item);
-    final tileColor = _isTransactionLogRow(item)
-        ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
-        : (isWalletOutflow ? AppColors.error : _colorFor(item.iconKey));
+    final isAllViewTx = _selectedWalletFilter == null && item.entryType == 'transaction';
+
+    final amountText = isAllViewTx
+        ? _currencyFormat.format(displayAmount)
+        : '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}';
+
+    final amountColor = isAllViewTx
+        ? AppColors.onSurface
+        : null;
+
+    final tileColor = isAllViewTx
+        ? _walletColor(item.walletAccount)
+        : (_isTransactionLogRow(item)
+            ? (isWalletOutflow ? AppColors.error : AppColors.secondary)
+            : (isWalletOutflow ? AppColors.error : _colorFor(item.iconKey)));
+
+    final supportingText = isAllViewTx
+        ? _buildDualImpactText(item)
+        : _buildTileSupportingText(item);
+
+    String? runningBalanceText;
+    if (_selectedWalletFilter != null) {
+      final currentBal = switch (_selectedWalletFilter!) {
+        'gcash' => item.postGcashBalance,
+        'maya' => item.postMayaBalance,
+        'on_hand' => item.postOnHandBalance,
+        _ => 0.0,
+      };
+      runningBalanceText = 'Bal: ${_currencyFormat.format(currentBal)}';
+    }
+
     return ArchitectActivityTile(
       title: item.title,
       subtitle: _buildTileSubtitle(item),
-      supportingText: _buildTileSupportingText(item),
-      amount:
-          '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}',
+      supportingText: supportingText,
+      amount: amountText,
+      amountColor: amountColor,
+      runningBalance: runningBalanceText,
       time: _timeFormat.format(item.createdAt),
       icon: _iconFor(item.iconKey),
       iconColor: tileColor,
@@ -1252,22 +1444,26 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
     // Load ASC so we can compute accurate running (post) balances.
     final rawRows = await _database.customSelect('''
       SELECT
-        entry_type,
-        title,
-        reference,
-        wallet_account,
-        note,
-        amount,
-        tag,
-        icon_key,
-        owner_movement_type,
-        wallet_delta,
-        maya_wallet_delta,
-        on_hand_delta,
-        strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at
-      FROM ledger_entries
-      WHERE is_deleted = 0
-      ORDER BY created_at_ms ASC, id ASC
+        le.id,
+        le.entry_type,
+        le.title,
+        le.reference,
+        le.wallet_account,
+        le.note,
+        le.amount,
+        le.tag,
+        le.icon_key,
+        le.owner_movement_type,
+        le.wallet_delta,
+        le.maya_wallet_delta,
+        le.on_hand_delta,
+        strftime('%Y-%m-%dT%H:%M:%fZ', le.created_at_ms / 1000.0, 'unixepoch') AS created_at,
+        ft.fee_amount,
+        ft.charge_destination
+      FROM ledger_entries le
+      LEFT JOIN fee_transactions ft ON ft.related_transaction_sync_id = le.id AND ft.is_deleted = 0
+      WHERE le.is_deleted = 0
+      ORDER BY le.created_at_ms ASC, le.id ASC
     ''').get();
     final rows = rawRows
         .map((r) => Map<String, Object?>.from(r.data))
@@ -1301,6 +1497,8 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
       final mayaWalletDelta =
           (row['maya_wallet_delta'] as num?)?.toDouble() ?? 0;
       final onHandDelta = (row['on_hand_delta'] as num?)?.toDouble() ?? 0;
+      final dbFee = (row['fee_amount'] as num?)?.toDouble() ?? 0.0;
+      final dbDest = (row['charge_destination'] as String?) ?? '';
 
       runningGcash += walletDelta;
       runningMaya += mayaWalletDelta;
@@ -1323,8 +1521,10 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
           onHandDelta: onHandDelta,
           walletDelta: walletDelta,
           mayaWalletDelta: mayaWalletDelta,
-          chargeAmount: _extractChargeAmountFromNote(note),
-          chargeDestinationKey: _extractChargeDestinationKeyFromNote(note),
+          chargeAmount: dbFee > 0 ? dbFee : _extractChargeAmountFromNote(note),
+          chargeDestinationKey: dbDest.isNotEmpty
+              ? _normalizeWalletKey(dbDest)
+              : _extractChargeDestinationKeyFromNote(note),
           postGcashBalance: runningGcash,
           postMayaBalance: runningMaya,
           postOnHandBalance: runningOnHand,
@@ -1336,7 +1536,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
     final allRowsDesc = allRows.reversed.toList(growable: false);
 
     if (!mounted) return;
-    final txRows = allRowsDesc.where(_isTransactionPerspectiveRow).toList();
+    final txRows = allRowsDesc;
     final movRows = allRowsDesc
         .where((row) => row.entryType == 'owner_movement')
         .toList();
@@ -1365,253 +1565,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
     return _normalizeWalletKey((match.group(1) ?? '').trim());
   }
 
-  Future<void> _openLedgerReportSheet() async {
-    final now = DateTime.now();
-    DateTime beginDate = DateTime(now.year, now.month, 1);
-    DateTime endDate = DateTime(now.year, now.month, now.day);
-    _ReportFileType selectedType = _ReportFileType.pdf;
 
-    final request = await showModalBottomSheet<_LedgerReportRequest>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surfaceContainerLowest,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            Future<void> pickBeginDate() async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: beginDate,
-                firstDate: DateTime(now.year - 10),
-                lastDate: DateTime(now.year + 10),
-                helpText: context.l10n.selectBeginningDate,
-              );
-              if (picked == null) {
-                return;
-              }
-              setSheetState(() {
-                beginDate = DateTime(picked.year, picked.month, picked.day);
-                if (endDate.isBefore(beginDate)) {
-                  endDate = beginDate;
-                }
-              });
-            }
-
-            Future<void> pickEndDate() async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: endDate,
-                firstDate: DateTime(now.year - 10),
-                lastDate: DateTime(now.year + 10),
-                helpText: context.l10n.selectEndDate,
-              );
-              if (picked == null) {
-                return;
-              }
-              setSheetState(() {
-                endDate = DateTime(picked.year, picked.month, picked.day);
-                if (endDate.isBefore(beginDate)) {
-                  beginDate = endDate;
-                }
-              });
-            }
-
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 18,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.assessment_outlined,
-                          color: AppColors.primary,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          context.l10n.generalLedgerReport,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.onSurface,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      context.l10n.generalLedgerReportDescription,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDatePickerTile(
-                      label: context.l10n.beginningDate,
-                      value: _fullDateFormat.format(beginDate),
-                      onTap: pickBeginDate,
-                    ),
-                    const SizedBox(height: 10),
-                    _buildDatePickerTile(
-                      label: context.l10n.endDate,
-                      value: _fullDateFormat.format(endDate),
-                      onTap: pickEndDate,
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      context.l10n.fileFormat,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ChoiceChip(
-                          label: Text(context.l10n.pdf),
-                          selected: selectedType == _ReportFileType.pdf,
-                          onSelected: (_) => setSheetState(() {
-                            selectedType = _ReportFileType.pdf;
-                          }),
-                        ),
-                        ChoiceChip(
-                          label: Text(context.l10n.excel),
-                          selected: selectedType == _ReportFileType.excel,
-                          onSelected: (_) => setSheetState(() {
-                            selectedType = _ReportFileType.excel;
-                          }),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              side: const BorderSide(
-                                color: AppColors.outlineVariant,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: () => Navigator.of(sheetContext).pop(),
-                            child: Text(context.l10n.cancel),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.of(sheetContext).pop(
-                                _LedgerReportRequest(
-                                  beginDate: beginDate,
-                                  endDate: endDate,
-                                  fileType: selectedType,
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.download_rounded, size: 16),
-                            label: Text(context.l10n.generate),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (request == null || !mounted) {
-      return;
-    }
-
-    if (request.endDate.isBefore(request.beginDate)) {
-      _showSnack(context.l10n.endDateValidationMessage, isError: true);
-      return;
-    }
-
-    await _generateGeneralLedgerReport(request);
-  }
-
-  Widget _buildDatePickerTile({
-    required String label,
-    required String value,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: AppColors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      value,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.calendar_month_rounded,
-                color: AppColors.primary,
-                size: 18,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Future<void> _generateGeneralLedgerReport(
     _LedgerReportRequest request,
@@ -1756,24 +1710,28 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
         .customSelect(
           '''
       SELECT
-        entry_type,
-        title,
-        reference,
-        wallet_account,
-        note,
-        amount,
-        tag,
-        icon_key,
-        owner_movement_type,
-        wallet_delta,
-        maya_wallet_delta,
-        on_hand_delta,
-        strftime('%Y-%m-%dT%H:%M:%fZ', created_at_ms / 1000.0, 'unixepoch') AS created_at
-      FROM ledger_entries
-      WHERE is_deleted = 0
-        AND created_at_ms >= ?
-        AND created_at_ms <= ?
-      ORDER BY created_at_ms ASC, id ASC
+        le.id,
+        le.entry_type,
+        le.title,
+        le.reference,
+        le.wallet_account,
+        le.note,
+        le.amount,
+        le.tag,
+        le.icon_key,
+        le.owner_movement_type,
+        le.wallet_delta,
+        le.maya_wallet_delta,
+        le.on_hand_delta,
+        strftime('%Y-%m-%dT%H:%M:%fZ', le.created_at_ms / 1000.0, 'unixepoch') AS created_at,
+        ft.fee_amount,
+        ft.charge_destination
+      FROM ledger_entries le
+      LEFT JOIN fee_transactions ft ON ft.related_transaction_sync_id = le.id AND ft.is_deleted = 0
+      WHERE le.is_deleted = 0
+        AND le.created_at_ms >= ?
+        AND le.created_at_ms <= ?
+      ORDER BY le.created_at_ms ASC, le.id ASC
       ''',
           variables: [
             Variable.withInt(start.millisecondsSinceEpoch),
@@ -1801,18 +1759,24 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
           final isOutflow = iconKey == 'cash_out';
           final inflow = isOutflow ? 0.0 : amount;
           final outflow = isOutflow ? amount : 0.0;
-          final chargeAmount =
-              entryType == 'transaction' ||
+
+          final dbFee = (row['fee_amount'] as num?)?.toDouble() ?? 0.0;
+          final chargeAmount = dbFee > 0
+              ? dbFee
+              : (entryType == 'transaction' ||
                   ((row['owner_movement_type'] as String?) ?? '').trim() ==
                       'Cash Transfer (On-hand to Wallet)'
-              ? _extractChargeAmountFromNote(notes)
-              : 0.0;
-          final chargeDestination =
-              entryType == 'transaction' ||
+                  ? _extractChargeAmountFromNote(notes)
+                  : 0.0);
+          final dbDest = (row['charge_destination'] as String?) ?? '';
+          final chargeDestination = dbDest.isNotEmpty
+              ? dbDest
+              : (entryType == 'transaction' ||
                   ((row['owner_movement_type'] as String?) ?? '').trim() ==
                       'Cash Transfer (On-hand to Wallet)'
-              ? _extractChargeDestinationFromNote(notes)
-              : '';
+                  ? _extractChargeDestinationFromNote(notes)
+                  : '');
+
           runningBalance += inflow - outflow;
 
           return _LedgerExportRow(
@@ -2252,7 +2216,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          backgroundColor: isError ? AppColors.error : AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -2415,6 +2379,12 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
 
   bool _isWalletOutflow(_HistoryRow item) {
     if (item.entryType == 'transaction') {
+      final isQr = item.onHandDelta == 0 && (item.walletDelta != 0 || item.mayaWalletDelta != 0);
+      if (isQr) {
+        // QR payment increases the merchant's wallet, so it is never an outflow.
+        return false;
+      }
+
       if (_selectedWalletFilter == 'on_hand') {
         // On-hand perspective: cash_out drains physical cash (−), cash_in adds physical cash (+).
         return item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
@@ -2521,6 +2491,50 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen> {
       default:
         return AppColors.onSurfaceVariant;
     }
+  }
+
+  Color _walletColor(String walletAccount) {
+    final key = _normalizeWalletKey(walletAccount);
+    switch (key) {
+      case 'gcash':
+        return AppColors.primary;
+      case 'maya':
+        return AppColors.secondary;
+      case 'on_hand':
+        return AppColors.onHand;
+      default:
+        return AppColors.onSurfaceVariant;
+    }
+  }
+
+  String _buildDualImpactText(_HistoryRow item) {
+    final isMaya = _normalizeWalletKey(item.walletAccount) == 'maya';
+    final walletLabel = isMaya ? context.l10n.maya : context.l10n.gcash;
+    final walletDelta = isMaya ? item.mayaWalletDelta : item.walletDelta;
+    final onHandDelta = item.onHandDelta;
+    final fee = item.chargeAmount;
+    final isCashOut = item.iconKey == 'cash_out' || item.iconKey == 'maya_cash_out';
+
+    if (item.entryType == 'transaction') {
+      final isQr = onHandDelta == 0 && walletDelta != 0;
+      if (isQr) {
+        return 'Received ${_currencyFormat.format(walletDelta.abs())} $walletLabel via QR • Earned: ${_currencyFormat.format(fee)}';
+      }
+      if (isCashOut) {
+        return 'Received ${_currencyFormat.format(walletDelta.abs())} $walletLabel • Paid ${_currencyFormat.format(onHandDelta.abs())} Cash • Earned: ${_currencyFormat.format(fee)}';
+      } else {
+        return 'Sent ${_currencyFormat.format(walletDelta.abs())} $walletLabel • Received ${_currencyFormat.format(onHandDelta.abs())} Cash • Earned: ${_currencyFormat.format(fee)}';
+      }
+    }
+
+    final parts = <String>[];
+    if (walletDelta != 0) {
+      parts.add('$walletLabel: ${walletDelta > 0 ? '+' : '−'}${_currencyFormat.format(walletDelta.abs())}');
+    }
+    if (onHandDelta != 0) {
+      parts.add('${context.l10n.onHand}: ${onHandDelta > 0 ? '+' : '−'}${_currencyFormat.format(onHandDelta.abs())}');
+    }
+    return parts.join(' • ');
   }
 }
 

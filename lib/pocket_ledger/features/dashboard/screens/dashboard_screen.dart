@@ -275,7 +275,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         caption: context.l10n.physicalCash,
                         icon: Icons.payments_outlined,
-                        accentColor: const Color(0xFF8E6C00),
+                        accentColor: AppColors.onHand,
                         onTap: () => _openWalletPerspectiveHistory(
                           HistoryWalletPerspective.onHand,
                         ),
@@ -291,7 +291,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         caption: 'Withdrawable now',
                         icon: Icons.trending_up_rounded,
-                        accentColor: const Color(0xFF4A7EA6),
+                        accentColor: AppColors.softNavy,
                         titleMaxLines: 2,
                         onTap: () => _openChargesEarnings(dashboard),
                       ),
@@ -425,7 +425,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   ) {
     final totalBusinessCash = dashboard.businessUsableCash;
     final withdrawableEarnings = dashboard.remainingWithdrawableTotal;
-    const accentColor = Color(0xFF1E3A5F);
+    const accentColor = AppColors.darkNavyTile;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),

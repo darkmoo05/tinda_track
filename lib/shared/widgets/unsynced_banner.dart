@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/sync/sync_orchestrator.dart';
+import '../../core/app_theme.dart';
 
 /// A self-contained banner that appears at the top of the screen whenever the
 /// current user has unsynced local data remaining from a previous session.
@@ -117,8 +118,8 @@ class _UnsyncedBannerState extends ConsumerState<UnsyncedBanner>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                const Color(0xFFFFA500).withValues(alpha: 0.92),
-                const Color(0xFFFF6B00).withValues(alpha: 0.88),
+                AppColors.bannerAmber.withValues(alpha: 0.92),
+                AppColors.bannerOrange.withValues(alpha: 0.88),
               ],
             ),
           ),

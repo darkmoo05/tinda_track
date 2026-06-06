@@ -63,7 +63,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   bool _showRequiredIndicators = false;
   bool _isSaving = false;
   TransactionPreviewResponse? _lastPreview;
-  String? _previewErrorMessage;
   _ChargeHandlingMode? _chargeHandlingMode;
   bool _showSummaryDetails = false;
 
@@ -184,6 +183,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   double get _walletDeltaPreview {
     final amount = _enteredAmount;
     final fee = _chargeFee;
+    if (_isQrPayment) {
+      return amount + fee;
+    }
     if (!_isOutflowSelection) {
       return _effectiveChargeHandlingMode ==
               _ChargeHandlingMode.deductFromEnteredAmount
@@ -213,27 +215,27 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         : -amount;
   }
 
+  String get _localFeeRoutingExplanation {
+    final amount = _enteredAmount;
+    final fee = _chargeFee;
+    final chargeHandling = _effectiveChargeHandlingMode;
+
+    if (_isQrPayment) {
+      return 'QR Payment (Top-up): customer sends ₱${(amount + fee).toStringAsFixed(2)} via QR (₱${amount.toStringAsFixed(2)} + ₱${fee.toStringAsFixed(2)} service fee). Business wallet increases by ₱${(amount + fee).toStringAsFixed(2)}, no cash exchange.';
+    } else if (!_isOutflowSelection) {
+      return chargeHandling == _ChargeHandlingMode.addOnTop
+          ? 'Inflow: customer pays ₱${amount.toStringAsFixed(2)} + ₱${fee.toStringAsFixed(2)} in cash. Business wallet decreases by ₱${amount.toStringAsFixed(2)} and on-hand increases by ₱${(amount + fee).toStringAsFixed(2)}.'
+          : 'Inflow: customer pays ₱${amount.toStringAsFixed(2)} cash. Business wallet decreases by ₱${(amount - fee).toStringAsFixed(2)} (fee deducted from wallet transfer) and on-hand increases by ₱${amount.toStringAsFixed(2)}.';
+    } else {
+      return chargeHandling == _ChargeHandlingMode.addOnTop
+          ? 'Outflow: customer\'s wallet is charged ₱${amount.toStringAsFixed(2)} + ₱${fee.toStringAsFixed(2)}. Business wallet increases by ₱${(amount + fee).toStringAsFixed(2)} and on-hand decreases by ₱${amount.toStringAsFixed(2)}.'
+          : 'Outflow: customer\'s wallet is charged ₱${amount.toStringAsFixed(2)}. Business wallet increases by ₱${amount.toStringAsFixed(2)} and on-hand decreases by ₱${(amount - fee).toStringAsFixed(2)} (fee deducted from cash payout).';
+    }
+  }
+
   String _signedMoney(double value) {
     final sign = value < 0 ? '-' : '+';
     return '$sign$_pesoLabel ${value.abs().toStringAsFixed(2)}';
-  }
-
-  bool get _useLocalBreakdownInDialog => !_canCustomizeFeeHandling;
-
-  double _dialogFeeAmount(TransactionPreviewResponse preview) {
-    return _useLocalBreakdownInDialog ? _chargeFee : preview.chargeAmount;
-  }
-
-  double _dialogWalletChange(TransactionPreviewResponse preview) {
-    return _useLocalBreakdownInDialog
-        ? _walletDeltaPreview
-        : preview.walletCredit;
-  }
-
-  double _dialogCashChange(TransactionPreviewResponse preview) {
-    return _useLocalBreakdownInDialog
-        ? _cashDeltaPreview
-        : preview.onHandChange;
   }
 
 
@@ -501,10 +503,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: const Color(0xFFE8F5E9), // very soft light green
+          color: AppColors.successLight, // very soft light green
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: const Color(0xFFC8E6C9),
+            color: AppColors.successBorder,
             width: 1.0,
           ),
         ),
@@ -513,7 +515,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           children: [
             const Icon(
               Icons.check_circle,
-              color: Color(0xFF2E7D32), // soft dark green
+              color: AppColors.success, // soft dark green
               size: 14,
             ),
             const SizedBox(width: 6),
@@ -521,7 +523,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               context.l10n.verifiedAccountFound(name),
               style: const TextStyle(
                 fontSize: 11,
-                color: Color(0xFF2E7D32),
+                color: AppColors.success,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -739,9 +741,11 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            _isOutflowSelection
-                                ? 'Total Charged to Wallet'
-                                : 'Total Sent to Wallet',
+                            _isQrPayment
+                                ? 'Total Received in Wallet'
+                                : _isOutflowSelection
+                                    ? 'Total Charged to Wallet'
+                                    : 'Total Sent to Wallet',
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -756,7 +760,11 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
+                          '$_pesoLabel ${(_isQrPayment
+                              ? _walletDeltaPreview
+                              : _isOutflowSelection
+                                  ? _totalCollected
+                                  : _amountToSend).toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -779,9 +787,11 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            _isOutflowSelection
-                                ? 'Cash to Hand to Customer'
-                                : 'Cash to Collect from Customer',
+                            _isQrPayment
+                                ? 'Cash Exchange (Digital)'
+                                : _isOutflowSelection
+                                    ? 'Cash to Hand to Customer'
+                                    : 'Cash to Collect from Customer',
                             style: const TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.bold,
@@ -796,7 +806,11 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          '$_pesoLabel ${(_isOutflowSelection ? _amountToSend : _totalCollected).toStringAsFixed(2)}',
+                          '$_pesoLabel ${(_isQrPayment
+                              ? 0.0
+                              : _isOutflowSelection
+                                  ? _amountToSend
+                                  : _totalCollected).toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -1190,16 +1204,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               child: _buildWalletButton(
                 label: 'GCash',
                 selected: _selectedWalletSelection == _WalletSelection.gcash,
-                activeBgColor: const Color(0xFF005DAC),
+                activeBgColor: AppColors.gcash,
                 activeTextColor: Colors.white,
-                activeBorderColor: const Color(0xFF005DAC),
+                activeBorderColor: AppColors.gcash,
                 logoWidget: Container(
                   width: 20,
                   height: 20,
                   decoration: BoxDecoration(
                     color: _selectedWalletSelection == _WalletSelection.gcash 
                         ? Colors.white 
-                        : const Color(0xFF005DAC),
+                        : AppColors.gcash,
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
@@ -1207,7 +1221,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     'G',
                     style: TextStyle(
                       color: _selectedWalletSelection == _WalletSelection.gcash 
-                          ? const Color(0xFF005DAC) 
+                          ? AppColors.gcash 
                           : Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -1228,8 +1242,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 label: 'Maya',
                 selected: _selectedWalletSelection == _WalletSelection.maya,
                 activeBgColor: Colors.white,
-                activeTextColor: const Color(0xFF106D20),
-                activeBorderColor: const Color(0xFF106D20),
+                activeTextColor: AppColors.maya,
+                activeBorderColor: AppColors.maya,
                 logoWidget: Container(
                   width: 20,
                   height: 20,
@@ -1912,11 +1926,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     if (!mounted) return;
 
     // Try backend preview when available, but do not block local save if
-    // preview cannot be loaded.
+    // preview cannot be loaded (instead, fallback to local calculation breakdown).
     final previewLoaded = await _loadAndValidatePreview();
-    final proceed = previewLoaded
-        ? await _showFeeBreakdownDialog()
-        : await _showProceedWithoutPreviewDialog();
+    final proceed = await _showFeeBreakdownDialog(isOffline: !previewLoaded);
 
     if (!proceed) {
       if (!mounted) return;
@@ -2085,9 +2097,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   Future<bool> _loadAndValidatePreview() async {
     final amount = _enteredAmount;
     if (amount <= 0) {
-      setState(
-        () => _previewErrorMessage = context.l10n.amountMustBeGreaterThanZero,
-      );
       return false;
     }
 
@@ -2112,58 +2121,29 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
       setState(() {
         _lastPreview = preview;
-        _previewErrorMessage = null;
       });
       return true;
     } on TransactionApiException catch (e) {
-      final status = e.statusCode == null ? '' : ' (${e.statusCode})';
-      setState(
-        () => _previewErrorMessage = context.l10n.feeValidationFailedStatus(
-          status,
-          e.message,
-        ),
-      );
+      debugPrint('Failed to load transaction preview: ${e.message}');
       return false;
     } catch (e) {
-      setState(
-        () => _previewErrorMessage = context.l10n.feeValidationFailed('$e'),
-      );
+      debugPrint('Failed to load transaction preview: $e');
       return false;
     }
   }
 
-  Future<bool> _showProceedWithoutPreviewDialog() async {
-    final proceed =
-        await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(context.l10n.backendPreviewUnavailable),
-            content: Text(
-              _previewErrorMessage ??
-                  context.l10n.unableToValidateFeePreviewNow,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(context.l10n.cancel),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(context.l10n.saveLocally),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+  /// Show fee breakdown dialog to user. If [isOffline] is true, uses local calculations
+  /// and shows an offline mode badge indicator.
+  Future<bool> _showFeeBreakdownDialog({bool isOffline = false}) async {
+    final preview = _lastPreview;
+    if (!isOffline && preview == null) return false;
 
-    return proceed;
-  }
+    final chargeAmount = isOffline ? _chargeFee : preview!.chargeAmount;
+    final walletCredit = isOffline ? _walletDeltaPreview : preview!.walletCredit;
+    final onHandChange = isOffline ? _cashDeltaPreview : preview!.onHandChange;
+    final explanation = isOffline ? _localFeeRoutingExplanation : preview!.feeRoutingExplanation;
+    final activeColor = _selectedWalletColor;
 
-  /// Show fee breakdown dialog to user with backend-calculated details.
-  Future<bool> _showFeeBreakdownDialog() async {
-    if (_lastPreview == null) return false;
-
-    final preview = _lastPreview!;
     final confirmed =
         await showDialog<bool>(
           context: context,
@@ -2175,28 +2155,65 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (isOffline) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: activeColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: activeColor.withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.cloud_off_rounded,
+                            color: activeColor,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Offline Mode • Calculating locally. Syncs when connection is restored.',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: activeColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Text(
                     context.l10n.reviewTotals,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
                   _buildPreviewField(
-                    _isOutflowSelection
-                        ? context.l10n.amountCustomerSends
-                        : context.l10n.amountSentToCustomerWallet,
-                    '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
+                    _isQrPayment
+                        ? 'Total Received in Wallet'
+                        : _isOutflowSelection
+                            ? 'Total Charged to Wallet'
+                            : 'Total Sent to Wallet',
+                    '$_pesoLabel ${(isOffline
+                        ? (_isOutflowSelection ? _totalCollected : _amountToSend)
+                        : _isOutflowSelection
+                            ? preview!.totalCollected
+                            : preview!.walletCredit.abs()).toStringAsFixed(2)}',
                   ),
                   _buildPreviewField(
                     context.l10n.serviceFee,
-                    '$_pesoLabel ${_dialogFeeAmount(preview).toStringAsFixed(2)}',
+                    '$_pesoLabel ${chargeAmount.toStringAsFixed(2)}',
                   ),
                   _buildPreviewField(
-                    context.l10n.walletChangeLabel,
-                    _signedMoney(_dialogWalletChange(preview)),
+                    '$_selectedWalletAccount Balance Change',
+                    _signedMoney(walletCredit),
                   ),
                   _buildPreviewField(
-                    context.l10n.cashChangeLabel,
-                    _signedMoney(_dialogCashChange(preview)),
+                    'Cash Balance Change',
+                    _signedMoney(onHandChange),
                   ),
                   const SizedBox(height: 16),
                   const Divider(),
@@ -2207,7 +2224,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    preview.feeRoutingExplanation,
+                    explanation,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -2321,7 +2338,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               ),
             ],
           ),
-          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          backgroundColor: isError ? AppColors.error : AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),

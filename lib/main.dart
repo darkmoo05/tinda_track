@@ -328,9 +328,9 @@ class AuthGate extends ConsumerWidget {
 
     return switch (authState.status) {
       AuthStatus.initial || AuthStatus.loading => const Scaffold(
-          backgroundColor: Color(0xFF0F0F12),
+          backgroundColor: AppColors.loginBackground,
           body: Center(
-            child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+            child: CircularProgressIndicator(color: AppColors.loginNeonCyan),
           ),
         ),
       AuthStatus.authenticated => const StartupSyncGate(),

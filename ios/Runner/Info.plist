@@ -67,8 +67,18 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access is used to take product photos and scan receipts for faster transaction entry.</string>
+	<string>Camera access is used to take product photos, scan barcodes, and capture receipts for faster transaction entry.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Photo library access is used to select receipt screenshots for transaction autofill.</string>
+	<string>Photo library access is used to select product images and receipt screenshots for transaction autofill.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>TindaTrack needs permission to save exported reports and product images to your photo library.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access may be used by the camera for video recording of inventory items.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>TindaTrack uses audio for barcode scan feedback sounds.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TindaTrack uses your local network to sync data with your store server.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>TindaTrack uses Face ID to securely authenticate and protect your store data.</string>
 </dict>
 </plist>
