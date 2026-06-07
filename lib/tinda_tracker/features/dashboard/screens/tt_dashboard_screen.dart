@@ -317,12 +317,29 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest;
+    final textVarColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+    Color adaptiveColor = color;
+    if (isDark) {
+      if (color == AppColors.secondary) {
+        adaptiveColor = const Color(0xFF34D399);
+      } else if (color == const Color(0xFF1565C0)) {
+        adaptiveColor = const Color(0xFF60A5FA);
+      } else if (color == const Color(0xFF6A1B9A)) {
+        adaptiveColor = const Color(0xFFC084FC);
+      } else if (color == const Color(0xFFC62828)) {
+        adaptiveColor = const Color(0xFFF87171);
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: cardBg,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        border: isDark ? Border.all(color: Colors.white.withValues(alpha: 0.08)) : null,
+        boxShadow: isDark ? null : [
           BoxShadow(
             color: AppColors.onSurface.withValues(alpha: 0.04),
             blurRadius: 16,
@@ -336,10 +353,10 @@ class _StatCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
+              color: adaptiveColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: color, size: 18),
+            child: Icon(icon, color: adaptiveColor, size: 18),
           ),
           const SizedBox(height: 10),
           Text(
@@ -347,15 +364,15 @@ class _StatCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
-              color: color,
+              color: adaptiveColor,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.onSurfaceVariant,
+              color: textVarColor,
             ),
           ),
         ],
@@ -474,13 +491,15 @@ class _TopProductRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(10),
-        boxShadow: [
+        border: isDark ? Border.all(color: Colors.white.withValues(alpha: 0.08)) : null,
+        boxShadow: isDark ? null : [
           BoxShadow(
             color: AppColors.onSurface.withValues(alpha: 0.03),
             blurRadius: 8,
@@ -499,7 +518,7 @@ class _TopProductRow extends StatelessWidget {
                   ? const Color(0xFFB0BEC5)
                   : rank == 3
                   ? const Color(0xFFBE8A60)
-                  : AppColors.surfaceContainerHigh,
+                  : (isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerHigh),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -508,7 +527,7 @@ class _TopProductRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: rank <= 3 ? Colors.white : AppColors.onSurfaceVariant,
+                  color: rank <= 3 ? Colors.white : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                 ),
               ),
             ),
@@ -528,9 +547,9 @@ class _TopProductRow extends StatelessWidget {
                 ),
                 Text(
                   '${product.qty} sold',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   ),
                 ),
               ],

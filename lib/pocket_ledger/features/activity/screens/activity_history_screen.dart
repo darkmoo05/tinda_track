@@ -201,10 +201,16 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
   }
 
   Widget _buildTabBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tabBarBg = isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLow;
+    final indicatorBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest;
+    final labelColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final unselectedLabelColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant.withValues(alpha: 0.7);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
+        color: tabBarBg,
         borderRadius: BorderRadius.circular(14),
       ),
       child: TabBar(
@@ -212,8 +218,8 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
         indicatorColor: Colors.transparent,
-        labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
+        labelColor: labelColor,
+        unselectedLabelColor: unselectedLabelColor,
         labelStyle: const TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 13,
@@ -223,11 +229,12 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
           fontSize: 13,
         ),
         indicator: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: indicatorBg,
           borderRadius: BorderRadius.circular(10),
+          border: isDark ? Border.all(color: Colors.white.withValues(alpha: 0.08)) : null,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
               blurRadius: 4,
               offset: const Offset(0, 2),
             )
@@ -253,6 +260,11 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
   }
 
   Widget _buildSearchAndFilters() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final searchBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest;
+    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant.withValues(alpha: 0.4);
+    final hintColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -262,10 +274,10 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: searchBg,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                color: borderColor,
               ),
             ),
             child: TextField(
@@ -282,14 +294,14 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
               },
               decoration: InputDecoration(
                 hintText: context.l10n.searchAccountRefParty,
-                hintStyle: const TextStyle(
+                hintStyle: TextStyle(
                   fontSize: 14,
-                  color: AppColors.onSurfaceVariant,
+                  color: hintColor,
                 ),
-                prefixIcon: const Icon(
+                prefixIcon: Icon(
                   Icons.search_rounded,
                   size: 20,
-                  color: AppColors.onSurfaceVariant,
+                  color: hintColor,
                 ),
                 suffixIcon: _searchQuery.isEmpty
                     ? null
@@ -300,10 +312,10 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
                           setState(() => _searchQuery = '');
                           _applyFilters();
                         },
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close_rounded,
                           size: 18,
-                          color: AppColors.onSurfaceVariant,
+                          color: hintColor,
                         ),
                       ),
                 border: InputBorder.none,
@@ -488,6 +500,18 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
 
   Widget _buildPresetChip(String presetName) {
     final isSelected = _activeDatePreset == presetName;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final labelColor = isSelected
+        ? primaryColor
+        : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant);
+    final selectedColor = isDark
+        ? const Color(0xFF60A5FA).withValues(alpha: 0.15)
+        : AppColors.primary.withValues(alpha: 0.08);
+    final unselectedBg = isDark
+        ? const Color(0xFF1E293B)
+        : AppColors.surfaceContainerLow;
+
     return ChoiceChip(
       selected: isSelected,
       onSelected: (_) => _selectDatePreset(presetName),
@@ -497,13 +521,15 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
         style: TextStyle(
           fontSize: 12,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-          color: isSelected ? AppColors.primary : AppColors.onSurfaceVariant,
+          color: labelColor,
         ),
       ),
-      selectedColor: AppColors.primary.withValues(alpha: 0.08),
-      backgroundColor: AppColors.surfaceContainerLow,
+      selectedColor: selectedColor,
+      backgroundColor: unselectedBg,
       side: BorderSide(
-        color: isSelected ? AppColors.primary : Colors.transparent,
+        color: isSelected
+            ? primaryColor
+            : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.transparent),
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -543,6 +569,25 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
     required String? walletKey,
   }) {
     final isSelected = _selectedWalletFilter == walletKey;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Color adaptiveColor = color;
+    if (isDark) {
+      if (color == AppColors.primary) {
+        adaptiveColor = const Color(0xFF60A5FA);
+      } else if (color == AppColors.secondary) {
+        adaptiveColor = const Color(0xFF34D399);
+      } else if (color == AppColors.onHand) {
+        adaptiveColor = const Color(0xFFFBBF24);
+      }
+    }
+
+    final unselectedBg = isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLow;
+    final avatarColor = isSelected ? adaptiveColor : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant);
+    final textColor = isSelected ? adaptiveColor : (isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface);
+    final borderColor = isSelected
+        ? adaptiveColor.withValues(alpha: 0.35)
+        : (isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant.withValues(alpha: 0.5));
 
     return ChoiceChip(
       selected: isSelected,
@@ -556,22 +601,20 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
       avatar: Icon(
         icon,
         size: 16,
-        color: isSelected ? color : AppColors.onSurfaceVariant,
+        color: avatarColor,
       ),
       label: Text(
         label,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: isSelected ? color : AppColors.onSurface,
+          color: textColor,
         ),
       ),
-      selectedColor: color.withValues(alpha: 0.14),
-      backgroundColor: AppColors.surfaceContainerLow,
+      selectedColor: adaptiveColor.withValues(alpha: 0.14),
+      backgroundColor: unselectedBg,
       side: BorderSide(
-        color: isSelected
-            ? color.withValues(alpha: 0.35)
-            : AppColors.outlineVariant.withValues(alpha: 0.5),
+        color: borderColor,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -621,13 +664,14 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
   }
 
   Widget _buildEmptyState({required String title, required String message}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant),
       ),
       child: Column(
         children: [
@@ -946,8 +990,9 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
         ? _currencyFormat.format(displayAmount)
         : '${isWalletOutflow ? '−' : '+'} ${_currencyFormat.format(displayAmount)}';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final amountColor = isAllViewTx
-        ? AppColors.onSurface
+        ? (isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface)
         : null;
 
     final tileColor = isAllViewTx
@@ -1026,6 +1071,11 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
     await showDialog<void>(
       context: context,
       builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final dialogBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest;
+        final cardBg = isDark ? const Color(0xFF0B0F19) : AppColors.surfaceContainerLowest;
+        final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant.withValues(alpha: 0.5);
+
         return Dialog(
           insetPadding: const EdgeInsets.symmetric(
             horizontal: 20,
@@ -1037,7 +1087,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
           child: ClipRRect(
             borderRadius: BorderRadius.circular(22),
             child: Container(
-              color: AppColors.surfaceContainerLowest,
+              color: dialogBg,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1125,12 +1175,10 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
                           Container(
                             width: double.infinity,
                             decoration: BoxDecoration(
-                              color: AppColors.surfaceContainerLowest,
+                              color: cardBg,
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: AppColors.outlineVariant.withValues(
-                                  alpha: 0.5,
-                                ),
+                                color: borderColor,
                               ),
                             ),
                             child: Column(
@@ -1306,8 +1354,10 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
         : isIncreased
         ? Icons.trending_up_rounded
         : Icons.trending_down_rounded;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
     final trendColor = isUnchanged
-        ? AppColors.onSurfaceVariant
+        ? (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant)
         : isIncreased
         ? AppColors.secondary
         : AppColors.error;
@@ -1315,23 +1365,23 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.06),
+        color: primaryColor.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 13, color: AppColors.primary),
+              Icon(icon, size: 13, color: primaryColor),
               const SizedBox(width: 5),
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.primary,
+                    color: primaryColor,
                     fontWeight: FontWeight.w700,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1393,32 +1443,34 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
   }
 
   Widget _buildNotesSection(String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 0),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.07),
+          color: primaryColor.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+          border: Border.all(color: primaryColor.withValues(alpha: 0.18)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              children: const [
+              children: [
                 Icon(
                   Icons.sticky_note_2_outlined,
                   size: 14,
-                  color: AppColors.primary,
+                  color: primaryColor,
                 ),
-                SizedBox(width: 5),
+                const SizedBox(width: 5),
                 Text(
                   'Notes',
                   style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.primary,
+                    color: primaryColor,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.2,
                   ),

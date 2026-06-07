@@ -108,6 +108,34 @@ class _UnsyncedBannerState extends ConsumerState<UnsyncedBanner>
   Widget build(BuildContext context) {
     if (_checking || !_visible || _dismissed) return const SizedBox.shrink();
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    final bannerGradient = isDark
+        ? const LinearGradient(
+            colors: [
+              Color(0xFF2C1B03),
+              Color(0xFF1C1102),
+            ],
+          )
+        : const LinearGradient(
+            colors: [
+              AppColors.bannerAmber,
+              AppColors.bannerOrange,
+            ],
+          );
+          
+    final border = isDark
+        ? const Border(bottom: BorderSide(color: Color(0xFF523306), width: 1.0))
+        : null;
+
+    final textColor = isDark ? const Color(0xFFFFD060) : Colors.white;
+    final iconColor = isDark ? const Color(0xFFFFB84D) : Colors.white;
+    final closeColor = isDark ? const Color(0xFFFFB84D).withValues(alpha: 0.7) : Colors.white;
+    
+    final buttonBg = isDark
+        ? const Color(0xFF523306)
+        : Colors.white.withValues(alpha: 0.20);
+
     return SlideTransition(
       position: _slideAnimation,
       child: Material(
@@ -116,12 +144,8 @@ class _UnsyncedBannerState extends ConsumerState<UnsyncedBanner>
         child: Container(
           width: double.infinity,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppColors.bannerAmber.withValues(alpha: 0.92),
-                AppColors.bannerOrange.withValues(alpha: 0.88),
-              ],
-            ),
+            gradient: bannerGradient,
+            border: border,
           ),
           child: SafeArea(
             bottom: false,
@@ -129,9 +153,9 @@ class _UnsyncedBannerState extends ConsumerState<UnsyncedBanner>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.cloud_off_rounded,
-                    color: Colors.white,
+                    color: iconColor,
                     size: 20,
                   ),
                   const SizedBox(width: 10),
@@ -140,8 +164,8 @@ class _UnsyncedBannerState extends ConsumerState<UnsyncedBanner>
                       _pendingCount == 1
                           ? '1 unsynced change from your last session.'
                           : '$_pendingCount unsynced changes from your last session.',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: textColor,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -149,20 +173,19 @@ class _UnsyncedBannerState extends ConsumerState<UnsyncedBanner>
                   ),
                   const SizedBox(width: 8),
                   _syncing
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                            color: Colors.white,
+                            color: textColor,
                             strokeWidth: 2,
                           ),
                         )
                       : TextButton(
                           onPressed: _syncNow,
                           style: TextButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor:
-                                Colors.white.withValues(alpha: 0.20),
+                            foregroundColor: textColor,
+                            backgroundColor: buttonBg,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 4,
@@ -184,8 +207,8 @@ class _UnsyncedBannerState extends ConsumerState<UnsyncedBanner>
                   const SizedBox(width: 4),
                   IconButton(
                     onPressed: _syncing ? null : _dismiss,
-                    icon: const Icon(Icons.close_rounded,
-                        color: Colors.white, size: 18),
+                    icon: Icon(Icons.close_rounded,
+                        color: closeColor, size: 18),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
                       minWidth: 28,

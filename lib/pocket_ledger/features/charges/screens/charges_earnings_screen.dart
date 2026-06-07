@@ -60,8 +60,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
 
   String _fmt(double v) => _currency.format(v);
 
-  int _selectedPeriod = 0;
-  static const List<String> _periods = ['DAY', 'WEEK', 'MONTH', 'YEAR'];
+  int _activeTab = 0; // 0: Customer Collections, 1: Owner Withdrawals
   _HistorySourceFilter _historySourceFilter = _HistorySourceFilter.all;
 
   List<_FeeMovementEntry> _feeMovements = [];
@@ -224,6 +223,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: ArchitectAppBar(title: context.l10n.appTitle, actions: const []),
       body: CustomScrollView(
@@ -245,67 +245,182 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                   _buildWithdrawableCard(),
                   const SizedBox(height: 14),
                   _buildAnalyticsSection(),
-                  const SizedBox(height: 20),
-                  _buildFeeMovementLog(),
-                  const SizedBox(height: 24),
-                  // Fee History header
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Fee History',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.onSurface,
+                  const SizedBox(height: 14),
+                  _buildListSegmentedControl(),
+                  const SizedBox(height: 16),
+                  if (_activeTab == 0) ...[
+                    // Customer Collections Sub-Header
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Customer Fee Revenue',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                                ),
                               ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Tap a day to see each fee entry',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.onSurfaceVariant,
+                              const SizedBox(height: 2),
+                              Text(
+                                'Tap a day to see each fee entry',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                ),
                               ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '${_dayGroups.length} day${_dayGroups.length == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _buildSourceFilterChips(),
+                    const SizedBox(height: 8),
+                    _buildHistoryLegend(),
+                    const SizedBox(height: 12),
+                    if (_dayGroups.isEmpty) _buildEmptyState(),
+                  ] else ...[
+                    // Withdrawals & Transfers Sub-Header
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Withdrawal & Transfer History',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Every time fee earnings were withdrawn or moved to a wallet',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!_isLoadingFeeMovements)
+                          Text(
+                            '$_feeMovementsTotal record${_feeMovementsTotal == 1 ? '' : 's'}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                             ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        '${_dayGroups.length} day${_dayGroups.length == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _buildSourceFilterChips(),
-                  const SizedBox(height: 8),
-                  _buildHistoryLegend(),
-                  const SizedBox(height: 12),
-                  if (_dayGroups.isEmpty) _buildEmptyState(),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_isLoadingFeeMovements)
+                      const LinearProgressIndicator(minHeight: 2)
+                    else if (_feeMovements.isEmpty)
+                      _buildFeeMovementEmptyState(),
+                  ],
                 ],
               ),
             ),
           ),
 
-          // ── Day groups — lazy, only visible headers are built ──
-          if (_dayGroups.isNotEmpty)
+          // ── Conditional list content ──
+          if (_activeTab == 0 && _dayGroups.isNotEmpty)
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
               sliver: SliverList.builder(
                 itemCount: _dayGroups.length,
                 itemBuilder: (_, i) => _buildDayGroup(_dayGroups[i]),
               ),
             )
+          else if (_activeTab == 1 && _feeMovements.isNotEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+              sliver: SliverToBoxAdapter(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
+                  ),
+                  child: Column(
+                    children: [
+                      ..._feeMovements.asMap().entries.map(
+                        (e) => _buildFeeMovementEntry(
+                          e.value,
+                          isLast: e.key == _feeMovements.length - 1 &&
+                              _feeMovementsTotal <= _feeMovements.length,
+                        ),
+                      ),
+                      if (_feeMovementsTotal > _feeMovements.length)
+                        InkWell(
+                          onTap: _showFeeMovementSheet,
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(16),
+                            bottomRight: Radius.circular(16),
+                          ),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 13,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                top: BorderSide(
+                                  color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
+                                  width: 0.5,
+                                ),
+                              ),
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(16),
+                                bottomRight: Radius.circular(16),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'View all $_feeMovementsTotal records',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 16,
+                                  color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            )
           else
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
     );
@@ -337,7 +452,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
         children: [
           // Label
           const Text(
-            'Total service fee earned',
+            'All-Time Service Fees Earned',
             style: TextStyle(
               color: Colors.white70,
               fontSize: 13,
@@ -355,64 +470,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
               letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 16),
-          // Period filter — moved from the chart card
-          Row(
-            children: [
-              const Text(
-                'View by',
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.22),
-                    ),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<int>(
-                      value: _selectedPeriod,
-                      isDense: true,
-                      borderRadius: BorderRadius.circular(12),
-                      dropdownColor: AppColors.primaryContainer,
-                      icon: const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: Colors.white70,
-                        size: 18,
-                      ),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                      items: List.generate(_periods.length, (i) {
-                        return DropdownMenuItem<int>(
-                          value: i,
-                          child: Text(_periods[i]),
-                        );
-                      }),
-                      onChanged: (v) {
-                        if (v != null) setState(() => _selectedPeriod = v);
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           // Where the money went — inline routing chips
           const Text(
             'Where did the charges go?',
@@ -502,35 +560,128 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
     );
   }
 
+  Widget _buildWithdrawalProgressBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final total = widget.totalEarnings;
+    if (total <= 0) return const SizedBox.shrink();
+
+    final withdrawn = _alreadyWithdrawnTotal;
+    final withdrawable = widget.remainingWithdrawableTotal;
+
+    final withdrawnFraction = withdrawn / total;
+    final withdrawableFraction = withdrawable / total;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            height: 8,
+            width: double.infinity,
+            color: isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerHigh,
+            child: Row(
+              children: [
+                if (withdrawnFraction > 0)
+                  Expanded(
+                    flex: (withdrawnFraction * 100).round(),
+                    child: Container(
+                      color: isDark ? const Color(0xFF475569) : AppColors.onSurfaceVariant.withValues(alpha: 0.4),
+                    ),
+                  ),
+                if (withdrawableFraction > 0)
+                  Expanded(
+                    flex: (withdrawableFraction * 100).round(),
+                    child: Container(
+                      color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isDark ? const Color(0xFF475569) : AppColors.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Withdrawn (${(withdrawnFraction * 100).toStringAsFixed(0)}%)',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Withdrawable (${(withdrawableFraction * 100).toStringAsFixed(0)}%)',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildWithdrawableCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
     final hasWithdrawable = widget.remainingWithdrawableTotal > 0;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Remaining withdrawable earnings',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
-              color: AppColors.onSurface,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             _fmt(widget.remainingWithdrawableTotal),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
-              color: AppColors.primary,
+              color: primaryColor,
             ),
           ),
           const SizedBox(height: 2),
@@ -538,10 +689,11 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
             'Already withdrawn: ${_fmt(_alreadyWithdrawnTotal)}',
             style: TextStyle(
               fontSize: 11,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.8),
+              color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.8),
             ),
           ),
-          const SizedBox(height: 10),
+          _buildWithdrawalProgressBar(),
+          const SizedBox(height: 14),
           Row(
             children: [
               _buildBreakdownChip('GCash', widget.remainingWithdrawableGcash),
@@ -561,6 +713,10 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
               onPressed: hasWithdrawable ? _openFeeWithdrawal : null,
               icon: const Icon(Icons.savings_rounded),
               label: const Text('Withdraw Earnings Now'),
+              style: FilledButton.styleFrom(
+                backgroundColor: hasWithdrawable ? primaryColor : null,
+                foregroundColor: hasWithdrawable ? (isDark ? const Color(0xFF0B0F19) : Colors.white) : null,
+              ),
             ),
           ),
         ],
@@ -569,11 +725,12 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   }
 
   Widget _buildBreakdownChip(String label, double amount) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
+          color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
@@ -581,10 +738,10 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: AppColors.onSurfaceVariant,
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 4),
@@ -593,10 +750,10 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
               alignment: Alignment.centerLeft,
               child: Text(
                 _fmt(amount),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
             ),
@@ -607,23 +764,68 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   }
 
   Widget _buildSourceFilterChips() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _buildFilterChip(_HistorySourceFilter.all, 'All'),
-        _buildFilterChip(_HistorySourceFilter.gcash, 'GCash'),
-        _buildFilterChip(_HistorySourceFilter.maya, 'Maya'),
-        _buildFilterChip(_HistorySourceFilter.onHand, 'On-hand'),
-      ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildFilterChip(_HistorySourceFilter.all, 'All'),
+          const SizedBox(width: 8),
+          _buildFilterChip(_HistorySourceFilter.gcash, 'GCash'),
+          const SizedBox(width: 8),
+          _buildFilterChip(_HistorySourceFilter.maya, 'Maya'),
+          const SizedBox(width: 8),
+          _buildFilterChip(_HistorySourceFilter.onHand, 'On-hand'),
+        ],
+      ),
     );
   }
 
   Widget _buildFilterChip(_HistorySourceFilter value, String label) {
-    final selected = _historySourceFilter == value;
+    final isSelected = _historySourceFilter == value;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final IconData icon;
+    final Color color;
+    switch (value) {
+      case _HistorySourceFilter.all:
+        icon = Icons.grid_view_rounded;
+        color = AppColors.primary;
+        break;
+      case _HistorySourceFilter.gcash:
+        icon = Icons.account_balance_wallet_outlined;
+        color = AppColors.primary;
+        break;
+      case _HistorySourceFilter.maya:
+        icon = Icons.wallet_rounded;
+        color = AppColors.secondary;
+        break;
+      case _HistorySourceFilter.onHand:
+        icon = Icons.payments_outlined;
+        color = AppColors.onHand;
+        break;
+    }
+
+    Color adaptiveColor = color;
+    if (isDark) {
+      if (color == AppColors.primary) {
+        adaptiveColor = const Color(0xFF60A5FA);
+      } else if (color == AppColors.secondary) {
+        adaptiveColor = const Color(0xFF34D399);
+      } else if (color == AppColors.onHand) {
+        adaptiveColor = const Color(0xFFFBBF24);
+      }
+    }
+
+    final unselectedBg = isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLow;
+    final avatarColor = isSelected ? adaptiveColor : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant);
+    final textColor = isSelected ? adaptiveColor : (isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface);
+    final borderColor = isSelected
+        ? adaptiveColor.withValues(alpha: 0.35)
+        : (isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant.withValues(alpha: 0.5));
+
     return ChoiceChip(
-      label: Text(label),
-      selected: selected,
+      selected: isSelected,
+      showCheckmark: false,
       onSelected: (_) {
         setState(() {
           _historySourceFilter = value;
@@ -633,34 +835,42 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
           _dayGroups = _computeDayGroups();
         });
       },
+      avatar: Icon(
+        icon,
+        size: 16,
+        color: avatarColor,
+      ),
+      label: Text(label),
       labelStyle: TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: FontWeight.w700,
-        color: selected ? Colors.white : AppColors.onSurface,
+        color: textColor,
       ),
-      selectedColor: AppColors.primary,
-      backgroundColor: AppColors.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      selectedColor: adaptiveColor.withValues(alpha: 0.14),
+      backgroundColor: unselectedBg,
       side: BorderSide(
-        color: selected ? AppColors.primary : AppColors.outlineVariant,
+        color: borderColor,
       ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
     );
   }
 
   Widget _buildHistoryLegend() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         'Legend: each row shows fee source type and where the fee was routed (GCash, Maya, or On-hand).',
         style: TextStyle(
           fontSize: 11,
-          color: AppColors.onSurfaceVariant.withValues(alpha: 0.85),
+          color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.85),
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -680,30 +890,33 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
       return _buildChartPlaceholder();
     }
 
+    final dates = widget.flowDates.take(safeLength).toList(growable: false);
+
     return ArchitectAnalyticsCard(
       title: context.l10n.dailyEarningsTrend,
       value: _fmt(widget.totalEarnings),
       trend: '${widget.transactionCount} transactions',
       subtitle: '',
       showStats: false,
-      selectedPeriod: _selectedPeriod,
-      onPeriodChanged: (v) => setState(() => _selectedPeriod = v),
       spots: widget.flowSpots.take(safeLength).toList(growable: false),
+      isLineChart: true,
+      secondarySpots: null,
       xLabels: widget.flowLabels.take(safeLength).toList(growable: false),
-      dates: widget.flowDates.take(safeLength).toList(growable: false),
+      dates: dates,
     );
   }
 
   Widget _buildChartPlaceholder() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -711,13 +924,16 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Charges analytics will appear after transactions are added.',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -727,6 +943,9 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   // ── Day group (expandable) ────────────────────────────────────
 
   Widget _buildDayGroup(_DayGroup group) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final secondaryColor = isDark ? const Color(0xFF34D399) : AppColors.secondary;
     final isExpanded = _expandedDays.contains(group.date);
     final count = group.transactions.length;
     final headerKey = _headerKeyForDay(group.date);
@@ -779,7 +998,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
               },
               child: Ink(
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLowest,
+                  color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(16),
                     topRight: const Radius.circular(16),
@@ -788,12 +1007,12 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                   ),
                   border: Border.all(
                     color: isExpanded
-                        ? AppColors.primaryContainer.withValues(alpha: 0.45)
-                        : AppColors.outlineVariant.withValues(alpha: 0.5),
+                        ? primaryColor.withValues(alpha: 0.45)
+                        : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant).withValues(alpha: 0.5),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.onSurface.withValues(alpha: 0.04),
+                      color: (isDark ? Colors.black : AppColors.onSurface).withValues(alpha: 0.04),
                       blurRadius: 24,
                       offset: const Offset(0, 8),
                     ),
@@ -809,14 +1028,14 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryContainer.withValues(
+                          color: primaryColor.withValues(
                             alpha: 0.12,
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.calendar_today_rounded,
-                          color: AppColors.primaryContainer,
+                          color: primaryColor,
                           size: 18,
                         ),
                       ),
@@ -827,10 +1046,10 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                           children: [
                             Text(
                               _dateHeader.format(group.date),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.onSurface,
+                                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -838,7 +1057,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                               '$count fee entr${count == 1 ? 'y' : 'ies'}',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: AppColors.onSurfaceVariant.withValues(
+                                color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(
                                   alpha: 0.7,
                                 ),
                               ),
@@ -851,10 +1070,10 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                         children: [
                           Text(
                             _fmt(group.total),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w800,
-                              color: AppColors.secondary,
+                              color: secondaryColor,
                             ),
                           ),
                           const SizedBox(height: 1),
@@ -862,7 +1081,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                             'Total fees collected that day',
                             style: TextStyle(
                               fontSize: 10,
-                              color: AppColors.onSurfaceVariant.withValues(
+                              color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(
                                 alpha: 0.7,
                               ),
                             ),
@@ -873,9 +1092,9 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                       AnimatedRotation(
                         turns: isExpanded ? 0.5 : 0,
                         duration: const Duration(milliseconds: 200),
-                        child: const Icon(
+                        child: Icon(
                           Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.onSurfaceVariant,
+                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                           size: 20,
                         ),
                       ),
@@ -893,13 +1112,13 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
             child: isExpanded
                 ? Container(
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow,
+                      color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
                       borderRadius: const BorderRadius.only(
                         bottomLeft: Radius.circular(16),
                         bottomRight: Radius.circular(16),
                       ),
                       border: Border.all(
-                        color: AppColors.primaryContainer.withValues(
+                        color: primaryColor.withValues(
                           alpha: 0.45,
                         ),
                       ),
@@ -918,21 +1137,22 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   }
 
   Widget _buildSubTransaction(ChargeTransaction tx) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final dest = tx.chargeDestination.toLowerCase();
     final Color chipColor;
     final IconData chipIcon;
     final String destLabel;
 
     if (dest.contains('maya')) {
-      chipColor = AppColors.secondary;
+      chipColor = isDark ? const Color(0xFF34D399) : AppColors.secondary;
       chipIcon = Icons.account_balance_rounded;
       destLabel = context.l10n.maya;
     } else if (dest.contains('gcash')) {
-      chipColor = AppColors.primary;
+      chipColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
       chipIcon = Icons.account_balance_wallet_rounded;
       destLabel = context.l10n.gcash;
     } else {
-      chipColor = AppColors.onHand;
+      chipColor = isDark ? AppColors.onHandGold : AppColors.onHand;
       chipIcon = Icons.payments_outlined;
       destLabel = context.l10n.onHand;
     }
@@ -945,7 +1165,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: AppColors.outlineVariant.withValues(alpha: 0.4),
+            color: (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant).withValues(alpha: 0.4),
           ),
         ),
       ),
@@ -971,10 +1191,10 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                   friendlyTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -984,7 +1204,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.65),
+                    color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.65),
                   ),
                 ),
               ],
@@ -1025,120 +1245,105 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
     );
   }
 
-  // ── Fee movement log ─────────────────────────────────────────
-
-  Widget _buildFeeMovementLog() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Fee Earnings Log',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Every time fee earnings were withdrawn or moved to a wallet',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (!_isLoadingFeeMovements)
-              Text(
-                '$_feeMovementsTotal record${_feeMovementsTotal == 1 ? '' : 's'}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-          ],
+  Widget _buildListSegmentedControl() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
         ),
-        const SizedBox(height: 10),
-        if (_isLoadingFeeMovements)
-          const LinearProgressIndicator(minHeight: 2)
-        else if (_feeMovements.isEmpty)
-          _buildFeeMovementEmptyState()
-        else
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.outlineVariant),
-            ),
-            child: Column(
-              children: [
-                ..._feeMovements.asMap().entries.map(
-                  (e) => _buildFeeMovementEntry(
-                    e.value,
-                    isLast:
-                        e.key == _feeMovements.length - 1 &&
-                        _feeMovementsTotal <= _feeMovements.length,
-                  ),
-                ),
-                if (_feeMovementsTotal > _feeMovements.length)
-                  InkWell(
-                    onTap: _showFeeMovementSheet,
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 13,
-                      ),
-                      decoration: const BoxDecoration(
-                        border: Border(
-                          top: BorderSide(
-                            color: AppColors.outlineVariant,
-                            width: 0.5,
-                          ),
-                        ),
-                        borderRadius: BorderRadius.only(
-                          bottomLeft: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'View all $_feeMovementsTotal records',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            size: 16,
-                            color: AppColors.primary,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSegmentButton(
+              index: 0,
+              label: 'Customer Collections',
+              icon: Icons.payments_rounded,
             ),
           ),
-      ],
+          Expanded(
+            child: _buildSegmentButton(
+              index: 1,
+              label: 'Withdrawals & Transfers',
+              icon: Icons.swap_horiz_rounded,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentButton({
+    required int index,
+    required String label,
+    required IconData icon,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSelected = _activeTab == index;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          setState(() {
+            _activeTab = index;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLowest)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    )
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected
+                    ? primaryColor
+                    : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color: isSelected
+                          ? (isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface)
+                          : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1156,6 +1361,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
     _FeeMovementEntry entry, {
     bool isLast = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isWithdrawal = entry.movementType == 'Fee Withdrawal';
     final Color color = isWithdrawal
         ? AppColors.error
@@ -1177,7 +1383,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
             ? null
             : Border(
                 bottom: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                  color: (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant).withValues(alpha: 0.4),
                 ),
               ),
       ),
@@ -1203,10 +1409,10 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                   title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -1214,7 +1420,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                   _movementDateTimeFormat.format(entry.createdAt),
                   style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.65),
+                    color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.65),
                   ),
                 ),
                 if (entry.reference.isNotEmpty) ...[
@@ -1223,7 +1429,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
                     entry.reference,
                     style: TextStyle(
                       fontSize: 10,
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                      color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.5),
                     ),
                   ),
                 ],
@@ -1276,35 +1482,39 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   }
 
   Widget _buildFeeMovementEmptyState() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
       ),
       child: Column(
         children: [
           Icon(
             Icons.swap_horiz_rounded,
             size: 36,
-            color: AppColors.onSurfaceVariant.withValues(alpha: 0.35),
+            color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.35),
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             'No fee earnings yet',
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 14,
-              color: AppColors.onSurface,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'When you withdraw or transfer your fee earnings to a wallet, each movement will appear here.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -1314,6 +1524,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   // ── Empty state ───────────────────────────────────────────────
 
   Widget _buildEmptyState() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     String filterText;
     switch (_historySourceFilter) {
       case _HistorySourceFilter.gcash:
@@ -1332,31 +1543,34 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
       ),
       child: Column(
         children: [
           Icon(
             Icons.receipt_long_outlined,
             size: 40,
-            color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
+            color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.4),
           ),
           const SizedBox(height: 12),
           Text(
             filterText,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 15,
-              color: AppColors.onSurface,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Charge earnings from transactions will appear here.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -1563,11 +1777,12 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final groups = _dayGroups;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkNavy : AppColors.background,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1578,7 +1793,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.outlineVariant,
+              color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -1588,7 +1803,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1597,15 +1812,15 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.onSurface,
+                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
                         'All withdrawals and wallet transfers of fee earnings',
                         style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
+                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -1614,7 +1829,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close_rounded),
-                  color: AppColors.onSurfaceVariant,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   visualDensity: VisualDensity.compact,
                 ),
               ],
@@ -1657,6 +1872,8 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
   }
 
   Widget _chip(String label, _FeeMovementTypeFilter value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
     final selected = _filter == value;
     return ChoiceChip(
       label: Text(label),
@@ -1668,19 +1885,21 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
       labelStyle: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        color: selected ? Colors.white : AppColors.onSurface,
+        color: selected ? Colors.white : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurface),
       ),
-      selectedColor: AppColors.primary,
-      backgroundColor: AppColors.surfaceContainerLow,
+      selectedColor: primaryColor,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       side: BorderSide(
-        color: selected ? AppColors.primary : AppColors.outlineVariant,
+        color: selected ? primaryColor : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
       ),
       visualDensity: VisualDensity.compact,
     );
   }
 
   Widget _buildDayGroup(MapEntry<DateTime, List<_FeeMovementEntry>> group) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
     final day = group.key;
     final entries = group.value;
     final isExpanded = _expandedDays.contains(day);
@@ -1708,7 +1927,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
             }),
             child: Ink(
               decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLowest,
+                color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),
@@ -1717,8 +1936,8 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                 ),
                 border: Border.all(
                   color: isExpanded
-                      ? AppColors.primary.withValues(alpha: 0.35)
-                      : AppColors.outlineVariant.withValues(alpha: 0.5),
+                      ? primaryColor.withValues(alpha: 0.35)
+                      : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant).withValues(alpha: 0.5),
                 ),
               ),
               child: Padding(
@@ -1731,12 +1950,12 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.08),
+                        color: primaryColor.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.calendar_today_rounded,
-                        color: AppColors.primary,
+                        color: primaryColor,
                         size: 16,
                       ),
                     ),
@@ -1747,10 +1966,10 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                         children: [
                           Text(
                             _dateHeader.format(day),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.onSurface,
+                              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                             ),
                           ),
                           const SizedBox(height: 1),
@@ -1758,7 +1977,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                             '$count movement${count == 1 ? '' : 's'}',
                             style: TextStyle(
                               fontSize: 11,
-                              color: AppColors.onSurfaceVariant.withValues(
+                              color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(
                                 alpha: 0.7,
                               ),
                             ),
@@ -1771,10 +1990,10 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                       children: [
                         Text(
                           _fmt(dayTotal),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
+                            color: primaryColor,
                           ),
                         ),
                         const SizedBox(height: 1),
@@ -1782,7 +2001,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                           'moved that day',
                           style: TextStyle(
                             fontSize: 10,
-                            color: AppColors.onSurfaceVariant.withValues(
+                            color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(
                               alpha: 0.6,
                             ),
                           ),
@@ -1793,9 +2012,9 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                     AnimatedRotation(
                       turns: isExpanded ? 0.5 : 0,
                       duration: const Duration(milliseconds: 200),
-                      child: const Icon(
+                      child: Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: AppColors.onSurfaceVariant,
+                        color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                         size: 20,
                       ),
                     ),
@@ -1811,13 +2030,13 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
             child: isExpanded
                 ? Container(
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow,
+                      color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
                       borderRadius: const BorderRadius.only(
                         bottomLeft: Radius.circular(14),
                         bottomRight: Radius.circular(14),
                       ),
                       border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.35),
+                        color: primaryColor.withValues(alpha: 0.35),
                       ),
                     ),
                     child: Column(
@@ -1841,6 +2060,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
   }
 
   Widget _buildEntry(_FeeMovementEntry entry, {bool isLast = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isWithdrawal = entry.movementType == 'Fee Withdrawal';
     final Color color = isWithdrawal
         ? AppColors.error
@@ -1861,7 +2081,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
             ? null
             : Border(
                 bottom: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                  color: (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant).withValues(alpha: 0.4),
                 ),
               ),
       ),
@@ -1885,10 +2105,10 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                   title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -1896,7 +2116,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                   _dtFormat.format(entry.createdAt),
                   style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.65),
+                    color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.65),
                   ),
                 ),
                 if (entry.reference.isNotEmpty) ...[
@@ -1905,7 +2125,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
                     entry.reference,
                     style: TextStyle(
                       fontSize: 10,
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                      color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.5),
                     ),
                   ),
                 ],
@@ -1949,6 +2169,7 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
   }
 
   Widget _buildEmpty() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     String label;
     switch (_filter) {
       case _FeeMovementTypeFilter.withdrawals:
@@ -1969,22 +2190,25 @@ class _FeeMovementSheetState extends ConsumerState<_FeeMovementSheet> {
           Icon(
             Icons.swap_horiz_rounded,
             size: 40,
-            color: AppColors.onSurfaceVariant.withValues(alpha: 0.35),
+            color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant).withValues(alpha: 0.35),
           ),
           const SizedBox(height: 12),
           Text(
             'No $label recorded',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Fee earnings entries will appear here once you withdraw or transfer fee earnings.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+            ),
           ),
         ],
       ),

@@ -350,7 +350,9 @@ class _MainShellState extends ConsumerState<MainShell>
       bottomNavigationBar: BottomAppBar(
         padding: EdgeInsets.zero,
         height: 72,
-        color: AppColors.surfaceContainerLowest,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF161D30)
+            : AppColors.surfaceContainerLowest,
         shape: isKeyboardVisible ? null : const CircularNotchedRectangle(),
         notchMargin: isKeyboardVisible ? 0 : 8,
         child: Row(
@@ -470,10 +472,14 @@ class _AnimatedSubFabButtonState extends State<_AnimatedSubFabButton> {
                   onTap: widget.onTap,
                   child: Ink(
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLowest,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF1E293B)
+                          : AppColors.surfaceContainerLowest,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: widget.color.withValues(alpha: 0.18),
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? widget.color.withValues(alpha: 0.40)
+                            : widget.color.withValues(alpha: 0.18),
                         width: 1.2,
                       ),
                       boxShadow: [

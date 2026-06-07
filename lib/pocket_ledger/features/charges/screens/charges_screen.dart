@@ -179,40 +179,28 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final actionBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLow;
+    final actionIconColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
         onSettingsPressed: widget.openDrawer,
         actions: [
-          if (widget.launchedFromTransaction)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: IconButton.filledTonal(
-                tooltip: context.l10n.backToTransaction,
-                onPressed: () => Navigator.of(context).pop(),
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.surfaceContainerLow,
-                ),
-                icon: const Icon(
-                  Icons.arrow_back_rounded,
-                  color: AppColors.onSurfaceVariant,
-                  size: 20,
-                ),
-              ),
-            )
-          else
+          if (!widget.launchedFromTransaction)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: IconButton.filledTonal(
                 tooltip: context.l10n.openMenu,
                 onPressed: widget.openDrawer,
                 style: IconButton.styleFrom(
-                  backgroundColor: AppColors.surfaceContainerLow,
+                  backgroundColor: actionBg,
                 ),
-                icon: const Icon(
+                icon: Icon(
                   Icons.settings_outlined,
-                  color: AppColors.onSurfaceVariant,
+                  color: actionIconColor,
                   size: 20,
                 ),
               ),
@@ -243,17 +231,18 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
           const SizedBox(height: 100),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddBracketBottomSheet(context),
-        backgroundColor: _selectedWalletPrefix == 'maya'
-            ? AppColors.secondary
-            : AppColors.primary,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: Text(
-          context.l10n.addNewBracket,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 72),
+        child: FloatingActionButton.extended(
+          onPressed: () => _showAddBracketBottomSheet(context),
+          backgroundColor: AppColors.primary,
+          icon: const Icon(Icons.add_rounded, color: Colors.white),
+          label: Text(
+            context.l10n.addNewBracket,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ),
@@ -261,10 +250,12 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   }
 
   Widget _buildInlineWalletSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(14),
+        border: isDark ? Border.all(color: const Color(0xFF1E293B)) : null,
       ),
       padding: const EdgeInsets.all(4),
       child: Row(
@@ -297,6 +288,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
     required Color color,
     required IconData icon,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSelected = _selectedWalletPrefix == prefix;
     return GestureDetector(
       onTap: () {
@@ -326,7 +318,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
             Icon(
               icon,
               size: 16,
-              color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
+              color: isSelected ? Colors.white : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -337,7 +329,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
+                    color: isSelected ? Colors.white : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                   ),
                 ),
               ),
@@ -349,9 +341,10 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   }
 
   Widget _buildInlineServiceChips() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final activeColor = _selectedWalletPrefix == 'maya'
-        ? AppColors.secondary
-        : AppColors.primary;
+        ? (isDark ? const Color(0xFF34D399) : AppColors.secondary)
+        : (isDark ? const Color(0xFF60A5FA) : AppColors.primary);
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -372,11 +365,11 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                 }
               },
               selectedColor: activeColor.withValues(alpha: 0.12),
-              backgroundColor: AppColors.surfaceContainerLow,
+              backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLow,
               side: BorderSide(
                 color: isSelected
                     ? activeColor.withValues(alpha: 0.4)
-                    : AppColors.outlineVariant.withValues(alpha: 0.2),
+                    : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.2)),
                 width: 1,
               ),
               shape: RoundedRectangleBorder(
@@ -385,7 +378,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
               labelStyle: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+                color: isSelected ? activeColor : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
               ),
             ),
           );
@@ -402,10 +395,11 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   }
 
   void _showAddBracketBottomSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -413,8 +407,8 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             final activeColor = _selectedWalletPrefix == 'maya'
-                ? AppColors.secondary
-                : AppColors.primary;
+                ? (isDark ? const Color(0xFF34D399) : AppColors.secondary)
+                : (isDark ? const Color(0xFF60A5FA) : AppColors.primary);
 
             return Padding(
               padding: EdgeInsets.only(
@@ -448,10 +442,10 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                           const SizedBox(width: 12),
                           Text(
                             context.l10n.addNewBracket,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.onSurface,
+                              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                             ),
                           ),
                         ],
@@ -561,20 +555,25 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
     required VoidCallback onChanged,
     bool isDecimal = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: AppColors.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            fontSize: 14,
+          ),
           keyboardType: isDecimal
               ? const TextInputType.numberWithOptions(decimal: true)
               : TextInputType.number,
@@ -584,14 +583,14 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
           },
           decoration: InputDecoration(
             prefixText: '₱ ',
-            prefixStyle: const TextStyle(
+            prefixStyle: TextStyle(
               fontWeight: FontWeight.bold,
-              color: AppColors.onSurface,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
             ),
             hintText: hint,
-            hintStyle: const TextStyle(color: AppColors.outlineVariant),
+            hintStyle: TextStyle(color: isDark ? const Color(0xFF475569) : AppColors.outlineVariant),
             filled: true,
-            fillColor: AppColors.surfaceContainerLow,
+            fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -607,6 +606,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   }
 
   Widget _buildHelpSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -615,8 +615,9 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
+              color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(10),
+              border: isDark ? Border.all(color: const Color(0xFF1E293B)) : null,
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -626,15 +627,15 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                     Icon(
                       Icons.help_outline_rounded,
                       size: 18,
-                      color: AppColors.primary,
+                      color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       context.l10n.whatTheseFieldsMean,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.onSurface,
+                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                       ),
                     ),
                   ],
@@ -644,7 +645,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                       ? Icons.keyboard_arrow_up_rounded
                       : Icons.keyboard_arrow_down_rounded,
                   size: 20,
-                  color: AppColors.onSurfaceVariant,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
               ],
             ),
@@ -655,9 +656,9 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: isDark ? AppColors.darkNavyTile : AppColors.surfaceContainerLowest,
               border: Border.all(
-                color: AppColors.outlineVariant.withValues(alpha: 0.3),
+                color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.3),
               ),
               borderRadius: BorderRadius.circular(10),
             ),
@@ -687,9 +688,9 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                   ),
                   child: Text(
                     context.l10n.exampleTransactionText,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.onSurface,
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -703,23 +704,24 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   }
 
   Widget _buildHelpRow(String title, String description) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           description,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: AppColors.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             height: 1.4,
           ),
         ),
@@ -730,6 +732,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
 
 
   Widget _buildActiveTiersSection(BuildContext context, List<Charge> brackets) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -739,22 +742,22 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
             Text(
               context.l10n.activeTiers,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.onSurface,
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.surfaceContainerHigh,
+                color: isDark ? AppColors.darkNavyTile : AppColors.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(9999),
               ),
               child: Text(
                 context.l10n.totalTiers(brackets.length.toString()),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.onSurfaceVariant,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
               ),
             ),
@@ -766,22 +769,23 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.outlineVariant),
+              border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
             ),
             child: Column(
               children: [
-                const Icon(
+                Icon(
                   Icons.sell_outlined,
                   size: 32,
-                  color: AppColors.onSurfaceVariant,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
                 const SizedBox(height: 12),
                 Text(
                   context.l10n.noFeeTiersTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
+                    color: isDark ? const Color(0xFFF8FAFC) : null,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -789,7 +793,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                   context.l10n.noFeeTiersMessage,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -817,14 +821,17 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
       return context.l10n.largeTransactions;
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final activeColor = _selectedWalletPrefix == 'maya'
-        ? AppColors.secondary
-        : AppColors.primary;
+        ? (isDark ? const Color(0xFF34D399) : AppColors.secondary)
+        : (isDark ? const Color(0xFF60A5FA) : AppColors.primary);
+    final errorColor = isDark ? const Color(0xFFF87171) : AppColors.error;
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
+        border: isDark ? Border.all(color: const Color(0xFF1E293B)) : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -866,18 +873,18 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.sync_alt_rounded,
                               size: 14,
-                              color: AppColors.onSurfaceVariant,
+                              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                             ),
                             const SizedBox(width: 6),
                             Text(
                               '₱${bracket.lowerBound.toInt()} — ₱${bracket.upperBound.toInt()}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.onSurface,
+                                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                               ),
                             ),
                           ],
@@ -910,7 +917,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
               const SizedBox(height: 12),
               Divider(
                 height: 1,
-                color: AppColors.outlineVariant.withValues(alpha: 0.2),
+                color: (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant).withValues(alpha: 0.2),
               ),
               const SizedBox(height: 12),
               Row(
@@ -921,18 +928,18 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                       Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.secondary,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF34D399) : AppColors.secondary,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
                         context.l10n.tierStatus(context.l10n.active),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.secondary,
+                          color: isDark ? const Color(0xFF34D399) : AppColors.secondary,
                         ),
                       ),
                     ],
@@ -957,8 +964,8 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                       IconButton.filledTonal(
                         onPressed: () => _deleteBracket(bracket),
                         style: IconButton.styleFrom(
-                          backgroundColor: AppColors.error.withValues(alpha: 0.08),
-                          foregroundColor: AppColors.error,
+                          backgroundColor: errorColor.withValues(alpha: 0.08),
+                          foregroundColor: errorColor,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -1071,10 +1078,13 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   }
 
   Future<void> _deleteBracket(Charge bracket) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final errorColor = isDark ? const Color(0xFFF87171) : AppColors.error;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLowest,
+        backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         titlePadding: EdgeInsets.zero,
         contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
@@ -1087,12 +1097,12 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.10),
+                  color: errorColor.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.layers_clear_rounded,
-                  color: AppColors.error,
+                  color: errorColor,
                   size: 28,
                 ),
               ),
@@ -1100,10 +1110,10 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
               Text(
                 context.l10n.deleteBracketTitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
@@ -1113,9 +1123,9 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                   bracket.upperBound.toInt().toString(),
                 ),
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.onSurfaceVariant,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
               ),
             ],
@@ -1129,7 +1139,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: const BorderSide(color: AppColors.outlineVariant),
+                    side: BorderSide(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1142,7 +1152,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
               Expanded(
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.error,
+                    backgroundColor: errorColor,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1156,7 +1166,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                   ),
                   label: Text(
                     context.l10n.delete,
-                    style: TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Colors.white),
                   ),
                 ),
               ),
@@ -1376,8 +1386,14 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isMaya = widget.bracket.transactionTypeKey.startsWith('maya');
+    final activeColor = isMaya
+        ? (isDark ? const Color(0xFF34D399) : AppColors.secondary)
+        : (isDark ? const Color(0xFF60A5FA) : AppColors.primary);
+
     return AlertDialog(
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titlePadding: EdgeInsets.zero,
       contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -1385,7 +1401,7 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
       title: Container(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.06),
+          color: activeColor.withValues(alpha: 0.06),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Row(
@@ -1394,22 +1410,22 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.14),
+                color: activeColor.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.edit_outlined,
-                color: AppColors.primary,
+                color: activeColor,
                 size: 20,
               ),
             ),
             const SizedBox(width: 12),
             Text(
               context.l10n.editChargeBracketTitle,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
               ),
             ),
           ],
@@ -1422,9 +1438,9 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
           const SizedBox(height: 12),
           Text(
             context.l10n.editChargeBracketHint,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.onSurfaceVariant,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 16),
@@ -1433,6 +1449,8 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
             label: context.l10n.lowerBound,
             hint: context.l10n.lowerBoundHint,
             keyboardType: TextInputType.number,
+            isDark: isDark,
+            activeColor: activeColor,
           ),
           const SizedBox(height: 12),
           _dialogField(
@@ -1440,6 +1458,8 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
             label: context.l10n.upperBound,
             hint: context.l10n.upperBoundHint,
             keyboardType: TextInputType.number,
+            isDark: isDark,
+            activeColor: activeColor,
           ),
           const SizedBox(height: 12),
           _dialogField(
@@ -1447,6 +1467,8 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
             label: context.l10n.chargeAmount,
             hint: context.l10n.chargeAmountHint,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            isDark: isDark,
+            activeColor: activeColor,
           ),
           if (_errorText != null) ...[
             const SizedBox(height: 10),
@@ -1468,7 +1490,7 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: AppColors.outlineVariant),
+                  side: BorderSide(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -1481,6 +1503,7 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
             Expanded(
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
+                  backgroundColor: activeColor,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -1512,6 +1535,8 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
     required TextEditingController controller,
     required String label,
     required String hint,
+    required bool isDark,
+    required Color activeColor,
     TextInputType? keyboardType,
   }) {
     return Column(
@@ -1519,25 +1544,29 @@ class _ChargeBracketDialogState extends ConsumerState<_ChargeBracketDialog> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            fontSize: 14,
+          ),
           decoration: InputDecoration(
             prefixText: '₱ ',
-            prefixStyle: const TextStyle(
+            prefixStyle: TextStyle(
               fontWeight: FontWeight.bold,
-              color: AppColors.onSurface,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
             ),
             hintText: hint,
             filled: true,
-            fillColor: AppColors.surfaceContainerLow,
+            fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,

@@ -318,6 +318,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     int titleMaxLines = 1,
     VoidCallback? onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tileBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest;
+    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant.withValues(alpha: 0.4);
+    Color adaptiveAccent = accentColor;
+    if (isDark) {
+      if (accentColor == AppColors.primary) {
+        adaptiveAccent = const Color(0xFF60A5FA);
+      } else if (accentColor == AppColors.secondary) {
+        adaptiveAccent = const Color(0xFF34D399);
+      } else if (accentColor == AppColors.onHand) {
+        adaptiveAccent = const Color(0xFFFBBF24);
+      } else if (accentColor == AppColors.softNavy) {
+        adaptiveAccent = const Color(0xFF94A3B8);
+      }
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Material(
@@ -327,18 +343,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Ink(
             width: width,
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: tileBg,
               border: Border(
-                left: BorderSide(color: accentColor, width: 4),
-                top: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
-                ),
-                right: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
-                ),
-                bottom: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
-                ),
+                left: BorderSide(color: adaptiveAccent, width: 4),
+                top: BorderSide(color: borderColor),
+                right: BorderSide(color: borderColor),
+                bottom: BorderSide(color: borderColor),
               ),
               boxShadow: [
                 BoxShadow(
@@ -365,7 +375,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             maxLines: titleMaxLines,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: AppColors.onSurfaceVariant,
+                              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.3,
@@ -377,10 +387,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           width: 30,
                           height: 30,
                           decoration: BoxDecoration(
-                            color: accentColor.withValues(alpha: 0.12),
+                            color: adaptiveAccent.withValues(alpha: 0.12),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(icon, color: accentColor, size: 15),
+                          child: Icon(icon, color: adaptiveAccent, size: 15),
                         ),
                       ],
                     ),
@@ -392,7 +402,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         value,
                         maxLines: 1,
                         style: TextStyle(
-                          color: accentColor,
+                          color: adaptiveAccent,
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                         ),
@@ -403,8 +413,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       caption,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.onSurfaceVariant,
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                         fontSize: 11,
                         fontWeight: FontWeight.w400,
                       ),
@@ -426,6 +436,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final totalBusinessCash = dashboard.businessUsableCash;
     final withdrawableEarnings = dashboard.remainingWithdrawableTotal;
     const accentColor = AppColors.darkNavyTile;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tileBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest;
+    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant.withValues(alpha: 0.4);
+    final totalColor = isDark ? const Color(0xFFF8FAFC) : AppColors.darkNavyTile;
+    final textVarColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -433,18 +448,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(14, 16, 16, 16),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: tileBg,
           border: Border(
-            left: const BorderSide(color: accentColor, width: 4),
-            top: BorderSide(
-              color: AppColors.outlineVariant.withValues(alpha: 0.4),
-            ),
-            right: BorderSide(
-              color: AppColors.outlineVariant.withValues(alpha: 0.4),
-            ),
-            bottom: BorderSide(
-              color: AppColors.outlineVariant.withValues(alpha: 0.4),
-            ),
+            left: BorderSide(color: isDark ? const Color(0xFF94A3B8) : accentColor, width: 4),
+            top: BorderSide(color: borderColor),
+            right: BorderSide(color: borderColor),
+            bottom: BorderSide(color: borderColor),
           ),
           boxShadow: [
             BoxShadow(
@@ -463,8 +472,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 Expanded(
                   child: Text(
                     context.l10n.totalFunds,
-                    style: const TextStyle(
-                      color: AppColors.onSurfaceVariant,
+                    style: TextStyle(
+                      color: textVarColor,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.3,
@@ -476,12 +485,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   width: 30,
                   height: 30,
                   decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.12),
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : accentColor.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.account_balance_rounded,
-                    color: accentColor,
+                    color: isDark ? const Color(0xFF94A3B8) : accentColor,
                     size: 15,
                   ),
                 ),
@@ -494,8 +503,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: Text(
                 _dashboardRepository.formatCurrency(totalBusinessCash),
                 maxLines: 1,
-                style: const TextStyle(
-                  color: accentColor,
+                style: TextStyle(
+                  color: totalColor,
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                 ),
@@ -504,8 +513,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const SizedBox(height: 8),
             Text(
               context.l10n.businessCashComputation,
-              style: const TextStyle(
-                color: AppColors.onSurfaceVariant,
+              style: TextStyle(
+                color: textVarColor,
                 fontSize: 11,
                 fontWeight: FontWeight.w400,
               ),
@@ -515,8 +524,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               context.l10n.withdrawableEarningsNote(
                 _dashboardRepository.formatCurrency(withdrawableEarnings),
               ),
-              style: const TextStyle(
-                color: AppColors.onSurfaceVariant,
+              style: TextStyle(
+                color: textVarColor,
                 fontSize: 10,
                 fontWeight: FontWeight.w400,
               ),
@@ -556,7 +565,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
-      decoration: _minimalCardDecoration(),
+      decoration: _minimalCardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -631,13 +640,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildPillTab(String label, bool isActive, VoidCallback onTap) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeBg = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final inactiveBg = isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLow;
+    final activeText = isDark ? const Color(0xFF0B0F19) : Colors.white;
+    final inactiveText = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.primary : AppColors.surfaceContainerLow,
+          color: isActive ? activeBg : inactiveBg,
           borderRadius: BorderRadius.circular(20),
         ),
         child: FittedBox(
@@ -647,7 +662,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+              color: isActive ? activeText : inactiveText,
             ),
           ),
         ),
@@ -688,7 +703,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(18),
-        decoration: _minimalCardDecoration(),
+        decoration: _minimalCardDecoration(context),
         child: Text(
           context.l10n.noActivitiesFilter,
           style: const TextStyle(
@@ -737,7 +752,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       onTap: _openPersonalExpenseStatementScreen,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: _minimalCardDecoration(),
+        decoration: _minimalCardDecoration(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -937,11 +952,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  BoxDecoration _minimalCardDecoration() {
+  BoxDecoration _minimalCardDecoration(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return BoxDecoration(
-      color: Colors.white,
+      color: isDark ? const Color(0xFF161D30) : Colors.white,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: AppColors.surfaceContainerHigh),
+      border: Border.all(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : AppColors.surfaceContainerHigh,
+      ),
     );
   }
 }

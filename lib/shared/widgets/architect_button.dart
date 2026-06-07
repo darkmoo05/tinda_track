@@ -15,11 +15,14 @@ class ArchitectButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+
     if (!isPrimary) {
       return TextButton(
         onPressed: onPressed,
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.primary,
+          foregroundColor: primaryColor,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),

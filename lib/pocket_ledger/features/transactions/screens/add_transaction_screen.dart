@@ -322,6 +322,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Watch partiesStreamProvider to keep it active and ensure cache matches database
     ref.watch(partiesStreamProvider);
 
@@ -334,11 +335,14 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? AppColors.darkNavy : AppColors.background,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: AppColors.onSurface),
+          icon: Icon(
+            Icons.close_rounded,
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: const [],
@@ -457,13 +461,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.onSurface.withValues(alpha: 0.8),
+                            color: isDark
+                                ? const Color(0xFFF8FAFC).withValues(alpha: 0.8)
+                                : AppColors.onSurface.withValues(alpha: 0.8),
                           ),
                         ),
                         tilePadding: EdgeInsets.zero,
                         childrenPadding: const EdgeInsets.only(top: 8, bottom: 8),
-                        iconColor: AppColors.onSurfaceVariant,
-                        collapsedIconColor: AppColors.onSurfaceVariant,
+                        iconColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                        collapsedIconColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                         children: [
                           _buildTextField(
                             controller: _referenceController,
@@ -498,32 +504,33 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildPartyFoundBanner(String name) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: AppColors.successLight, // very soft light green
+          color: isDark ? const Color(0xFF022C22) : AppColors.successLight,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: AppColors.successBorder,
+            color: isDark ? const Color(0xFF065F46) : AppColors.successBorder,
             width: 1.0,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.check_circle,
-              color: AppColors.success, // soft dark green
+              color: isDark ? const Color(0xFF34D399) : AppColors.success,
               size: 14,
             ),
             const SizedBox(width: 6),
             Text(
               context.l10n.verifiedAccountFound(name),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: AppColors.success,
+                color: isDark ? const Color(0xFF34D399) : AppColors.success,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -534,6 +541,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildPartyNotRegisteredAlert() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -553,26 +561,28 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
+            color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: AppColors.outlineVariant.withValues(alpha: 0.5),
+              color: isDark
+                  ? const Color(0xFF1E293B)
+                  : AppColors.outlineVariant.withValues(alpha: 0.5),
             ),
           ),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.info_outline_rounded,
-                color: AppColors.onSurfaceVariant,
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 size: 16,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   context.l10n.accountNotInContacts,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -582,7 +592,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 '+ Register',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.primary,
+                  color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -594,15 +604,26 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildCalculationPreview(BuildContext context) {
-    final activeColor = _selectedWalletColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark
+        ? (_selectedWalletSelection == _WalletSelection.maya
+            ? AppColors.mayaNeon
+            : AppColors.gcashNeon)
+        : _selectedWalletColor;
+    final surfaceColor = isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest;
+    final borderColor = isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.6);
+    final labelColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+    final valueColor = isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface;
+    final dashedColor = isDark ? const Color(0xFF334155) : AppColors.outlineVariant.withValues(alpha: 0.8);
+
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.6)),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -625,10 +646,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 Expanded(
                   child: Text(
                     context.l10n.reviewTotals,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
+                      color: valueColor,
                     ),
                   ),
                 ),
@@ -669,22 +690,30 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     _chargeHandlingMode == null
                         ? 'Select fee handling'
                         : _chargeHandlingDisplayLabel,
+                    labelColor: labelColor,
+                    valueColor: valueColor,
                   ),
                   const SizedBox(height: 6),
                   _buildPreviewRow(
                     context.l10n.usingWallet,
                     _selectedWalletAccount,
+                    labelColor: labelColor,
+                    valueColor: valueColor,
                   ),
                   const SizedBox(height: 6),
                   _buildPreviewRow(
                     context.l10n.feeDestination,
                     _chargeDestinationAccount,
+                    labelColor: labelColor,
+                    valueColor: valueColor,
                   ),
                   if (_matchedChargeBracket != null) ...[
                     const SizedBox(height: 6),
                     _buildPreviewRow(
                       context.l10n.feeRange,
                       '$_pesoLabel ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} - $_pesoLabel ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
+                      labelColor: labelColor,
+                      valueColor: valueColor,
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -702,7 +731,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: CustomPaint(
               size: const Size(double.infinity, 1),
-              painter: DashedLinePainter(),
+              painter: DashedLinePainter(color: dashedColor),
             ),
           ),
 
@@ -715,19 +744,22 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 _buildReceiptLine(
                   'Principal Amount',
                   '$_pesoLabel ${_enteredAmount.toStringAsFixed(2)}',
+                  labelColor: labelColor,
+                  valueColor: valueColor,
                 ),
                 const SizedBox(height: 8),
                 _buildReceiptLine(
                   'Service Fee',
                   '$_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
-                  valueColor: _chargeFee > 0 ? AppColors.error : null,
+                  labelColor: labelColor,
+                  valueColor: _chargeFee > 0 ? AppColors.error : valueColor,
                 ),
                 const SizedBox(height: 14),
 
                 // Dashed separator for total
                 CustomPaint(
                   size: const Size(double.infinity, 1),
-                  painter: DashedLinePainter(),
+                  painter: DashedLinePainter(color: dashedColor),
                 ),
                 const SizedBox(height: 14),
 
@@ -746,10 +778,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                                 : _isOutflowSelection
                                     ? 'Total Charged to Wallet'
                                     : 'Total Sent to Wallet',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.onSurfaceVariant,
+                              color: labelColor,
                             ),
                           ),
                         ),
@@ -765,10 +797,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                               : _isOutflowSelection
                                   ? _totalCollected
                                   : _amountToSend).toStringAsFixed(2)}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.onSurface,
+                            color: valueColor,
                           ),
                         ),
                       ),
@@ -792,10 +824,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                                 : _isOutflowSelection
                                     ? 'Cash to Hand to Customer'
                                     : 'Cash to Collect from Customer',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.onSurfaceVariant,
+                              color: labelColor,
                             ),
                           ),
                         ),
@@ -834,7 +866,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     );
   }
 
-  Widget _buildReceiptLine(String label, String value, {Color? valueColor}) {
+  Widget _buildReceiptLine(
+    String label,
+    String value, {
+    Color? labelColor,
+    Color? valueColor,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -845,9 +883,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               fit: BoxFit.scaleDown,
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
-                  color: AppColors.onSurfaceVariant,
+                  color: labelColor ?? (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                 ),
               ),
             ),
@@ -862,7 +900,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: valueColor ?? AppColors.onSurface,
+                color: valueColor ?? (isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface),
               ),
             ),
           ),
@@ -871,8 +909,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     );
   }
 
+  Widget _buildPreviewRow(
+    String label,
+    String value, {
+    Color? labelColor,
+    Color? valueColor,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final resolvedLabelColor = labelColor ?? (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant);
+    final resolvedValueColor = valueColor ?? (isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface);
 
-  Widget _buildPreviewRow(String label, String value) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 340;
@@ -882,9 +928,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
+                  color: resolvedLabelColor,
                 ),
               ),
               const SizedBox(height: 2),
@@ -895,10 +941,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   textAlign: TextAlign.end,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
+                    color: resolvedValueColor,
                   ),
                 ),
               ),
@@ -913,9 +959,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               flex: 6,
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
+                  color: resolvedLabelColor,
                 ),
               ),
             ),
@@ -927,10 +973,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 textAlign: TextAlign.end,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface,
+                  color: resolvedValueColor,
                 ),
               ),
             ),
@@ -941,27 +987,28 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildNoBracketWarning() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
+        color: isDark ? const Color(0xFF450A0A) : AppColors.error.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+        border: Border.all(color: isDark ? const Color(0xFF991B1B) : AppColors.error.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.warning_amber_rounded,
-            color: AppColors.error,
+            color: isDark ? const Color(0xFFFCA5A5) : AppColors.error,
             size: 14,
           ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               context.l10n.noFeeRuleForAmount,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: AppColors.error,
+                color: isDark ? const Color(0xFFFCA5A5) : AppColors.error,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -972,19 +1019,24 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildChargeHandlingSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final showChargeHandlingError =
         _showRequiredIndicators &&
         _canCustomizeFeeHandling &&
         _chargeHandlingMode == null;
-    final activeColor = _selectedWalletColor;
+    final activeColor = isDark
+        ? (_selectedWalletSelection == _WalletSelection.maya
+            ? AppColors.mayaNeon
+            : AppColors.gcashNeon)
+        : _selectedWalletColor;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
+        color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: AppColors.outlineVariant.withValues(alpha: 0.55),
+          color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.55),
         ),
       ),
       child: Column(
@@ -999,12 +1051,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           Container(
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: isDark ? const Color(0xFF0B0F19) : AppColors.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: showChargeHandlingError
                     ? AppColors.error
-                    : AppColors.outlineVariant.withValues(alpha: 0.55),
+                    : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.55)),
               ),
             ),
             child: Row(
@@ -1051,10 +1103,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           const SizedBox(height: 10),
           Text(
             'Applicable fee: $_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
             ),
           ),
         ],
@@ -1068,6 +1120,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     required Color activeColor,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -1091,7 +1144,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-              color: selected ? activeColor : AppColors.onSurfaceVariant,
+              color: selected
+                  ? activeColor
+                  : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
             ),
           ),
         ),
@@ -1165,15 +1220,18 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildCard({required Widget child}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1182,10 +1240,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       child: child,
     );
   }
+
   Widget _buildTypeSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final showTypeError =
         _showRequiredIndicators && _selectedServiceKey == null;
-    final activeColor = _selectedWalletColor;
+    final activeColor = isDark
+        ? (_selectedWalletSelection == _WalletSelection.maya
+            ? AppColors.mayaNeon
+            : AppColors.gcashNeon)
+        : _selectedWalletColor;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1204,16 +1268,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               child: _buildWalletButton(
                 label: 'GCash',
                 selected: _selectedWalletSelection == _WalletSelection.gcash,
-                activeBgColor: AppColors.gcash,
-                activeTextColor: Colors.white,
-                activeBorderColor: AppColors.gcash,
+                activeBgColor: isDark ? AppColors.gcash.withValues(alpha: 0.2) : AppColors.gcash,
+                activeTextColor: isDark ? AppColors.gcashNeon : Colors.white,
+                activeBorderColor: isDark ? AppColors.gcashNeon : AppColors.gcash,
                 logoWidget: Container(
                   width: 20,
                   height: 20,
                   decoration: BoxDecoration(
                     color: _selectedWalletSelection == _WalletSelection.gcash 
-                        ? Colors.white 
-                        : AppColors.gcash,
+                        ? (isDark ? AppColors.gcashNeon : Colors.white) 
+                        : (isDark ? const Color(0xFF161D30) : AppColors.gcash),
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
@@ -1221,8 +1285,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     'G',
                     style: TextStyle(
                       color: _selectedWalletSelection == _WalletSelection.gcash 
-                          ? AppColors.gcash 
-                          : Colors.white,
+                          ? (isDark ? Colors.black : AppColors.gcash) 
+                          : (isDark ? const Color(0xFF94A3B8) : Colors.white),
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1241,21 +1305,25 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               child: _buildWalletButton(
                 label: 'Maya',
                 selected: _selectedWalletSelection == _WalletSelection.maya,
-                activeBgColor: Colors.white,
-                activeTextColor: AppColors.maya,
-                activeBorderColor: AppColors.maya,
+                activeBgColor: isDark ? AppColors.secondary.withValues(alpha: 0.2) : Colors.white,
+                activeTextColor: isDark ? AppColors.mayaNeon : AppColors.maya,
+                activeBorderColor: isDark ? AppColors.mayaNeon : AppColors.maya,
                 logoWidget: Container(
                   width: 20,
                   height: 20,
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
+                  decoration: BoxDecoration(
+                    color: _selectedWalletSelection == _WalletSelection.maya
+                        ? (isDark ? AppColors.mayaNeon : Colors.black)
+                        : (isDark ? const Color(0xFF161D30) : Colors.black),
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
+                  child: Text(
                     'm',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: _selectedWalletSelection == _WalletSelection.maya
+                          ? (isDark ? Colors.black : Colors.white)
+                          : (isDark ? const Color(0xFF94A3B8) : Colors.white),
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1300,10 +1368,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       decoration: BoxDecoration(
                         color: isSelected 
                             ? activeColor.withValues(alpha: 0.08) 
-                            : AppColors.surfaceContainerLow,
+                            : (isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected ? activeColor : Colors.transparent,
+                          color: isSelected
+                              ? activeColor
+                              : (isDark ? const Color(0xFF1E293B) : Colors.transparent),
                           width: 1.5,
                         ),
                       ),
@@ -1316,13 +1386,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                             decoration: BoxDecoration(
                               color: isSelected 
                                   ? activeColor 
-                                  : Colors.grey.withValues(alpha: 0.15),
+                                  : (isDark ? const Color(0xFF1E293B) : Colors.grey.withValues(alpha: 0.15)),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
                               icon,
                               size: 16,
-                              color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
+                              color: isSelected
+                                  ? (isDark ? Colors.black : Colors.white)
+                                  : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1337,7 +1409,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                  color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+                                  color: isSelected
+                                      ? activeColor
+                                      : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                                 ),
                               ),
                             ),
@@ -1375,16 +1449,19 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     required Widget logoWidget,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         height: 48,
         decoration: BoxDecoration(
-          color: selected ? activeBgColor : Colors.white,
+          color: selected ? activeBgColor : (isDark ? AppColors.darkNavyTile : Colors.white),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? activeBorderColor : AppColors.outlineVariant,
+            color: selected
+                ? activeBorderColor
+                : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
             width: selected ? 1.5 : 1.0,
           ),
           boxShadow: selected
@@ -1410,7 +1487,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
-                    color: selected ? activeTextColor : AppColors.onSurfaceVariant,
+                    color: selected
+                        ? activeTextColor
+                        : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                   ),
                 ),
               ),
@@ -1455,10 +1534,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     bool isUnderline = false,
     bool isBorderless = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     InputDecoration decoration;
     if (isUnderline) {
       final borderSide = BorderSide(
-        color: hasError ? AppColors.error : AppColors.outlineVariant,
+        color: hasError
+            ? AppColors.error
+            : (isDark ? const Color(0xFF334155) : AppColors.outlineVariant),
         width: 1.0,
       );
       final activeBorderSide = BorderSide(
@@ -1474,7 +1556,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         enabledBorder: underlineBorder,
         focusedBorder: activeUnderlineBorder,
         contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
-        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+        hintStyle: TextStyle(
+          color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+          fontSize: 13,
+        ),
       );
     } else if (isBorderless) {
       final border = OutlineInputBorder(
@@ -1483,12 +1568,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       );
       decoration = InputDecoration(
         filled: true,
-        fillColor: AppColors.surfaceContainerLow,
+        fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
         border: border,
         enabledBorder: border,
         focusedBorder: border,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+        hintStyle: TextStyle(
+          color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+          fontSize: 13,
+        ),
       );
     } else {
       decoration = _inputDecoration(hasError: hasError);
@@ -1509,16 +1597,22 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           maxLines: maxLines,
           inputFormatters: inputFormatters,
           onChanged: onChanged,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+          ),
           decoration: decoration.copyWith(
             hintText: hint,
             prefixText: prefixText,
+            prefixStyle: TextStyle(
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            ),
             suffixIcon: suffixWidget ?? (suffixIcon == null
                 ? null
                 : IconButton(
                     icon: Icon(
                       suffixIcon,
                       size: 18,
-                      color: AppColors.onSurfaceVariant,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     ),
                     onPressed: onSuffixPressed == null
                         ? null
@@ -1552,11 +1646,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   Future<void> _openAccountSearchPicker() async {
     if (!mounted) return;
     final parties = ref.read(partiesStreamProvider).value ?? const <Party>[];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final selected = await showModalBottomSheet<Party>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
@@ -1698,11 +1793,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     }
 
     _missingRangeAlertVisible = true;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final goToCharges = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.56),
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLowest,
+        backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         titlePadding: EdgeInsets.zero,
         contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
@@ -1715,12 +1811,14 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.10),
+                  color: isDark
+                      ? AppColors.primary.withValues(alpha: 0.25)
+                      : AppColors.primary.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.payments_outlined,
-                  color: AppColors.primary,
+                  color: isDark ? AppColors.gcashNeon : AppColors.primary,
                   size: 28,
                 ),
               ),
@@ -1728,19 +1826,19 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               Text(
                 context.l10n.noFeeRangeFoundTitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 context.l10n.noFeeRangeFoundMessage,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.onSurfaceVariant,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
               ),
             ],
@@ -1754,7 +1852,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: const BorderSide(color: AppColors.outlineVariant),
+                    side: BorderSide(color: isDark ? const Color(0xFF334155) : AppColors.outlineVariant),
+                    foregroundColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1767,6 +1866,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               Expanded(
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
+                    backgroundColor: isDark ? AppColors.primaryContainer : AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -2132,8 +2232,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     }
   }
 
-  /// Show fee breakdown dialog to user. If [isOffline] is true, uses local calculations
-  /// and shows an offline mode badge indicator.
   Future<bool> _showFeeBreakdownDialog({bool isOffline = false}) async {
     final preview = _lastPreview;
     if (!isOffline && preview == null) return false;
@@ -2142,14 +2240,26 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     final walletCredit = isOffline ? _walletDeltaPreview : preview!.walletCredit;
     final onHandChange = isOffline ? _cashDeltaPreview : preview!.onHandChange;
     final explanation = isOffline ? _localFeeRoutingExplanation : preview!.feeRoutingExplanation;
-    final activeColor = _selectedWalletColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark
+        ? (_selectedWalletSelection == _WalletSelection.maya
+            ? AppColors.mayaNeon
+            : AppColors.gcashNeon)
+        : _selectedWalletColor;
 
     final confirmed =
         await showDialog<bool>(
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            title: Text(context.l10n.feeBreakdownTitle),
+            backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
+            title: Text(
+              context.l10n.feeBreakdownTitle,
+              style: TextStyle(
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2188,7 +2298,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   ],
                   Text(
                     context.l10n.reviewTotals,
-                    style: Theme.of(context).textTheme.titleSmall,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   _buildPreviewField(
@@ -2216,16 +2329,21 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     _signedMoney(onHandChange),
                   ),
                   const SizedBox(height: 16),
-                  const Divider(),
+                  Divider(color: isDark ? const Color(0xFF1E293B) : null),
                   const SizedBox(height: 8),
                   Text(
                     context.l10n.feeRouting,
-                    style: Theme.of(context).textTheme.titleSmall,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     explanation,
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -2233,10 +2351,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
+                style: TextButton.styleFrom(
+                  foregroundColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                ),
                 child: Text(context.l10n.cancel),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? AppColors.primaryContainer : AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
                 child: Text(context.l10n.confirmAndSave),
               ),
             ],
@@ -2248,13 +2373,25 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildPreviewField(String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: TextStyle(
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            ),
+          ),
         ],
       ),
     );
@@ -2353,10 +2490,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     bool isRequired = false,
     bool showErrorIndicator = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final labelStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: showErrorIndicator ? AppColors.error : AppColors.onSurfaceVariant,
+      color: showErrorIndicator
+          ? AppColors.error
+          : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
     );
 
     if (!isRequired) {
@@ -2381,20 +2521,22 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildSectionTitle(String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w700,
-        color: AppColors.onSurface,
+        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
       ),
     );
   }
 
   InputDecoration _inputDecoration({bool hasError = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InputDecoration(
       filled: true,
-      fillColor: AppColors.surfaceContainerLow,
+      fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(
@@ -2415,7 +2557,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      hintStyle: TextStyle(
+        color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+        fontSize: 13,
+      ),
     );
   }
 }
@@ -2471,6 +2616,7 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final filtered = _filteredParties;
     final maxHeight = MediaQuery.of(context).size.height * 0.78;
 
@@ -2487,7 +2633,7 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.outlineVariant.withValues(alpha: 0.7),
+                    color: isDark ? const Color(0xFF334155) : AppColors.outlineVariant.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -2498,17 +2644,26 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: _searchController,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                ),
                 decoration: InputDecoration(
                   hintText: context.l10n.searchNameOrAccount,
-                  prefixIcon: const Icon(Icons.search_rounded),
+                  hintStyle: TextStyle(
+                    color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
                   filled: true,
-                  fillColor: AppColors.surfaceContainerLow,
+                  fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
@@ -2530,9 +2685,9 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                           : ListView.separated(
                               itemCount: filtered.length,
                               separatorBuilder: (context, index) =>
-                                  const Divider(
+                                  Divider(
                                     height: 1,
-                                    color: AppColors.outlineVariant,
+                                    color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
                                   ),
                               itemBuilder: (context, index) {
                                 final party = filtered[index];
@@ -2542,26 +2697,31 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                                     vertical: 4,
                                   ),
                                   leading: CircleAvatar(
-                                    backgroundColor: AppColors.primary
-                                        .withValues(alpha: 0.15),
-                                    child: const Icon(
+                                    backgroundColor: isDark
+                                        ? AppColors.primary.withValues(alpha: 0.25)
+                                        : AppColors.primary.withValues(alpha: 0.15),
+                                    child: Icon(
                                       Icons.person_rounded,
-                                      color: AppColors.primary,
+                                      color: isDark ? AppColors.gcashNeon : AppColors.primary,
                                       size: 18,
                                     ),
                                   ),
                                   title: Text(
                                     party.name,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w700,
+                                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                                     ),
                                   ),
                                   subtitle: Text(
                                     context.l10n.accountWithNumber(
                                       party.accountNumber,
                                     ),
-                                    style: const TextStyle(fontSize: 12),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                    ),
                                   ),
                                   trailing: party.isVerified
                                       ? const Icon(
@@ -2591,6 +2751,7 @@ class _PartyPickerEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -2600,16 +2761,16 @@ class _PartyPickerEmptyState extends StatelessWidget {
             Icon(
               Icons.manage_search_rounded,
               size: 32,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
+              color: isDark ? const Color(0xFF64748B) : AppColors.onSurfaceVariant.withValues(alpha: 0.7),
             ),
             const SizedBox(height: 10),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
               ),
             ),
             const SizedBox(height: 6),
@@ -2618,7 +2779,7 @@ class _PartyPickerEmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: AppColors.onSurfaceVariant.withValues(alpha: 0.9),
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant.withValues(alpha: 0.9),
               ),
             ),
           ],
@@ -2743,8 +2904,9 @@ class _PartyRegistrationDialogState
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titlePadding: EdgeInsets.zero,
       contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -2752,7 +2914,9 @@ class _PartyRegistrationDialogState
       title: Container(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
         decoration: BoxDecoration(
-          color: AppColors.secondary.withValues(alpha: 0.06),
+          color: isDark
+              ? AppColors.secondary.withValues(alpha: 0.12)
+              : AppColors.secondary.withValues(alpha: 0.06),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Row(
@@ -2761,12 +2925,14 @@ class _PartyRegistrationDialogState
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.14),
+                color: isDark
+                    ? AppColors.secondary.withValues(alpha: 0.25)
+                    : AppColors.secondary.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.person_add_alt_1_rounded,
-                color: AppColors.secondary,
+                color: isDark ? AppColors.secondaryContainer : AppColors.secondary,
                 size: 20,
               ),
             ),
@@ -2774,10 +2940,10 @@ class _PartyRegistrationDialogState
             Expanded(
               child: Text(
                 context.l10n.partyRegistrationTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
             ),
@@ -2791,9 +2957,9 @@ class _PartyRegistrationDialogState
           const SizedBox(height: 12),
           Text(
             context.l10n.defineFinancialEntityBeforeTransaction,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.onSurfaceVariant,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 16),
@@ -2829,7 +2995,8 @@ class _PartyRegistrationDialogState
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: AppColors.outlineVariant),
+                  side: BorderSide(color: isDark ? const Color(0xFF334155) : AppColors.outlineVariant),
+                  foregroundColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2844,7 +3011,7 @@ class _PartyRegistrationDialogState
             Expanded(
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.secondary,
+                  backgroundColor: isDark ? AppColors.secondaryContainer : AppColors.secondary,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -2882,25 +3049,32 @@ class _PartyRegistrationDialogState
     required String hint,
     TextInputType? keyboardType,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+          ),
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: TextStyle(
+              color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+            ),
             filled: true,
-            fillColor: AppColors.surfaceContainerLow,
+            fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide.none,
@@ -2917,11 +3091,14 @@ class _PartyRegistrationDialogState
 }
 
 class DashedLinePainter extends CustomPainter {
+  final Color color;
+  DashedLinePainter({this.color = const Color(0xFFCBD5E1)});
+
   @override
   void paint(Canvas canvas, Size size) {
     double dashWidth = 5, dashSpace = 3, startX = 0;
     final paint = Paint()
-      ..color = AppColors.outlineVariant.withValues(alpha: 0.8)
+      ..color = color
       ..strokeWidth = 1.2;
     while (startX < size.width) {
       canvas.drawLine(Offset(startX, 0), Offset(startX + dashWidth, 0), paint);

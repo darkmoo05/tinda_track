@@ -277,6 +277,7 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
 
   @override
   Widget build(BuildContext context) {
+    _isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final walletSpots = widget.walletSpots ?? _gcashSpots;
     final mayaSpots = widget.mayaSpots ?? _mayaSpots;
     final cashSpots = widget.cashSpots ?? _cashSpots;
@@ -385,7 +386,6 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
     final subtitleColor = _isDarkMode
         ? Colors.white.withValues(alpha: 0.42)
         : AppColors.onSurfaceVariant;
-    final toggleAccent = _isDarkMode ? _kMayaNeon : AppColors.primary;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -424,41 +424,6 @@ class _IncomeArchitectureCardState extends State<IncomeArchitectureCard> {
                 style: TextStyle(fontSize: 11, color: subtitleColor),
               ),
             ],
-          ),
-        ),
-        // Theme toggle button replacing the static LIVE badge
-        GestureDetector(
-          onTap: () => setState(() => _isDarkMode = !_isDarkMode),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            decoration: BoxDecoration(
-              color: toggleAccent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: toggleAccent.withValues(alpha: 0.30)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _isDarkMode
-                      ? Icons.dark_mode_rounded
-                      : Icons.light_mode_rounded,
-                  size: 11,
-                  color: toggleAccent,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _isDarkMode ? 'DARK' : 'LIGHT',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: toggleAccent,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ],

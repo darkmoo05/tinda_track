@@ -29,6 +29,7 @@ class ArchitectActivityTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isIncome = amount.startsWith('+');
     final normalizedTitle = title.toLowerCase();
     final normalizedSubtitle = subtitle.toLowerCase();
@@ -59,7 +60,10 @@ class ArchitectActivityTile extends StatelessWidget {
                       left: 25,
                       child: Container(
                         width: 1.5,
-                        color: AppColors.outlineVariant.withValues(alpha: 0.45),
+                        color: (isDark
+                                ? const Color(0xFF334155)
+                                : AppColors.outlineVariant)
+                            .withValues(alpha: 0.45),
                       ),
                     ),
                     // Icon circle with white background to cut through line
@@ -69,8 +73,8 @@ class ArchitectActivityTile extends StatelessWidget {
                       child: Container(
                         width: 36,
                         height: 36,
-                        decoration: const BoxDecoration(
-                          color: AppColors.background,
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.darkNavy : AppColors.background,
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -106,18 +110,18 @@ class ArchitectActivityTile extends StatelessWidget {
                           children: [
                             Text(
                               title,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
-                                color: AppColors.onSurface,
+                                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                               ),
                             ),
                             const SizedBox(height: 3),
                             Text(
                               subtitle,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.onSurfaceVariant,
+                                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                               ),
                             ),
                             if (supportingText != null &&
@@ -161,7 +165,7 @@ class ArchitectActivityTile extends StatelessWidget {
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
                                 color: amountColor ?? (isTopUp
-                                    ? AppColors.primary
+                                    ? (isDark ? const Color(0xFF60A5FA) : AppColors.primary)
                                     : (isIncome
                                           ? AppColors.secondary
                                           : AppColors.error)),
@@ -171,9 +175,9 @@ class ArchitectActivityTile extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             time,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: AppColors.onSurfaceVariant,
+                              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                             ),
                           ),
                           if (runningBalance != null &&
@@ -184,7 +188,7 @@ class ArchitectActivityTile extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.onSurfaceVariant
+                                color: (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant)
                                     .withValues(alpha: 0.7),
                               ),
                             ),

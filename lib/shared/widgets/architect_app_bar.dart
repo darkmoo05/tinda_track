@@ -20,18 +20,26 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final appBarBg = isDark ? AppColors.darkNavy : AppColors.background;
+    final titleColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final iconBgColor = isDark ? const Color(0xFF161D30) : AppColors.primary;
+    final actionBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLow;
+    final actionIconColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+
     return AppBar(
-      backgroundColor: AppColors.background,
+      backgroundColor: appBarBg,
       elevation: 0,
       centerTitle: false,
       leading: leading,
+      foregroundColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
       title: Row(
         children: [
           Container(
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.primary,
+              color: iconBgColor,
               shape: BoxShape.circle,
             ),
             child: ClipOval(
@@ -43,7 +51,7 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
             title,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
-              color: AppColors.primary,
+              color: titleColor,
               letterSpacing: -0.5,
             ),
           ),
@@ -58,11 +66,11 @@ class ArchitectAppBar extends StatelessWidget implements PreferredSizeWidget {
                 tooltip: 'Open menu',
                 onPressed: onSettingsPressed ?? () {},
                 style: IconButton.styleFrom(
-                  backgroundColor: AppColors.surfaceContainerLow,
+                  backgroundColor: actionBg,
                 ),
-                icon: const Icon(
+                icon: Icon(
                   Icons.settings_outlined,
-                  color: AppColors.onSurfaceVariant,
+                  color: actionIconColor,
                   size: 20,
                 ),
               ),

@@ -108,23 +108,34 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
       ),
       floatingActionButton: !hasData
           ? null
-          : (isVeryCompact
-              ? FloatingActionButton(
-                  heroTag: null,
-                  onPressed: _onAddParty,
-                  tooltip: context.l10n.addNewPerson,
-                  child: const Icon(Icons.add_rounded),
-                )
-              : FloatingActionButton.extended(
-                  heroTag: null,
-                  onPressed: _onAddParty,
-                  label: Text(
-                    context.l10n.addNewPerson,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  icon: const Icon(Icons.add_rounded),
-                )),
+          : Padding(
+              padding: const EdgeInsets.only(bottom: 72),
+              child: isVeryCompact
+                  ? FloatingActionButton(
+                      heroTag: null,
+                      onPressed: _onAddParty,
+                      tooltip: context.l10n.addNewPerson,
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      child: const Icon(Icons.add_rounded, color: Colors.white),
+                    )
+                  : FloatingActionButton.extended(
+                      heroTag: null,
+                      onPressed: _onAddParty,
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      label: Text(
+                        context.l10n.addNewPerson,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      icon: const Icon(Icons.add_rounded, color: Colors.white),
+                    ),
+            ),
     );
   }
 
@@ -142,12 +153,14 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
             ref.watch(partiesStreamProvider).value ?? const <Party>[];
         final total = parties.length;
 
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
+            color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.outlineVariant),
+            border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
           ),
           child: Row(
             children: [
@@ -155,22 +168,22 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
+                  color: primaryColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.people_alt_rounded,
-                  color: AppColors.primary,
+                  color: primaryColor,
                   size: 18,
                 ),
               ),
               const SizedBox(width: 12),
               Text(
                 '$total ${context.l10n.peopleSaved}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
             ],
@@ -181,11 +194,12 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
   }
 
   Widget _buildFilterAndSortRow(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Align(
       alignment: Alignment.centerRight,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
+          color: isDark ? AppColors.darkNavyTile : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
@@ -220,14 +234,15 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
     required bool hasActiveSearch,
   }) {
     final isCompact = MediaQuery.sizeOf(context).width < 360;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (parties.isEmpty) {
       return Container(
         width: double.infinity,
         padding: EdgeInsets.all(isCompact ? 20 : 32),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.outlineVariant),
+          border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
         ),
         child: Column(
           children: [
@@ -236,14 +251,16 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
                   ? Icons.search_off_rounded
                   : Icons.people_outline_rounded,
               size: 56,
-              color: AppColors.onSurfaceVariant,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
               hasActiveSearch
                   ? context.l10n.noMatchingParties
                   : context.l10n.nobodyHereYet,
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: isDark ? const Color(0xFFF8FAFC) : null,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -253,7 +270,7 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
                   : context.l10n.letAddFirst,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.onSurfaceVariant,
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
               ),
             ),
             if (!hasActiveSearch) ...[
@@ -542,8 +559,11 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+
     return Dialog(
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: SingleChildScrollView(
@@ -555,7 +575,7 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
             Container(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.06),
+                color: primaryColor.withValues(alpha: 0.06),
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(20),
                 ),
@@ -566,22 +586,22 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.14),
+                      color: primaryColor.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.edit_rounded,
-                      color: AppColors.primary,
+                      color: primaryColor,
                       size: 20,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
+                  Text(
                     'Edit Party',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                     ),
                   ),
                 ],
@@ -594,11 +614,11 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Update the party details below.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -606,6 +626,8 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
                     controller: _fullNameController,
                     label: 'Full Name / Entity',
                     hint: 'Enter party full name',
+                    isDark: isDark,
+                    primaryColor: primaryColor,
                   ),
                   const SizedBox(height: 12),
                   _dialogField(
@@ -613,6 +635,8 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
                     label: 'Account Number',
                     hint: 'Enter account number',
                     keyboardType: TextInputType.number,
+                    isDark: isDark,
+                    primaryColor: primaryColor,
                   ),
                   if (_errorText != null) ...[
                     const SizedBox(height: 10),
@@ -637,7 +661,7 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: const BorderSide(color: AppColors.outlineVariant),
+                        side: BorderSide(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -652,6 +676,7 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
                   Expanded(
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
+                        backgroundColor: isDark ? const Color(0xFF2563EB) : AppColors.primary,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -684,6 +709,8 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
     required TextEditingController controller,
     required String label,
     required String hint,
+    required bool isDark,
+    required Color primaryColor,
     TextInputType? keyboardType,
   }) {
     return Column(
@@ -691,20 +718,28 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            fontSize: 14,
+          ),
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: TextStyle(
+              color: isDark ? const Color(0xFF475569) : AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+              fontSize: 14,
+            ),
             filled: true,
-            fillColor: AppColors.surfaceContainerLow,
+            fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -715,8 +750,8 @@ class _EditPartyDialogState extends ConsumerState<_EditPartyDialog> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
+              borderSide: BorderSide(
+                color: primaryColor,
                 width: 1.5,
               ),
             ),
@@ -833,8 +868,11 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+
     return Dialog(
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: SingleChildScrollView(
@@ -846,7 +884,7 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
             Container(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
               decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.06),
+                color: primaryColor.withValues(alpha: 0.06),
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(20),
                 ),
@@ -857,22 +895,22 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: AppColors.secondary.withValues(alpha: 0.14),
+                      color: primaryColor.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.person_add_alt_1_rounded,
-                      color: AppColors.secondary,
+                      color: primaryColor,
                       size: 20,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
+                  Text(
                     'Add Party',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                     ),
                   ),
                 ],
@@ -885,11 +923,11 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Create a new party record for Active Entities.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -897,6 +935,8 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
                     controller: _fullNameController,
                     label: 'Full Name / Entity',
                     hint: 'Enter party full name',
+                    isDark: isDark,
+                    primaryColor: primaryColor,
                   ),
                   const SizedBox(height: 12),
                   _dialogField(
@@ -904,6 +944,8 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
                     label: 'Account Number',
                     hint: 'Enter account number',
                     keyboardType: TextInputType.number,
+                    isDark: isDark,
+                    primaryColor: primaryColor,
                   ),
                   if (_errorText != null) ...[
                     const SizedBox(height: 10),
@@ -928,7 +970,7 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: const BorderSide(color: AppColors.outlineVariant),
+                        side: BorderSide(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -943,7 +985,7 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
                   Expanded(
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.secondary,
+                        backgroundColor: primaryColor,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -966,6 +1008,7 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
                             ),
                       label: Text(
                         _isSaving ? context.l10n.saving : context.l10n.addParty,
+                        style: const TextStyle(color: Colors.white),
                       ),
                     ),
                   ),
@@ -982,6 +1025,8 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
     required TextEditingController controller,
     required String label,
     required String hint,
+    required bool isDark,
+    required Color primaryColor,
     TextInputType? keyboardType,
   }) {
     return Column(
@@ -989,20 +1034,28 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            fontSize: 14,
+          ),
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: TextStyle(
+              color: isDark ? const Color(0xFF475569) : AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+              fontSize: 14,
+            ),
             filled: true,
-            fillColor: AppColors.surfaceContainerLow,
+            fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -1013,8 +1066,8 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
+              borderSide: BorderSide(
+                color: primaryColor,
                 width: 1.5,
               ),
             ),

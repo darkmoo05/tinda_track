@@ -6,7 +6,8 @@ import '../../../../core/app_theme.dart';
 import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
-import '../../../../shared/widgets/screen_header_card.dart';
+
+import '../../transactions/screens/add_owner_movement_screen.dart';
 import '../data/dashboard_repository.dart';
 import '../data/statement_entry.dart';
 
@@ -34,8 +35,11 @@ class _PersonalExpenseStatementScreenState
   _RecentRange _selectedRange = _RecentRange.today;
   DateTime? _lastSeenCutoff;
   bool _didPersistLastSeen = false;
-  final Set<String> _showAllGroupKeys = <String>{};
-  final Map<String, GlobalKey> _expansionKeys = <String, GlobalKey>{};
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+
+  Color get _outlineColor => _isDark ? const Color(0xFF334155) : AppColors.outlineVariant;
+  Color get _textOnSurfaceVar => _isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+  Color get _cardBgInfo => _isDark ? const Color(0xFF1E293B) : AppColors.lightBlueBackground;
 
   @override
   void initState() {
@@ -81,34 +85,7 @@ class _PersonalExpenseStatementScreenState
     await prefs.setInt(_lastSeenKey, newest.millisecondsSinceEpoch);
   }
 
-  GlobalKey _keyFor(String id) {
-    return _expansionKeys.putIfAbsent(id, () => GlobalKey());
-  }
 
-  void _scrollToSection(String id, {bool followExpansion = false}) {
-    void runScroll() {
-      if (!mounted) {
-        return;
-      }
-      final targetContext = _expansionKeys[id]?.currentContext;
-      if (targetContext == null) {
-        return;
-      }
-
-      Scrollable.ensureVisible(
-        targetContext,
-        alignment: 0.08,
-        duration: const Duration(milliseconds: 360),
-        curve: Curves.easeOutCubic,
-      );
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => runScroll());
-
-    if (followExpansion) {
-      Future<void>.delayed(const Duration(milliseconds: 220), runScroll);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,17 +131,15 @@ class _PersonalExpenseStatementScreenState
           return ListView(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
             children: [
-              _buildPageHeader(summary),
-              const SizedBox(height: 16),
-              _buildCurrentBalanceSection(summary),
-              const SizedBox(height: 16),
-              _buildHowChangedSection(summary),
-              const SizedBox(height: 16),
-              _buildRecentUpdatesSection(
+              _buildHeroCard(summary),
+              const SizedBox(height: 14),
+              _buildMetricsGrid(summary),
+              const SizedBox(height: 14),
+              _buildTimelineSection(
                 allEntries: entries,
                 personalEntries: filteredPersonal,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               _buildInfoCard(),
             ],
           );
@@ -231,289 +206,337 @@ class _PersonalExpenseStatementScreenState
     return entries.where((entry) => entry.createdAt.isAfter(cutoff)).length;
   }
 
-  Widget _buildPageHeader(_StatementSummary summary) {
-    return ScreenHeaderCard(
-      title: 'Borrowed Funds Statement',
-      subtitle: 'Outstanding balance · ${_fmt(summary.totalOutstanding)}',
-      gradientColors: const [AppColors.errorDeep, AppColors.error],
+  Future<void> _navigateToAddMovement(String movementType) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AddOwnerMovementScreen(
+          initialMovementType: movementType,
+        ),
+      ),
     );
+
+    if (saved == true && mounted) {
+      _reload();
+    }
   }
 
-  Widget _buildCurrentBalanceSection(_StatementSummary summary) {
+  Widget _buildHeroCard(_StatementSummary summary) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalTaken = summary.expenseTaken;
+    final totalPaid = summary.expensePaid;
+    final outstanding = summary.totalOutstanding;
+    final repaymentProgress = totalTaken > 0 ? (totalPaid / totalTaken).clamp(0.0, 1.0) : 0.0;
+    
+    final heroGradient = const LinearGradient(
+      colors: [AppColors.primary, Color(0xFF0F172A)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Borrowed Funds Balance',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildLargeBalanceTile(
-            title: 'Borrowed Funds',
-            summary: summary.personal,
-            accent: AppColors.primary,
-            cardColor: AppColors.softBlueBackground,
+        gradient: heroGradient,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: isDark ? 0.3 : 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildLargeBalanceTile({
-    required String title,
-    required _TypeSummary summary,
-    required Color accent,
-    required Color cardColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accent.withValues(alpha: 0.25)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
+            'OUTSTANDING DEBT BALANCE',
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-              color: accent,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildMetricLine('Taken', _fmt(summary.taken)),
-          const SizedBox(height: 4),
-          _buildMetricLine('Paid Back', _fmt(summary.paid)),
-          const SizedBox(height: 4),
-          _buildMetricLine('Remaining', _fmt(summary.remaining), isBold: true),
-          const SizedBox(height: 8),
-          Text(
-            'Paid ${summary.ratioPercent.toStringAsFixed(0)}%',
-            style: const TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
               fontSize: 11,
-              color: AppColors.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
             ),
           ),
           const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              minHeight: 8,
-              value: summary.ratio,
-              color: accent,
-              backgroundColor: AppColors.surfaceContainerHigh,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricLine(String label, String amount, {bool isBold = false}) {
-    return Row(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          amount,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isBold ? FontWeight.w900 : FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHowChangedSection(_StatementSummary summary) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'How This Changed',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 3),
-          const Text(
-            'Each expense has its own flow: Taken -> Paid Back -> Remaining',
-            style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
-          ),
-          const SizedBox(height: 12),
-          _buildTypeFlowCard(
-            title: 'Borrowed Funds Flow',
-            typeSummary: summary.personal,
-            accent: AppColors.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTypeFlowCard({
-    required String title,
-    required _TypeSummary typeSummary,
-    required Color accent,
-  }) {
-    final takenSafe = typeSummary.taken <= 0 ? 1.0 : typeSummary.taken;
-    final paidRatio = (typeSummary.paid / takenSafe).clamp(0.0, 1.0);
-    final remainingRatio = (typeSummary.remaining / takenSafe).clamp(0.0, 1.0);
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
           Text(
-            title,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: accent,
+            _fmt(outstanding),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Repayment Progress',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                '${(repaymentProgress * 100).toStringAsFixed(0)}% Paid',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              height: 6,
+              width: double.infinity,
+              color: Colors.white.withValues(alpha: 0.16),
+              child: Row(
+                children: [
+                  if (repaymentProgress > 0)
+                    Expanded(
+                      flex: (repaymentProgress * 100).round(),
+                      child: Container(
+                        color: isDark ? const Color(0xFF34D399) : const Color(0xFF10B981),
+                      ),
+                    ),
+                  if (repaymentProgress < 1)
+                    Expanded(
+                      flex: ((1 - repaymentProgress) * 100).round(),
+                      child: const SizedBox.shrink(),
+                    ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 8),
-          _buildFlowRow(
-            title: '1) Taken',
-            amount: _fmt(typeSummary.taken),
-            barColor: accent,
-            ratio: 1,
+          Text(
+            'Paid ${_fmt(totalPaid)} of ${_fmt(totalTaken)} total borrowed',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          const SizedBox(height: 8),
-          _buildFlowRow(
-            title: '2) Paid Back',
-            amount: _fmt(typeSummary.paid),
-            barColor: AppColors.secondary,
-            ratio: paidRatio,
-          ),
-          const SizedBox(height: 8),
-          _buildFlowRow(
-            title: '3) Remaining',
-            amount: _fmt(typeSummary.remaining),
-            barColor: AppColors.error,
-            ratio: remainingRatio,
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: outstanding > 0 ? () => _navigateToAddMovement('Borrowed Funds Repayment') : null,
+                  icon: const Icon(Icons.settings_backup_restore_rounded, size: 16),
+                  label: const Text('Repay Debt'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.3),
+                    disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _navigateToAddMovement('Borrowed Funds'),
+                  icon: const Icon(Icons.arrow_upward_rounded, size: 16),
+                  label: const Text('Borrow More'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white30, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFlowRow({
-    required String title,
-    required String amount,
-    required Color barColor,
-    required double ratio,
-  }) {
+  Widget _buildMetricsGrid(_StatementSummary summary) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalTaken = summary.expenseTaken;
+    final totalPaid = summary.expensePaid;
+    final outstanding = summary.totalOutstanding;
+    final repaymentRate = totalTaken > 0 ? (totalPaid / totalTaken * 100) : 0.0;
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurfaceVariant,
-                ),
+              child: _buildMetricCard(
+                title: 'Total Borrowed',
+                value: _fmt(totalTaken),
+                icon: Icons.payments_outlined,
+                color: isDark ? const Color(0xFFF59E0B) : const Color(0xFFD97706),
               ),
             ),
-            Text(
-              amount,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildMetricCard(
+                title: 'Total Repaid',
+                value: _fmt(totalPaid),
+                icon: Icons.check_circle_outline_rounded,
+                color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(99),
-          child: LinearProgressIndicator(
-            minHeight: 10,
-            value: ratio,
-            color: barColor,
-            backgroundColor: AppColors.surfaceContainerHigh,
-          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildMetricCard(
+                title: 'Repayment Rate',
+                value: '${repaymentRate.toStringAsFixed(1)}%',
+                icon: Icons.speed_rounded,
+                color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildMetricCard(
+                title: 'Remaining Debt',
+                value: _fmt(outstanding),
+                icon: Icons.timelapse_rounded,
+                color: outstanding > 0 
+                    ? (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626)) 
+                    : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildRecentUpdatesSection({
-    required List<StatementEntry> allEntries,
-    required List<StatementEntry> personalEntries,
+  Widget _buildMetricCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
   }) {
-    final newCount = _countNewEntries(allEntries);
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Recent Updates',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
             children: [
-              Text(
-                newCount > 0
-                    ? 'New since last visit: $newCount'
-                    : 'No new updates since last visit',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: newCount > 0
-                      ? AppColors.primary
-                      : AppColors.onSurfaceVariant,
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineSection({
+    required List<StatementEntry> allEntries,
+    required List<StatementEntry> personalEntries,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final newCount = _countNewEntries(allEntries);
+    final groupedEntries = _groupEntriesByDay(personalEntries);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Transaction Timeline',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      newCount > 0 
+                          ? '$newCount new update${newCount == 1 ? '' : 's'} since last visit' 
+                          : 'No new updates',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: newCount > 0 
+                            ? (isDark ? const Color(0xFF38BDF8) : AppColors.primary) 
+                            : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (newCount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
@@ -529,14 +552,31 @@ class _PersonalExpenseStatementScreenState
                 ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           _buildRangeChips(),
-          const SizedBox(height: 10),
-          _buildUpdatesAccordion(
-            title: 'Borrowed Funds Updates',
-            accent: AppColors.primary,
-            entries: personalEntries,
-          ),
+          const SizedBox(height: 16),
+          if (personalEntries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  'No transactions found in this range.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: groupedEntries.map((group) {
+                return _buildFlatDateGroup(
+                  title: _dayHeaderDate.format(group.day),
+                  entries: group.entries,
+                );
+              }).toList(),
+            ),
         ],
       ),
     );
@@ -569,74 +609,155 @@ class _PersonalExpenseStatementScreenState
     );
   }
 
-  Widget _buildUpdatesAccordion({
+  Widget _buildFlatDateGroup({
     required String title,
-    required Color accent,
     required List<StatementEntry> entries,
   }) {
-    final groupedEntries = _groupEntriesByDay(entries);
-    final accordionKeyId = 'accordion-$title';
-
-    return Container(
-      key: _keyFor(accordionKeyId),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          initiallyExpanded: false,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          iconColor: accent,
-          collapsedIconColor: accent,
-          onExpansionChanged: (expanded) {
-            if (expanded) {
-              _scrollToSection(accordionKeyId, followExpansion: true);
-            }
-          },
-          expansionAnimationStyle: const AnimationStyle(
-            duration: Duration(milliseconds: 320),
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          ),
-          title: Text(
-            '$title (${entries.length})',
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 14, bottom: 8),
+          child: Text(
+            title,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: accent,
+              color: isDark ? const Color(0xFF64748B) : AppColors.onSurfaceVariant.withValues(alpha: 0.8),
+              letterSpacing: 0.3,
             ),
           ),
-          children: entries.isEmpty
-              ? const [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: 2),
-                      child: Text(
-                        'No updates yet.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ),
-                ]
-              : groupedEntries
-                    .map(
-                      (group) => _buildDateGroupTile(
-                        groupKey: '$title-${group.day.millisecondsSinceEpoch}',
-                        title: _dayHeaderDate.format(group.day),
-                        entries: group.entries,
-                        accent: accent,
-                      ),
-                    )
-                    .toList(growable: false),
         ),
+        Column(
+          children: List.generate(entries.length, (index) {
+            return _buildTimelineRow(entries[index]);
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimelineRow(StatementEntry entry) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPayment = _isPaymentType(entry.type);
+    
+    final badgeText = isPayment ? 'Repayment' : 'Borrowed';
+    final badgeColor = isPayment 
+        ? (isDark ? const Color(0xFF34D399) : const Color(0xFF10B981))
+        : (isDark ? const Color(0xFFF87171) : const Color(0xFFEF4444));
+        
+    final icon = isPayment
+        ? Icons.arrow_downward_rounded
+        : Icons.arrow_upward_rounded;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.05) : AppColors.outlineVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: badgeColor.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: badgeColor, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _friendlyType(entry.type),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  entry.note == null || entry.note!.trim().isEmpty
+                      ? entry.date
+                      : '${entry.date} • ${entry.note}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                entry.amount,
+                style: TextStyle(
+                  color: isPayment 
+                      ? (isDark ? const Color(0xFF34D399) : const Color(0xFF059669)) 
+                      : (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626)),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  badgeText.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    color: badgeColor,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _cardBgInfo,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _outlineColor),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Borrowed Funds is money you take for personal use from the store. Remaining means Taken minus Paid Back.',
+              style: TextStyle(fontSize: 12, color: _textOnSurfaceVar),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -662,226 +783,6 @@ class _PersonalExpenseStatementScreenState
           ),
         )
         .toList(growable: false);
-  }
-
-  Widget _buildDateGroupTile({
-    required String groupKey,
-    required String title,
-    required List<StatementEntry> entries,
-    required Color accent,
-  }) {
-    final showAll = _showAllGroupKeys.contains(groupKey);
-    final visibleEntries = showAll ? entries : entries.take(12).toList();
-
-    return Container(
-      key: _keyFor(groupKey),
-      margin: const EdgeInsets.only(top: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: ExpansionTile(
-        initiallyExpanded: false,
-        tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-        childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-        iconColor: accent,
-        collapsedIconColor: accent,
-        onExpansionChanged: (expanded) {
-          if (expanded) {
-            _scrollToSection(groupKey, followExpansion: true);
-          }
-        },
-        expansionAnimationStyle: const AnimationStyle(
-          duration: Duration(milliseconds: 320),
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        ),
-        title: Text(
-          '$title (${entries.length})',
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-        children: [
-          AnimatedSize(
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeInOutCubic,
-            child: Column(
-              children: [
-                ...visibleEntries.asMap().entries.map(
-                  (item) => _buildAnimatedTimelineRow(
-                    entry: item.value,
-                    index: item.key,
-                  ),
-                ),
-                if (entries.length > 12)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          if (showAll) {
-                            _showAllGroupKeys.remove(groupKey);
-                          } else {
-                            _showAllGroupKeys.add(groupKey);
-                          }
-                        });
-                      },
-                      icon: Icon(
-                        showAll
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
-                        size: 18,
-                      ),
-                      label: Text(
-                        showAll ? 'Show Less' : 'Show All (${entries.length})',
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnimatedTimelineRow({
-    required StatementEntry entry,
-    required int index,
-  }) {
-    final clampedIndex = index > 8 ? 8 : index;
-    final duration = Duration(milliseconds: 150 + (clampedIndex * 35));
-
-    return TweenAnimationBuilder<double>(
-      key: ValueKey(
-        '${entry.createdAt.millisecondsSinceEpoch}-${entry.type}-$index',
-      ),
-      tween: Tween(begin: 0, end: 1),
-      duration: duration,
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        final y = (1 - value) * 8;
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(offset: Offset(0, y), child: child),
-        );
-      },
-      child: _buildTimelineRow(entry),
-    );
-  }
-
-  Widget _buildTimelineRow(StatementEntry entry) {
-    final isPayment = _isPaymentType(entry.type);
-    final badgeText = isPayment ? 'Payment Made' : 'Money Taken';
-    final badgeColor = isPayment ? AppColors.secondary : AppColors.error;
-    final icon = isPayment
-        ? Icons.arrow_circle_up_rounded
-        : Icons.arrow_circle_down_rounded;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.13),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: badgeColor, size: 17),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _friendlyType(entry.type),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  entry.note == null || entry.note!.trim().isEmpty
-                      ? entry.date
-                      : '${entry.date} • ${entry.note}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: badgeColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            entry.amount,
-            style: TextStyle(
-              color: entry.amountColor,
-              fontWeight: FontWeight.w900,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoCard() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.lightBlueBackground,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline_rounded, size: 18, color: AppColors.primary),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Borrowed Funds is money you take for personal use from the store. Remaining means Taken minus Paid Back.',
-              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   bool _isPersonalType(String type) {

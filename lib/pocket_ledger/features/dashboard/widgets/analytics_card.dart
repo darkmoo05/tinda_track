@@ -20,6 +20,9 @@ class ArchitectAnalyticsCard extends StatefulWidget {
   /// When false, the value / trend / subtitle stats block is hidden.
   final bool showStats;
 
+  final List<FlSpot>? secondarySpots;
+  final bool isLineChart;
+
   const ArchitectAnalyticsCard({
     super.key,
     required this.title,
@@ -32,6 +35,8 @@ class ArchitectAnalyticsCard extends StatefulWidget {
     this.selectedPeriod,
     this.onPeriodChanged,
     this.showStats = true,
+    this.secondarySpots,
+    this.isLineChart = false,
   });
 
   @override
@@ -74,6 +79,20 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
       activePeriod,
     );
 
+    _FilteredSeries? refilteredSecondary;
+    if (widget.secondarySpots != null) {
+      refilteredSecondary = _filteredSeries(
+        widget.secondarySpots!,
+        allLabels,
+        allDates,
+        activePeriod,
+      );
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurfaceVariantColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+    final secondaryColor = isDark ? const Color(0xFF34D399) : AppColors.secondary;
+
     return ArchitectCard(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -91,14 +110,10 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.0,
+                    color: onSurfaceVariantColor,
                   ),
                 ),
               ),
-              // Only show internal dropdown when not externally controlled
-              if (widget.selectedPeriod == null) ...[
-                const SizedBox(width: 8),
-                _buildSegmentedControl(),
-              ],
             ],
           ),
           if (widget.showStats) ...[
@@ -116,10 +131,10 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                 const SizedBox(width: 8),
                 Text(
                   widget.trend,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.secondary,
+                    color: secondaryColor,
                   ),
                 ),
               ],
@@ -127,81 +142,91 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
             const SizedBox(height: 8),
             Text(
               widget.subtitle,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.onSurfaceVariant,
+                color: onSurfaceVariantColor,
               ),
             ),
+          ],
+          if (widget.selectedPeriod == null) ...[
+            const SizedBox(height: 14),
+            _buildPeriodFilterChips(),
           ],
           const SizedBox(height: 18),
           _buildChartPanel(
             context,
             refilteredFiltered.spots,
+            refilteredSecondary?.spots,
             refilteredFiltered.labels,
           ),
+          if (widget.secondarySpots != null) ...[
+            const SizedBox(height: 16),
+            _buildChartLegend(context),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildSegmentedControl() {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 124, maxWidth: 152),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.14)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'View by',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurfaceVariant,
+  Widget _buildPeriodFilterChips() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activePeriod = widget.selectedPeriod ?? _selectedPeriod;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(_periods.length, (index) {
+          final isSelected = activePeriod == index;
+          final label = _periods[index];
+
+          Color accentColor = isDark ? const Color(0xFF06B6D4) : AppColors.primary;
+          if (widget.secondarySpots != null) {
+            accentColor = isDark ? const Color(0xFF3D9BFF) : AppColors.primary;
+          }
+
+          final bgColor = isDark
+              ? (isSelected ? accentColor.withValues(alpha: 0.15) : Colors.transparent)
+              : (isSelected ? accentColor.withValues(alpha: 0.12) : AppColors.surfaceContainerLow);
+
+          final borderColor = isDark
+              ? (isSelected ? accentColor.withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.10))
+              : (isSelected ? accentColor.withValues(alpha: 0.35) : AppColors.outlineVariant.withValues(alpha: 0.5));
+
+          final textColor = isDark
+              ? (isSelected ? Colors.white : Colors.white.withValues(alpha: 0.45))
+              : (isSelected ? accentColor : AppColors.onSurfaceVariant);
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () {
+                if (widget.onPeriodChanged != null) {
+                  widget.onPeriodChanged!(index);
+                } else {
+                  setState(() => _selectedPeriod = index);
+                }
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                isExpanded: true,
-                value: _selectedPeriod,
-                borderRadius: BorderRadius.circular(16),
-                dropdownColor: AppColors.surfaceContainerLowest,
-                icon: const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: AppColors.onSurfaceVariant,
-                ),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.onSurface,
-                ),
-                items: List.generate(_periods.length, (index) {
-                  return DropdownMenuItem<int>(
-                    value: index,
-                    child: Text(_periods[index]),
-                  );
-                }),
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  if (widget.onPeriodChanged != null) {
-                    widget.onPeriodChanged!(value);
-                  } else {
-                    setState(() => _selectedPeriod = value);
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
+          );
+        }),
       ),
     );
   }
@@ -209,8 +234,12 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
   Widget _buildChartPanel(
     BuildContext context,
     List<FlSpot> spots,
+    List<FlSpot>? secondarySpots,
     List<String> labels,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurfaceColor = isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final chartWidth = (labels.length * 52.0).clamp(
@@ -221,15 +250,27 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
         return Container(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF161D30)
+                : AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.surfaceContainerHigh),
+            border: Border.all(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : AppColors.surfaceContainerHigh,
+            ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.onSurface.withValues(alpha: 0.035),
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.035),
                 blurRadius: 18,
                 offset: const Offset(0, 8),
               ),
+              if (isDark && widget.isLineChart && secondarySpots == null)
+                BoxShadow(
+                  color: const Color(0xFF06B6D4).withValues(alpha: 0.07),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
             ],
           ),
           child: Column(
@@ -244,8 +285,10 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                       color: AppColors.primary.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(
-                      Icons.bar_chart_rounded,
+                    child: Icon(
+                      (widget.isLineChart || secondarySpots != null)
+                          ? Icons.show_chart_rounded
+                          : Icons.bar_chart_rounded,
                       color: AppColors.primary,
                     ),
                   ),
@@ -254,7 +297,7 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                     child: Text(
                       'Charges monitoring report',
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: AppColors.onSurface,
+                        color: onSurfaceColor,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -271,18 +314,29 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.surfaceContainerLowest,
-                      AppColors.surfaceContainerLow,
-                    ],
+                    colors: Theme.of(context).brightness == Brightness.dark
+                        ? [
+                            const Color(0xFF161D30),
+                            const Color(0xFF1E293B),
+                          ]
+                        : [
+                            AppColors.surfaceContainerLowest,
+                            AppColors.surfaceContainerLow,
+                          ],
                   ),
-                  border: Border.all(color: AppColors.surfaceContainerHigh),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : AppColors.surfaceContainerHigh,
+                  ),
                 ),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: SizedBox(
                     width: chartWidth,
-                    child: BarChart(_buildChartData(spots, labels)),
+                    child: (widget.isLineChart || secondarySpots != null)
+                        ? LineChart(_buildLineChartData(spots, secondarySpots, labels))
+                        : BarChart(_buildChartData(spots, labels)),
                   ),
                 ),
               ),
@@ -290,6 +344,251 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
           ),
         );
       },
+    );
+  }
+
+  LineChartData _buildLineChartData(
+    List<FlSpot> spots,
+    List<FlSpot>? secondarySpots,
+    List<String> labels,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cyanColor = isDark ? const Color(0xFF06B6D4) : AppColors.primary;
+    final gcashColor = isDark ? const Color(0xFF3D9BFF) : const Color(0xFF2563EB);
+    final mayaColor = isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+
+    final safeSpots = spots.isEmpty ? const [FlSpot(0, 0)] : spots;
+
+    final double maxY;
+    if (secondarySpots != null) {
+      final safeSecondarySpots = secondarySpots.isEmpty ? const [FlSpot(0, 0)] : secondarySpots;
+      final maxPrimaryY = safeSpots.map((spot) => spot.y).reduce((a, b) => a > b ? a : b);
+      final maxSecondaryY = safeSecondarySpots.map((spot) => spot.y).reduce((a, b) => a > b ? a : b);
+      maxY = maxPrimaryY > maxSecondaryY ? maxPrimaryY : maxSecondaryY;
+    } else {
+      maxY = safeSpots.map((spot) => spot.y).reduce((a, b) => a > b ? a : b);
+    }
+    final chartMaxY = maxY <= 0 ? 1.0 : maxY * 1.2;
+    final shouldCompactLabels = labels.length > 4;
+
+    return LineChartData(
+      backgroundColor: Colors.transparent,
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        getDrawingHorizontalLine: (value) => FlLine(
+          color: AppColors.outlineVariant.withValues(alpha: isDark ? 0.08 : 0.20),
+          strokeWidth: 1,
+        ),
+      ),
+      titlesData: FlTitlesData(
+        show: true,
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 28,
+            interval: 1,
+            getTitlesWidget: (value, meta) {
+              final idx = value.toInt();
+              if (idx < 0 || idx >= labels.length) {
+                return const SizedBox.shrink();
+              }
+
+              final isEdge =
+                  idx == 0 ||
+                  idx == labels.length - 1 ||
+                  idx == (labels.length ~/ 2);
+              if (!isEdge && shouldCompactLabels) {
+                return const SizedBox.shrink();
+              }
+
+              final onSurfaceColor = isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface;
+              final onSurfaceVariantColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+
+              return Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  labels[idx],
+                  style: TextStyle(
+                    fontSize: shouldCompactLabels ? 9 : 10,
+                    fontWeight: FontWeight.w700,
+                    color: isEdge ? onSurfaceColor : onSurfaceVariantColor,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+      borderData: FlBorderData(show: false),
+      minY: 0,
+      maxY: chartMaxY,
+      lineBarsData: [
+        if (secondarySpots != null) ...[
+          LineChartBarData(
+            spots: safeSpots,
+            isCurved: true,
+            barWidth: 3,
+            color: gcashColor,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                radius: 3.5,
+                color: gcashColor,
+                strokeWidth: 1.5,
+                strokeColor: isDark ? const Color(0xFF161D30) : Colors.white,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  gcashColor.withValues(alpha: isDark ? 0.24 : 0.18),
+                  gcashColor.withValues(alpha: 0.0),
+                ],
+              ),
+            ),
+          ),
+          LineChartBarData(
+            spots: secondarySpots.isEmpty ? const [FlSpot(0, 0)] : secondarySpots,
+            isCurved: true,
+            barWidth: 3,
+            color: mayaColor,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                radius: 3.5,
+                color: mayaColor,
+                strokeWidth: 1.5,
+                strokeColor: isDark ? const Color(0xFF161D30) : Colors.white,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  mayaColor.withValues(alpha: isDark ? 0.24 : 0.18),
+                  mayaColor.withValues(alpha: 0.0),
+                ],
+              ),
+            ),
+          ),
+        ] else ...[
+          LineChartBarData(
+            spots: safeSpots,
+            isCurved: true,
+            barWidth: 3.5,
+            color: cyanColor,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                radius: 4.0,
+                color: cyanColor,
+                strokeWidth: 2.0,
+                strokeColor: isDark ? const Color(0xFF161D30) : Colors.white,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  cyanColor.withValues(alpha: isDark ? 0.28 : 0.20),
+                  cyanColor.withValues(alpha: 0.0),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+      lineTouchData: LineTouchData(
+        enabled: true,
+        touchTooltipData: LineTouchTooltipData(
+          tooltipRoundedRadius: 12,
+          getTooltipColor: (_) => isDark ? const Color(0xFF1E293B) : AppColors.onSurface,
+          fitInsideHorizontally: true,
+          fitInsideVertically: true,
+          getTooltipItems: (touchedSpots) {
+            return touchedSpots.map((touchedSpot) {
+              final label = (touchedSpot.spotIndex >= 0 && touchedSpot.spotIndex < labels.length)
+                  ? labels[touchedSpot.spotIndex]
+                  : '';
+              if (secondarySpots != null) {
+                final isGcash = touchedSpot.barIndex == 0;
+                final seriesName = isGcash ? 'GCash' : 'Maya';
+                final seriesColor = isGcash ? gcashColor : mayaColor;
+                return LineTooltipItem(
+                  '$label\n$seriesName: ₱ ${(touchedSpot.y * 1000).toStringAsFixed(2)}',
+                  TextStyle(
+                    color: seriesColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                );
+              } else {
+                return LineTooltipItem(
+                  '$label\nEarnings: ₱ ${(touchedSpot.y * 1000).toStringAsFixed(2)}',
+                  TextStyle(
+                    color: cyanColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                );
+              }
+            }).toList();
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChartLegend(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gcashColor = isDark ? const Color(0xFF3D9BFF) : const Color(0xFF2563EB);
+    final mayaColor = isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+    final onSurfaceColor = isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildLegendItem('GCash Fee', gcashColor, onSurfaceColor),
+        const SizedBox(width: 24),
+        _buildLegendItem('Maya Fee', mayaColor, onSurfaceColor),
+      ],
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color dotColor, Color textColor) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: dotColor,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: textColor,
+          ),
+        ),
+      ],
     );
   }
 
@@ -524,6 +823,10 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                 return const SizedBox.shrink();
               }
 
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              final onSurfaceColor = isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface;
+              final onSurfaceVariantColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+
               return Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
@@ -532,8 +835,8 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
                     fontSize: shouldCompactLabels ? 9 : 10,
                     fontWeight: FontWeight.w700,
                     color: isEdge
-                        ? AppColors.onSurface
-                        : AppColors.onSurfaceVariant,
+                        ? onSurfaceColor
+                        : onSurfaceVariantColor,
                   ),
                 ),
               );
@@ -551,7 +854,9 @@ class _ArchitectAnalyticsCardState extends State<ArchitectAnalyticsCard> {
         enabled: true,
         touchTooltipData: BarTouchTooltipData(
           tooltipRoundedRadius: 12,
-          getTooltipColor: (_) => AppColors.onSurface,
+          getTooltipColor: (_) => Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF1E293B)
+              : AppColors.onSurface,
           fitInsideHorizontally: true,
           fitInsideVertically: true,
           getTooltipItem: (group, groupIndex, rod, rodIndex) {

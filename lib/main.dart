@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
+import 'core/theme_provider.dart';
 import 'core/database/app_database.dart';
 import 'package:drift/drift.dart';
 import 'core/database/daos/app_meta_dao.dart';
@@ -72,6 +73,7 @@ Future<void> main() async {
       ]);
 
       await LocaleProvider.instance.load();
+      await ThemeProvider.instance.load();
 
       // Build a Riverpod container up-front so we can run one-time DB migrations
       // and hydrate the API base URL before the first widget is built.
@@ -140,12 +142,14 @@ class TindaTrackApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: LocaleProvider.instance,
+      listenable: Listenable.merge([LocaleProvider.instance, ThemeProvider.instance]),
       builder: (context, _) {
         return MaterialApp(
           title: 'PocketLedger',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeProvider.instance.themeMode,
           locale: LocaleProvider.instance.locale,
           localizationsDelegates: [
             AppLocalizations.delegate,

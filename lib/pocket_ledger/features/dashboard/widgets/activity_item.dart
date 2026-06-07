@@ -22,6 +22,9 @@ class ArchitectActivityItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPositive = amount.startsWith('+');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface;
+    final textSecondary = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -41,7 +44,8 @@ class ArchitectActivityItem extends StatelessWidget {
                     left: 25,
                     child: Container(
                       width: 1.5,
-                      color: AppColors.outlineVariant.withValues(alpha: 0.45),
+                      color: (isDark ? const Color(0xFF334155) : AppColors.outlineVariant)
+                          .withValues(alpha: 0.45),
                     ),
                   ),
                   // Icon circle cutting through the line
@@ -51,8 +55,8 @@ class ArchitectActivityItem extends StatelessWidget {
                     child: Container(
                       width: 36,
                       height: 36,
-                      decoration: const BoxDecoration(
-                        color: AppColors.background,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0B0F19) : AppColors.background,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -90,10 +94,10 @@ class ArchitectActivityItem extends StatelessWidget {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
-                              color: AppColors.onSurface,
+                              color: textPrimary,
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -101,9 +105,9 @@ class ArchitectActivityItem extends StatelessWidget {
                             subtitle,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.onSurfaceVariant,
+                              color: textSecondary,
                             ),
                           ),
                           if (tag.trim().isNotEmpty)
