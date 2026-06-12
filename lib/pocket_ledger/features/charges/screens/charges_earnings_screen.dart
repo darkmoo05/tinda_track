@@ -11,6 +11,8 @@ import '../../../../shared/widgets/screen_header_card.dart';
 import '../../transactions/screens/add_owner_movement_screen.dart';
 import '../../dashboard/data/dashboard_repository.dart';
 import '../../dashboard/widgets/analytics_card.dart';
+import '../../dashboard/logic/onboarding_provider.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
 
 class ChargesEarningsScreen extends ConsumerStatefulWidget {
   const ChargesEarningsScreen({
@@ -224,7 +226,11 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Scaffold(
+    final onboardingState = ref.watch(onboardingProvider);
+    final onboardingKeys = ref.watch(onboardingKeysProvider);
+    final showSpotlight = onboardingState.step == OnboardingStep.chargesScreenPrompt;
+
+    final scaffold = Scaffold(
       appBar: ArchitectAppBar(title: context.l10n.appTitle, actions: const []),
       body: CustomScrollView(
         slivers: [
@@ -424,12 +430,37 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
         ],
       ),
     );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (showSpotlight)
+          TutorialSpotlight(
+            targetKey: onboardingKeys.chargesHeroKey,
+            title: 'Manage Your Earnings',
+            description: 'All the service fees you collect are compiled here. This shows your true net earnings from mobile cash-in/out services. Tap "Dashboard" to go back and finish the tutorial!',
+            onNext: () {
+              Navigator.of(context).pop();
+              ref.read(onboardingProvider.notifier).setStep(OnboardingStep.demoDataPrompt);
+            },
+            onSkip: () {
+              Navigator.of(context).pop();
+              ref.read(onboardingProvider.notifier).completeTour();
+            },
+            nextLabel: 'Dashboard',
+            showNext: true,
+            borderRadius: 28.0,
+            shape: BoxShape.rectangle,
+          ),
+      ],
+    );
   }
 
   // ── Hero banner ───────────────────────────────────────────────
 
   Widget _buildHeroBanner() {
     return Container(
+      key: ref.read(onboardingKeysProvider).chargesHeroKey,
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -656,14 +687,16 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
     final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
     final hasWithdrawable = widget.remainingWithdrawableTotal > 0;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
-      ),
+    return KeyedSubtree(
+      key: ref.read(onboardingKeysProvider).chargesWithdrawableKey,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -721,7 +754,7 @@ class _ChargesEarningsScreenState extends ConsumerState<ChargesEarningsScreen> {
           ),
         ],
       ),
-    );
+    ),);
   }
 
   Widget _buildBreakdownChip(String label, double amount) {

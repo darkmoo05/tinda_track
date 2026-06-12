@@ -17,6 +17,8 @@ import '../../../../shared/receipt_scan/receipt_scan_service.dart';
 import '../../charges/domain/entities/charge.dart';
 import '../../charges/presentation/providers/charge_providers.dart';
 import '../../charges/screens/charges_screen.dart';
+import '../../dashboard/logic/onboarding_provider.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
 import '../../parties/domain/entities/party.dart';
 import '../../parties/presentation/providers/party_providers.dart';
 import '../data/transaction_repository.dart';
@@ -54,6 +56,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   final _referenceController = TextEditingController();
   final _principalController = TextEditingController();
   final _notesController = TextEditingController();
+  final _accountFieldKey = GlobalKey(debugLabel: 'onboardingAccountField');
+  final _amountFieldKey = GlobalKey(debugLabel: 'onboardingAmountField');
+  final _saveButtonKey = GlobalKey(debugLabel: 'onboardingSaveButton');
+
   final TransactionRepository _transactionRepository =
       TransactionRepository.instance;
   AppDatabase get _database => ref.read(currentAppDatabaseProvider);
@@ -114,6 +120,22 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     final typeKey = _selectedTypeKey;
     if (typeKey == null) {
       return null;
+    }
+
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addTxForm;
+    if (isTourActive && typeKey == 'gcash_cashin' && principal == 100.0) {
+      return Charge(
+        id: 'mock-tutorial-charge',
+        lowerBound: 0.0,
+        upperBound: 10000.0,
+        chargeAmount: 10.0,
+        transactionTypeKey: 'gcash_cashin',
+        sync: SyncMetadata(
+          syncId: 'mock-tutorial-sync-id',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
     }
 
     final brackets =
@@ -301,12 +323,18 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       });
 
   @override
+  @override
   void initState() {
     super.initState();
+    _selectedServiceKey = 'cashin';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_accountController.text.trim().isNotEmpty) {
         _resolvePartyFromAccount(_accountController.text);
+      }
+      final onboardingState = ref.read(onboardingProvider);
+      if (onboardingState.step == OnboardingStep.tapFabPrompt) {
+        ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addTxForm);
       }
     });
   }
@@ -334,7 +362,21 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       }
     });
 
-    return Scaffold(
+    final onboardingState = ref.watch(onboardingProvider);
+    final isTourActive = onboardingState.step == OnboardingStep.addTxForm;
+
+    final showAccountSpotlight = isTourActive && _accountController.text.isEmpty;
+    final showAmountSpotlight = isTourActive && _accountController.text.isNotEmpty && _principalController.text.isEmpty;
+    final showChargesHandlingSpotlight = isTourActive &&
+        _accountController.text.isNotEmpty &&
+        _principalController.text.isNotEmpty &&
+        _chargeHandlingMode == null;
+    final showSaveSpotlight = isTourActive &&
+        _accountController.text.isNotEmpty &&
+        _principalController.text.isNotEmpty &&
+        _chargeHandlingMode != null;
+
+    final scaffold = Scaffold(
       backgroundColor: isDark ? AppColors.darkNavy : AppColors.background,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
@@ -367,57 +409,60 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     const SizedBox(height: 12),
                     _buildTypeSelector(),
                     const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _accountController,
-                      label: context.l10n.accountNumber,
-                      hint: context.l10n.searchOrEnterAccountNumber,
-                      isUnderline: true,
-                      suffixWidget: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          GestureDetector(
-                            onTap: _openAccountSearchPicker,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.search,
-                                size: 18,
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ReceiptScanButton(
-                            onDraftReady: _applyReceiptDraft,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: const BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.camera_alt_outlined,
-                                size: 16,
-                                color: Colors.white,
+                    KeyedSubtree(
+                      key: _accountFieldKey,
+                      child: _buildTextField(
+                        controller: _accountController,
+                        label: context.l10n.accountNumber,
+                        hint: context.l10n.searchOrEnterAccountNumber,
+                        isUnderline: true,
+                        suffixWidget: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: _openAccountSearchPicker,
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                ),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.search,
+                                  size: 18,
+                                  color: AppColors.onSurfaceVariant,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                        ],
+                            const SizedBox(width: 8),
+                            ReceiptScanButton(
+                              onDraftReady: _applyReceiptDraft,
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.camera_alt_outlined,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onChanged: _resolvePartyFromAccount,
+                        isRequired: true,
+                        hasError: _isAccountNumberMissing,
                       ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      onChanged: _resolvePartyFromAccount,
-                      isRequired: true,
-                      hasError: _isAccountNumberMissing,
                     ),
                     if (_hasTypedAccount && _isRegisteredAccount) ...[
                       const SizedBox(height: 8),
@@ -427,18 +472,21 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       _buildPartyNotRegisteredAlert(),
                     ],
                     const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _principalController,
-                      label: context.l10n.transactionAmount,
-                      hint: '0.00',
-                      prefixText: '$_pesoLabel  ',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                    KeyedSubtree(
+                      key: _amountFieldKey,
+                      child: _buildTextField(
+                        controller: _principalController,
+                        label: context.l10n.transactionAmount,
+                        hint: '0.00',
+                        prefixText: '$_pesoLabel  ',
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [_amountInputFormatter],
+                        onChanged: _onPrincipalChanged,
+                        isRequired: true,
+                        hasError: _isPrincipalMissing,
                       ),
-                      inputFormatters: [_amountInputFormatter],
-                      onChanged: _onPrincipalChanged,
-                      isRequired: true,
-                      hasError: _isPrincipalMissing,
                     ),
                     if (_canCustomizeFeeHandling) ...[
                       const SizedBox(height: 16),
@@ -500,6 +548,74 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           ),
         ],
       ),
+    );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (showAccountSpotlight)
+          TutorialSpotlight(
+            targetKey: _accountFieldKey,
+            title: 'Enter Customer Account',
+            description: 'Type a phone number or reference account for the customer receiving the cash-in.',
+            onNext: () {
+              setState(() {
+                _accountController.text = '09171234567';
+                _resolvePartyFromAccount('09171234567');
+              });
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Fill Sample',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (showAmountSpotlight)
+          TutorialSpotlight(
+            targetKey: _amountFieldKey,
+            title: 'Enter Transaction Amount',
+            description: 'Enter the amount the customer wants to cash-in (e.g., 100).',
+            onNext: () {
+              setState(() {
+                _principalController.text = '100';
+                _onPrincipalChanged('100');
+              });
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Fill 100',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (showChargesHandlingSpotlight)
+          TutorialSpotlight(
+            targetKey: ref.watch(onboardingKeysProvider).chargesHandlingKey,
+            title: 'Fee Handling Option',
+            description: 'Select who pays the service fee. Choose "Customer pays fee" to add the fee to the transaction total.',
+            onNext: () {
+              setState(() {
+                _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+              });
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Customer Pays',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (showSaveSpotlight)
+          TutorialSpotlight(
+            targetKey: _saveButtonKey,
+            title: 'Record Transaction',
+            description: 'Perfect! Tapping \'Save\' will record this GCash cash-in transaction. Note how the service fee is automatically computed!',
+            onNext: _onSaveTransaction,
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Save',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+      ],
     );
   }
 
@@ -1020,6 +1136,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   Widget _buildChargeHandlingSelector() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addTxForm;
     final showChargeHandlingError =
         _showRequiredIndicators &&
         _canCustomizeFeeHandling &&
@@ -1030,86 +1147,98 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             : AppColors.gcashNeon)
         : _selectedWalletColor;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _fieldLabel(
-            context.l10n.whoPaysServiceFee,
-            isRequired: true,
-            showErrorIndicator: showChargeHandlingError,
+    return KeyedSubtree(
+      key: ref.read(onboardingKeysProvider).chargesHandlingKey,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.55),
           ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0B0F19) : AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: showChargeHandlingError
-                    ? AppColors.error
-                    : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.55)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _fieldLabel(
+              context.l10n.whoPaysServiceFee,
+              isRequired: true,
+              showErrorIndicator: showChargeHandlingError,
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0B0F19) : AppColors.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: showChargeHandlingError
+                      ? AppColors.error
+                      : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.55)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildFeeHandlingOption(
+                      label: context.l10n.customerPaysFeeLabel,
+                      selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
+                      activeColor: activeColor,
+                      onTap: () {
+                        setState(() {
+                          _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: _buildFeeHandlingOption(
+                      label: context.l10n.deductedFromSentLabel,
+                      selected: _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount,
+                      activeColor: activeColor,
+                      onTap: () {
+                        if (isTourActive) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('This is locked to Customer Pays Fee during the tutorial.'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                          return;
+                        }
+                        setState(() {
+                          _chargeHandlingMode = _ChargeHandlingMode.deductFromEnteredAmount;
+                        });
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildFeeHandlingOption(
-                    label: context.l10n.customerPaysFeeLabel,
-                    selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
-                    activeColor: activeColor,
-                    onTap: () {
-                      setState(() {
-                        _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
-                      });
-                    },
-                  ),
+            if (showChargeHandlingError) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Please choose a fee handling option.',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: _buildFeeHandlingOption(
-                    label: context.l10n.deductedFromSentLabel,
-                    selected: _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount,
-                    activeColor: activeColor,
-                    onTap: () {
-                      setState(() {
-                        _chargeHandlingMode = _ChargeHandlingMode.deductFromEnteredAmount;
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (showChargeHandlingError) ...[
-            const SizedBox(height: 6),
+              ),
+            ],
+            const SizedBox(height: 10),
             Text(
-              'Please choose a fee handling option.',
-              style: const TextStyle(
+              'Applicable fee: $_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.error,
                 fontWeight: FontWeight.w600,
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
               ),
             ),
           ],
-          const SizedBox(height: 10),
-          Text(
-            'Applicable fee: $_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1155,66 +1284,69 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildSaveButton(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryContainer],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return KeyedSubtree(
+      key: _saveButtonKey,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.primary, AppColors.primaryContainer],
           ),
-        ],
-      ),
-      child: ElevatedButton(
-        onPressed: _isSaving ? null : _onSaveTransaction,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        child: _isSaving
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: Colors.white,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.check_rounded,
+        child: ElevatedButton(
+          onPressed: _isSaving ? null : _onSaveTransaction,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: _isSaving
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
                     color: Colors.white,
-                    size: 20,
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        context.l10n.saveTransactionAction,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          letterSpacing: 0.5,
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          context.l10n.saveTransactionAction,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -1243,6 +1375,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   Widget _buildTypeSelector() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addTxForm;
     final showTypeError =
         _showRequiredIndicators && _selectedServiceKey == null;
     final activeColor = isDark
@@ -1293,6 +1426,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   ),
                 ),
                 onTap: () {
+                  if (isTourActive) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This is locked to GCash during the tutorial.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    return;
+                  }
                   setState(() {
                     _selectedWalletSelection = _WalletSelection.gcash;
                   });
@@ -1330,6 +1472,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   ),
                 ),
                 onTap: () {
+                  if (isTourActive) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This is locked to GCash during the tutorial.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    return;
+                  }
                   setState(() {
                     _selectedWalletSelection = _WalletSelection.maya;
                   });
@@ -1356,6 +1507,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   padding: const EdgeInsets.only(right: 10),
                   child: GestureDetector(
                     onTap: () {
+                      if (isTourActive) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('This is locked to Cash-In during the tutorial.'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                        return;
+                      }
                       setState(() {
                         _selectedServiceKey = serviceKey;
                       });
@@ -2114,11 +2274,14 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     final mayaWalletDelta = usesMayaWallet ? selectedWalletDelta : 0.0;
     final chargeDestination = _chargeDestinationAccount;
     final now = DateTime.now();
-    final reference = referenceText.isNotEmpty
-        ? referenceText
-        : accountNumber.isNotEmpty
-        ? accountNumber
-        : 'QR-${DateTime.now().millisecondsSinceEpoch}';
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addTxForm;
+    final reference = isTourActive
+        ? 'SAMPLE-REF-CASHIN-2D'
+        : (referenceText.isNotEmpty
+            ? referenceText
+            : accountNumber.isNotEmpty
+            ? accountNumber
+            : 'QR-${DateTime.now().millisecondsSinceEpoch}');
     final iconKey = isOutflow ? 'cash_out' : 'cash_in';
     final title = selectedType;
     final noteBase = notes.isNotEmpty
@@ -2156,7 +2319,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           deviceId: deviceId,
           createdAt: now,
           updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
-          isDirty: true,
+          isDirty: !isTourActive,
         ),
       );
 
@@ -2177,12 +2340,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               deviceId: deviceId,
               createdAt: now,
               updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
-              isDirty: true,
+              isDirty: !isTourActive,
             ),
           );
           await ref.read(feeTransactionRepositoryProvider).save(fee);
         }
       });
+
+      if (isTourActive) {
+        ref.read(onboardingProvider.notifier).setHasDemoData(true);
+        ref.read(onboardingProvider.notifier).setStep(OnboardingStep.explainDeltas);
+      }
 
       return true;
     } on Exception catch (error, stackTrace) {

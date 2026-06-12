@@ -17,6 +17,8 @@ import '../domain/entities/movement_category.dart';
 import '../logic/owner_movement_fee_logic.dart';
 import '../presentation/providers/ledger_entry_providers.dart';
 import '../presentation/providers/movement_category_providers.dart';
+import '../../dashboard/logic/onboarding_provider.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
 
 class AddOwnerMovementScreen extends ConsumerStatefulWidget {
   const AddOwnerMovementScreen({
@@ -39,6 +41,9 @@ class _AddOwnerMovementScreenState
   final _amountController = TextEditingController();
   final _referenceController = TextEditingController();
   final _notesController = TextEditingController();
+  final _amountFieldKey = GlobalKey(debugLabel: 'onboardingAmountField');
+  final _saveButtonKey = GlobalKey(debugLabel: 'onboardingSaveButton');
+
   static const List<String> _movementTypes = [
     'Top-up',
     'Cash Transfer (On-hand to Wallet)',
@@ -188,6 +193,15 @@ class _AddOwnerMovementScreenState
     _destination = _resolveInitialDestination();
     _loadExpenseCategories();
     _refreshAvailableFeeIncome();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final onboardingState = ref.read(onboardingProvider);
+        if (onboardingState.step == OnboardingStep.setupCapitalPrompt) {
+          ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addCapitalForm);
+        }
+      }
+    });
   }
 
   @override
@@ -375,7 +389,12 @@ class _AddOwnerMovementScreenState
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    final onboardingState = ref.watch(onboardingProvider);
+    final isTourActive = onboardingState.step == OnboardingStep.addCapitalForm;
+    final showSaveSpotlight = isTourActive && _amountController.text.isNotEmpty;
+    final showAmountSpotlight = isTourActive && _amountController.text.isEmpty;
+
+    final scaffold = Scaffold(
       backgroundColor: isDark ? AppColors.darkNavy : AppColors.background,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
@@ -515,16 +534,19 @@ class _AddOwnerMovementScreenState
                   const SizedBox(height: 16),
                 ],
 
-                _buildTextField(
-                  controller: _amountController,
-                  label: 'Amount',
-                  hint: '0.00',
-                  prefixText: '₱  ',
-                  isRequired: true,
-                  hasError: _isAmountMissing,
-                  isUnderline: true,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                KeyedSubtree(
+                  key: _amountFieldKey,
+                  child: _buildTextField(
+                    controller: _amountController,
+                    label: 'Amount',
+                    hint: '0.00',
+                    prefixText: '₱  ',
+                    isRequired: true,
+                    hasError: _isAmountMissing,
+                    isUnderline: true,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                 ),
                 if (_isCashTransferToWallet) ...[
@@ -703,10 +725,47 @@ class _AddOwnerMovementScreenState
           const SizedBox(height: 16),
           _buildSummaryCard(amount),
           const SizedBox(height: 24),
-          _buildSaveButton(),
+          KeyedSubtree(
+            key: _saveButtonKey,
+            child: _buildSaveButton(),
+          ),
           const SizedBox(height: 40),
         ],
       ),
+    );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (showAmountSpotlight)
+          TutorialSpotlight(
+            targetKey: _amountFieldKey,
+            title: 'Enter Starting Capital',
+            description: 'Type your starting GCash balance (e.g. 1000) here to fund your business.',
+            onNext: () {
+              setState(() {
+                _amountController.text = '1000';
+              });
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Fill 1,000',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (showSaveSpotlight)
+          TutorialSpotlight(
+            targetKey: _saveButtonKey,
+            title: 'Save Balance',
+            description: 'Awesome! Now tap \'Save\' to record this capital in your ledger.',
+            onNext: _handleSave,
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Save',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+      ],
     );
   }
 
@@ -1413,9 +1472,12 @@ class _AddOwnerMovementScreenState
     final now = DateTime.now();
     final referenceInput = _referenceController.text.trim();
     final notes = _notesController.text.trim();
-    final reference = referenceInput.isNotEmpty
-        ? referenceInput
-        : _buildAutoReference(now);
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm;
+    final reference = isTourActive
+        ? 'CAP-INITIAL-3D'
+        : (referenceInput.isNotEmpty
+            ? referenceInput
+            : _buildAutoReference(now));
     final feeTransferAmount = _isCashTransferToWallet
         ? feeTransferAmountOverride.clamp(0.0, double.infinity)
         : 0.0;
@@ -1957,6 +2019,7 @@ class _AddOwnerMovementScreenState
     required DateTime now,
     required int nowMs,
   }) async {
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm;
     final entry = LedgerEntry(
       id: '',
       entryType: 'owner_movement',
@@ -1980,10 +2043,14 @@ class _AddOwnerMovementScreenState
         deviceId: deviceId,
         createdAt: now,
         updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
-        isDirty: true,
+        isDirty: !isTourActive,
       ),
     );
     await ref.read(ledgerEntryRepositoryProvider).save(entry);
+    if (isTourActive) {
+      ref.read(onboardingProvider.notifier).setHasDemoData(true);
+      ref.read(onboardingProvider.notifier).setStep(OnboardingStep.tapFabPrompt);
+    }
   }
 
   String _buildReferenceForType(String movementType, DateTime timestamp) {
@@ -2653,6 +2720,7 @@ class _AddOwnerMovementScreenState
 
   Widget _buildMovementTypeSelector() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2683,7 +2751,18 @@ class _AddOwnerMovementScreenState
               final inactiveTextColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
 
               return GestureDetector(
-                onTap: () => _onMovementTypeChanged(type),
+                onTap: () {
+                  if (isTourActive) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This field is locked to Top-up during the tutorial.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    return;
+                  }
+                  _onMovementTypeChanged(type);
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: 90,
@@ -2769,6 +2848,7 @@ class _AddOwnerMovementScreenState
   Widget _buildAccountSelector(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final options = _accountOptions;
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2818,6 +2898,15 @@ class _AddOwnerMovementScreenState
             return Expanded(
               child: GestureDetector(
                 onTap: () {
+                  if (isTourActive) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This is locked to GCash during the tutorial.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    return;
+                  }
                   setState(() => _destination = option);
                   if (_isFeeWithdrawal || _isCashTransferToWallet) {
                     _refreshAvailableFeeIncome();

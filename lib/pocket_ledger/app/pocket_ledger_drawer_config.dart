@@ -15,6 +15,7 @@ AppDrawerConfig buildPocketLedgerDrawerConfig(
   BuildContext context, {
   void Function(int)? onNavTap,
   VoidCallback? onSwitchApp,
+  VoidCallback? onRestartTutorial,
 }) {
   void push(Widget screen) =>
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
@@ -53,6 +54,12 @@ AppDrawerConfig buildPocketLedgerDrawerConfig(
       ),
     ],
     settingsItems: [
+      if (onRestartTutorial != null)
+        DrawerItem(
+          icon: Icons.help_outline_rounded,
+          label: 'Restart Tutorial',
+          onTap: onRestartTutorial,
+        ),
       DrawerItem(
         icon: Icons.backup_rounded,
         label: context.l10n.backupData,

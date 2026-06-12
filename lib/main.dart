@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
@@ -22,7 +23,6 @@ import 'core/sync/sync_config.dart';
 import 'core/sync/sync_orchestrator.dart';
 import 'core/l10n/l10n_extension.dart';
 import 'core/l10n/locale_provider.dart';
-import 'shared/widgets/app_loading_modal.dart';
 import 'pocket_ledger/app/main_shell.dart';
 import 'tinda_tracker/app/tinda_tracker_shell.dart';
 
@@ -231,23 +231,16 @@ class _StartupSyncGateState extends ConsumerState<StartupSyncGate> {
     }
     _startupTaskStarted = true;
 
-    final loading = showAppLoadingModal(
-      context,
-      message: 'Syncing startup data...',
-      caption: 'Please wait while we fetch your latest records.',
-    );
+    // Instantly transition to ready state so the user lands on the dashboard immediately
+    setState(() {
+      _ready = true;
+    });
 
     try {
       await ref.read(syncOrchestratorProvider).runOnce();
     } catch (_) {
-      // Startup should continue even if first sync attempt fails.
-    } finally {
-      loading.close();
+      // Startup continues even if first sync attempt fails.
     }
-    if (!mounted) return;
-    setState(() {
-      _ready = true;
-    });
   }
 
   @override

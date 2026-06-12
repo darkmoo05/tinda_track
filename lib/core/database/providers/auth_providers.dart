@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:drift/native.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:uuid/uuid.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import '../../network/api_client.dart';
@@ -99,6 +102,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  String _mapErrorToKey(Object e) {
+    if (e is DioException) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        return 'authErrorTimeout';
+      } else if (e.type == DioExceptionType.connectionError) {
+        return 'authErrorConnection';
+      } else if (e.response != null) {
+        final statusCode = e.response!.statusCode;
+        if (statusCode == 400 || statusCode == 401) {
+          return 'authErrorInvalidCredentials';
+        } else if (statusCode == 409) {
+          return 'authErrorUsernameTaken';
+        }
+      }
+    }
+    final errStr = e.toString().toLowerCase();
+    if (errStr.contains('socketexception') ||
+        errStr.contains('connection refused') ||
+        errStr.contains('network_error') ||
+        errStr.contains('handshake_status')) {
+      return 'authErrorConnection';
+    }
+    return 'authErrorGeneric';
+  }
+
   Future<bool> login(String username, String password) async {
     state = const AuthState.loading();
     try {
@@ -119,7 +149,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthState.authenticated(username: name, role: role);
       return true;
     } catch (e) {
-      state = AuthState.error(e.toString().replaceAll('DioException:', ''));
+      state = AuthState.error(_mapErrorToKey(e));
       return false;
     }
   }
@@ -143,9 +173,45 @@ class AuthNotifier extends StateNotifier<AuthState> {
         defaultCurrency: defaultCurrency,
       );
       // Automatically login after successful registration
-      return await login(username, password);
+      final loggedIn = await login(username, password);
+      if (loggedIn) {
+        try {
+          final tindaTrackerDao = ref.read(tindaTrackerDaoProvider);
+          final existing = await tindaTrackerDao.businessProfiles.getActiveProfile();
+          if (existing == null) {
+            final syncId = const Uuid().v4();
+            final deviceId = await ref.read(databaseAppMetaDaoProvider).getOrCreateDeviceId();
+            final now = DateTime.now().millisecondsSinceEpoch;
+
+            final defaultPrefs = {
+              'showRecipes': businessType == 'food_service',
+              'showSerialTracking': ['auto_parts', 'hardware'].contains(businessType),
+              'showMultiLocation': ['auto_parts', 'hardware'].contains(businessType),
+              'showBundles': ['auto_parts', 'hardware'].contains(businessType),
+            };
+
+            final companion = BusinessProfilesCompanion(
+              id: Value(const Uuid().v4()),
+              syncId: Value(syncId),
+              deviceId: Value(deviceId),
+              isDeleted: const Value(false),
+              isDirty: const Value(true),
+              createdAtMs: Value(now),
+              updatedAtMs: Value(now),
+              businessName: Value(businessName),
+              businessType: Value(businessType),
+              defaultCurrency: Value(defaultCurrency),
+              preferencesJson: Value(json.encode(defaultPrefs)),
+            );
+            await tindaTrackerDao.businessProfiles.upsertLocal(companion);
+          }
+        } catch (dbErr) {
+          developer.log('Failed to pre-populate profile: $dbErr', name: 'auth.register');
+        }
+      }
+      return loggedIn;
     } catch (e) {
-      state = AuthState.error(e.toString().replaceAll('DioException:', ''));
+      state = AuthState.error(_mapErrorToKey(e));
       return false;
     }
   }

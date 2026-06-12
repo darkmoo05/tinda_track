@@ -637,8 +637,7 @@ class AppLocalizationsCeb extends AppLocalizations {
       'Makita dinhi ang imong naluwas nga mga transaksyon ug aktibidad sa tag-iya.';
 
   @override
-  String get searchAccountRefParty =>
-      'Pangita pinaagi sa account, ref no., o nota';
+  String get searchAccountRefParty => 'Pangita pinaagi sa account, ref no.';
 
   @override
   String get beginningDate => 'Gikan sa petsa';
@@ -1682,4 +1681,96 @@ class AppLocalizationsCeb extends AppLocalizations {
   @override
   String get scanOrTypeSerial =>
       'Mag-scan o mag-type ug serial number aron idugang.';
+
+  @override
+  String get businessTypeRetail => 'Sari-Sari / Retail';
+
+  @override
+  String get businessTypeFoodService => 'Carinderia / Serbisyo sa Pagkaon';
+
+  @override
+  String get businessTypeAutoParts => 'Tindahan sa Piyesa / Serbisyo';
+
+  @override
+  String get businessTypeHardware => 'Tindahan sa Hardware';
+
+  @override
+  String get businessTypeMarketplace => 'Pwesto sa Merkado';
+
+  @override
+  String get businessTypeGeneral => 'Pangkalahatan / Uban pa';
+
+  @override
+  String get showPassword => 'Ipakita ang password';
+
+  @override
+  String get hidePassword => 'Itago ang password';
+
+  @override
+  String get usernameValidator =>
+      'Ang username kinahanglan labing gamay 4 ka karakter ug letra o numero lamang';
+
+  @override
+  String get passwordValidator =>
+      'Ang password kinahanglan labing gamay 6 ka karakter';
+
+  @override
+  String get authErrorConnection =>
+      'Dili makakonektar sa server. Palihog susiha ang imong koneksyon sa internet.';
+
+  @override
+  String get authErrorTimeout =>
+      'Na-timeout ang koneksyon. Palihog sulayi pag-usab sa laing higayon.';
+
+  @override
+  String get authErrorInvalidCredentials => 'Sayop nga username o password.';
+
+  @override
+  String get authErrorUsernameTaken =>
+      'Kini nga username nakuha na. Palihog sulayi ang uban.';
+
+  @override
+  String get authErrorGeneric =>
+      'Napakyas ang pag-authenticate. Palihog sulayi pag-usab.';
+
+  @override
+  String get tutorialWelcomeTitlePocketLedger =>
+      'Maayong pag-abot sa PocketLedger!';
+
+  @override
+  String get tutorialWelcomeDescPocketLedger =>
+      'Maghimo ta og dali nga 1-minuto nga tour aron makita kung unsaon pag-track ang imong cash drawer ug digital wallets (GCash/Maya) sa sayon nga paagi!';
+
+  @override
+  String get tutorialCashTitle => 'Kasalukuyang Kwarta sa Negosyo';
+
+  @override
+  String get tutorialCashDesc =>
+      'Nagpakita kini sa kinatibuk-ang kwarta nga imong magamit sa pagpadagan sa imong tindahan. Gihiusa niini ang imong GCash, Maya, ug pisikal nga On-hand Cash, minus ang bisan unsang personal nga gasto nga imong gikuha.';
+
+  @override
+  String get tutorialWalletsTitle => 'GCash, Maya ug On-hand Cash';
+
+  @override
+  String get tutorialWalletsDesc =>
+      'Ang GCash ug Maya mga digital nga kwarta sa imong telepono. Ang On-hand Cash mao ang pisikal nga kwarta sa imong drawer. Kung ang kustomer mobayad kanimo og cash para sa cash-in, ang imong GCash moubos apan ang imong cash drawer mosaka!';
+
+  @override
+  String get tutorialSampleTitlePocketLedger => 'Tan-awa Kini sa Aksyon!';
+
+  @override
+  String get tutorialSampleDescPocketLedger =>
+      'Gusto ba nimo nga butangan og sample nga transaksyon (pananglitan: ₱100 GCash Cash-In nga adunay ₱10 nga fee) aron makita kung giunsa ang dashboard, mga tsart, ug nakolekta nga mga bayranan nga mo-update dayon?';
+
+  @override
+  String get addSampleDataButton => 'Idugang ang Sample nga Transaksyon';
+
+  @override
+  String get startEmptyButton => 'Sugod nga Walay Sulod';
+
+  @override
+  String get nextButton => 'Sunod';
+
+  @override
+  String get skipButton => 'Laktawan';
 }

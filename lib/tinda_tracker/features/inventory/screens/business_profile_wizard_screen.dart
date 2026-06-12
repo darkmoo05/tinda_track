@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/google_fonts_shim.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' show Value;
 
@@ -11,6 +11,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/database/providers/database_providers.dart';
 import '../../../../core/sync/sync_orchestrator.dart';
 import '../../../../core/sync/sync_result.dart';
+import '../../../../core/l10n/l10n_extension.dart';
 
 class BusinessProfileWizardScreen extends ConsumerStatefulWidget {
   const BusinessProfileWizardScreen({super.key, this.onComplete});
@@ -402,37 +403,37 @@ class _BusinessProfileWizardScreenState
             const SizedBox(height: 24),
             _buildTypeCard(
               type: 'retail',
-              title: 'Sari-Sari / Retail',
+              title: context.l10n.businessTypeRetail,
               desc: 'Simple stock, POS sales, and customer credit (utang). Hides complex raw ingredients and serial numbers.',
               icon: Icons.storefront_rounded,
             ),
             _buildTypeCard(
               type: 'food_service',
-              title: 'Carinderia / Food Service',
+              title: context.l10n.businessTypeFoodService,
               desc: 'Perishable ingredients, dish recipes / Bill of Materials (BOM), auto-deducting stock, and waste reports.',
               icon: Icons.restaurant_rounded,
             ),
             _buildTypeCard(
               type: 'auto_parts',
-              title: 'Auto Shop / Services',
+              title: context.l10n.businessTypeAutoParts,
               desc: 'Tracking parts by serial numbers, custom compatibility fields, multi-location storage, and kits/bundles.',
               icon: Icons.build_rounded,
             ),
             _buildTypeCard(
               type: 'hardware',
-              title: 'Hardware Store',
+              title: context.l10n.businessTypeHardware,
               desc: 'Supports size/dimensions attributes, multi-shelf locations, bulk conversions, and serial/lot tracking.',
               icon: Icons.construction_rounded,
             ),
             _buildTypeCard(
               type: 'marketplace',
-              title: 'Public Market Stall',
+              title: context.l10n.businessTypeMarketplace,
               desc: 'Optimized for quick weight conversions (kilo/grams) and high-speed sales entries.',
               icon: Icons.shopping_basket_rounded,
             ),
             _buildTypeCard(
               type: 'general',
-              title: 'General Inventory',
+              title: context.l10n.businessTypeGeneral,
               desc: 'Standard inventory with shelf locations, category groupings, and reorder levels.',
               icon: Icons.inventory_2_rounded,
             ),
@@ -604,17 +605,17 @@ class _BusinessProfileWizardScreenState
   String _templateName(String type) {
     switch (type) {
       case 'retail':
-        return 'Sari-Sari / Retail';
+        return context.l10n.businessTypeRetail;
       case 'food_service':
-        return 'Carinderia / Food Service';
+        return context.l10n.businessTypeFoodService;
       case 'auto_parts':
-        return 'Auto Shop';
+        return context.l10n.businessTypeAutoParts;
       case 'hardware':
-        return 'Hardware';
+        return context.l10n.businessTypeHardware;
       case 'marketplace':
-        return 'Public Market';
+        return context.l10n.businessTypeMarketplace;
       default:
-        return 'General / Other';
+        return context.l10n.businessTypeGeneral;
     }
   }
 }

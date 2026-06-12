@@ -1117,7 +1117,7 @@ abstract class AppLocalizations {
   /// No description provided for @walletHistorySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Track GCash, Maya, and cash movement.'**
+  /// **'Track GCash, Maya, and cash movements.'**
   String get walletHistorySubtitle;
 
   /// No description provided for @reports.
@@ -1249,7 +1249,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchAccountRefParty.
   ///
   /// In en, this message translates to:
-  /// **'Search by account, ref no., or note'**
+  /// **'Search by account, ref no.'**
   String get searchAccountRefParty;
 
   /// No description provided for @beginningDate.
@@ -3096,6 +3096,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Scan or type a serial number to add.'**
   String get scanOrTypeSerial;
+
+  /// No description provided for @businessTypeRetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Sari-Sari / Retail'**
+  String get businessTypeRetail;
+
+  /// No description provided for @businessTypeFoodService.
+  ///
+  /// In en, this message translates to:
+  /// **'Carinderia / Food Service'**
+  String get businessTypeFoodService;
+
+  /// No description provided for @businessTypeAutoParts.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto Shop / Services'**
+  String get businessTypeAutoParts;
+
+  /// No description provided for @businessTypeHardware.
+  ///
+  /// In en, this message translates to:
+  /// **'Hardware Store'**
+  String get businessTypeHardware;
+
+  /// No description provided for @businessTypeMarketplace.
+  ///
+  /// In en, this message translates to:
+  /// **'Public Market Stall'**
+  String get businessTypeMarketplace;
+
+  /// No description provided for @businessTypeGeneral.
+  ///
+  /// In en, this message translates to:
+  /// **'General / Other'**
+  String get businessTypeGeneral;
+
+  /// No description provided for @showPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Password'**
+  String get showPassword;
+
+  /// No description provided for @hidePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Password'**
+  String get hidePassword;
+
+  /// No description provided for @usernameValidator.
+  ///
+  /// In en, this message translates to:
+  /// **'Username must be at least 4 characters and contain only letters and numbers'**
+  String get usernameValidator;
+
+  /// No description provided for @passwordValidator.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 6 characters'**
+  String get passwordValidator;
+
+  /// No description provided for @authErrorConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot connect to the server. Please check your internet connection.'**
+  String get authErrorConnection;
+
+  /// No description provided for @authErrorTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timed out. Please try again later.'**
+  String get authErrorTimeout;
+
+  /// No description provided for @authErrorInvalidCredentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect username or password.'**
+  String get authErrorInvalidCredentials;
+
+  /// No description provided for @authErrorUsernameTaken.
+  ///
+  /// In en, this message translates to:
+  /// **'This username is already taken. Please try another one.'**
+  String get authErrorUsernameTaken;
+
+  /// No description provided for @authErrorGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication failed. Please try again.'**
+  String get authErrorGeneric;
+
+  /// No description provided for @tutorialWelcomeTitlePocketLedger.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to PocketLedger!'**
+  String get tutorialWelcomeTitlePocketLedger;
+
+  /// No description provided for @tutorialWelcomeDescPocketLedger.
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s take a quick 1-minute tour to see how to track your cash drawer and digital wallets (GCash/Maya) easily!'**
+  String get tutorialWelcomeDescPocketLedger;
+
+  /// No description provided for @tutorialCashTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Business Cash'**
+  String get tutorialCashTitle;
+
+  /// No description provided for @tutorialCashDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'This shows the total money you have available to run your shop. It combines your GCash, Maya, and physical On-hand Cash, minus any personal expenses you withdrew.'**
+  String get tutorialCashDesc;
+
+  /// No description provided for @tutorialWalletsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'GCash, Maya & On-hand Cash'**
+  String get tutorialWalletsTitle;
+
+  /// No description provided for @tutorialWalletsDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'GCash and Maya are digital money in your phone. On-hand Cash is the physical cash in your drawer. When a customer pays you cash to cash-in, your GCash goes down, but your cash drawer goes up!'**
+  String get tutorialWalletsDesc;
+
+  /// No description provided for @tutorialSampleTitlePocketLedger.
+  ///
+  /// In en, this message translates to:
+  /// **'See it in Action!'**
+  String get tutorialSampleTitlePocketLedger;
+
+  /// No description provided for @tutorialSampleDescPocketLedger.
+  ///
+  /// In en, this message translates to:
+  /// **'Would you like to pre-populate a sample transaction (e.g. ₱100 GCash Cash-In with a ₱10 fee) to see how the dashboard, charts, and collected fees update instantly?'**
+  String get tutorialSampleDescPocketLedger;
+
+  /// No description provided for @addSampleDataButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Sample Transaction'**
+  String get addSampleDataButton;
+
+  /// No description provided for @startEmptyButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Fresh (Empty)'**
+  String get startEmptyButton;
+
+  /// No description provided for @nextButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get nextButton;
+
+  /// No description provided for @skipButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get skipButton;
 }
 
 class _AppLocalizationsDelegate

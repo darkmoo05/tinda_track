@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   // Primary & Secondary
@@ -86,33 +85,39 @@ class AppTheme {
         onSurface: AppColors.onSurface,
       ),
       scaffoldBackgroundColor: AppColors.background,
-      textTheme: TextTheme(
-        displayLarge: GoogleFonts.manrope(
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 32,
           fontWeight: FontWeight.bold,
           color: AppColors.onSurface,
         ),
-        displayMedium: GoogleFonts.manrope(
+        displayMedium: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 28,
           fontWeight: FontWeight.bold,
           color: AppColors.onSurface,
         ),
-        headlineSmall: GoogleFonts.manrope(
+        headlineSmall: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: AppColors.onSurface,
         ),
-        bodyLarge: GoogleFonts.inter(
+        bodyLarge: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 16,
           fontWeight: FontWeight.normal,
           color: AppColors.onSurface,
         ),
-        bodyMedium: GoogleFonts.inter(
+        bodyMedium: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 14,
           fontWeight: FontWeight.normal,
           color: AppColors.onSurface,
         ),
-        labelMedium: GoogleFonts.inter(
+        labelMedium: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: AppColors.onSurfaceVariant,
@@ -142,36 +147,42 @@ class AppTheme {
         onSurface: const Color(0xFFF8FAFC),
       ),
       scaffoldBackgroundColor: AppColors.darkNavy,
-      textTheme: TextTheme(
-        displayLarge: GoogleFonts.manrope(
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 32,
           fontWeight: FontWeight.bold,
-          color: const Color(0xFFF8FAFC),
+          color: Color(0xFFF8FAFC),
         ),
-        displayMedium: GoogleFonts.manrope(
+        displayMedium: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 28,
           fontWeight: FontWeight.bold,
-          color: const Color(0xFFF8FAFC),
+          color: Color(0xFFF8FAFC),
         ),
-        headlineSmall: GoogleFonts.manrope(
+        headlineSmall: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 20,
           fontWeight: FontWeight.w600,
-          color: const Color(0xFFF8FAFC),
+          color: Color(0xFFF8FAFC),
         ),
-        bodyLarge: GoogleFonts.inter(
+        bodyLarge: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 16,
           fontWeight: FontWeight.normal,
-          color: const Color(0xFFF8FAFC),
+          color: Color(0xFFF8FAFC),
         ),
-        bodyMedium: GoogleFonts.inter(
+        bodyMedium: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 14,
           fontWeight: FontWeight.normal,
-          color: const Color(0xFFF8FAFC),
+          color: Color(0xFFF8FAFC),
         ),
-        labelMedium: GoogleFonts.inter(
+        labelMedium: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: const Color(0xFF94A3B8),
+          color: Color(0xFF94A3B8),
         ),
       ),
       cardTheme: CardThemeData(

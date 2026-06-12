@@ -5,7 +5,9 @@ import '../../../../core/app_theme.dart';
 import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
-import '../../../../shared/widgets/screen_header_card.dart';
+import '../../../../shared/widgets/dashboard_tutorial_overlay.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
+import '../logic/onboarding_provider.dart';
 import '../../activity/screens/activity_history_screen.dart';
 import '../../charges/screens/charges_earnings_screen.dart';
 import '../../transactions/screens/add_owner_movement_screen.dart';
@@ -47,14 +49,95 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _dashboardFuture = _dashboardRepository.loadSnapshot();
   }
 
+
   void _reloadDashboardSnapshot() {
     setState(() {
       _dashboardFuture = _dashboardRepository.loadSnapshot();
     });
   }
 
+  Widget _buildDemoModeBanner(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bannerBg = isDark ? const Color(0xFF1E293B) : Colors.yellow.shade50;
+    final borderCol = isDark ? const Color(0xFFFBBF24).withValues(alpha: 0.4) : Colors.yellow.shade200;
+    
+    return Container(
+      key: ref.read(onboardingKeysProvider).demoModeBannerKey,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderCol, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Demo Mode Active',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFD97706),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'These are sample transactions. You can clear them or keep them.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF78350F),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () async {
+              await ref.read(onboardingProvider.notifier).clearSampleData();
+              _reloadDashboardSnapshot();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFDC2626),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+          const SizedBox(width: 4),
+          TextButton(
+            onPressed: () async {
+              await ref.read(onboardingProvider.notifier).promoteDemoDataToReal();
+              _reloadDashboardSnapshot();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF059669),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Keep', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final onboardingState = ref.watch(onboardingProvider);
+    final onboardingKeys = ref.watch(onboardingKeysProvider);
+
     return FutureBuilder<DashboardSnapshot>(
       future: _dashboardFuture,
       builder: (context, snapshot) {
@@ -92,7 +175,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           );
         }
 
-        return Scaffold(
+        final scaffold = Scaffold(
           key: _scaffoldKey,
           appBar: ArchitectAppBar(
             title: context.l10n.appTitle,
@@ -101,10 +184,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              ScreenHeaderCard(
-                title: context.l10n.walletOverview,
-                subtitle: context.l10n.walletCashBalanceTrend,
-              ),
+              if (onboardingState.hasDemoData)
+                _buildDemoModeBanner(context),
+              _buildBusinessCashHeroCard(context, dashboard),
               const SizedBox(height: 16),
               if (dashboard.showAlertCard)
                 ArchitectAlertCard(
@@ -115,6 +197,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               if (dashboard.showAlertCard) const SizedBox(height: 16),
               _buildWalletSummarySection(context, dashboard),
+              const SizedBox(height: 16),
+              _buildChargesEarningsAllocationCard(context, dashboard),
               const SizedBox(height: 16),
               _buildBalanceTrendSection(dashboard),
               const SizedBox(height: 16),
@@ -128,6 +212,80 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               const SizedBox(height: 100),
             ],
           ),
+        );
+
+        return Stack(
+          children: [
+            scaffold,
+            if (onboardingState.step == OnboardingStep.welcome)
+              DashboardTutorialOverlay(
+                onSkip: () {
+                  ref.read(onboardingProvider.notifier).startTour();
+                },
+              ),
+            if (onboardingState.step == OnboardingStep.setupCapitalPrompt)
+              TutorialSpotlight(
+                targetKey: onboardingKeys.topUpButtonKey,
+                title: 'Set Up Your Capital',
+                description: 'First, let\'s record your starting shop funds. Tap the \'Top-Up\' button to continue.',
+                onNext: () {
+                  _onAlertAction('RESTOCK FUNDS');
+                },
+                onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+                nextLabel: 'Next',
+                showNext: true,
+                shape: BoxShape.rectangle,
+                borderRadius: 24.0,
+              ),
+            if (onboardingState.step == OnboardingStep.explainDeltas)
+              TutorialSpotlight(
+                targetKey: onboardingKeys.walletGridKey,
+                title: 'Observe Balance Deltas',
+                description: 'Notice the math:\n'
+                    '• Your GCash balance decreased because you sent GCash to the customer.\n'
+                    '• Your physical On-Hand Cash increased because you collected cash plus your fee.\n'
+                    '• Your overall Business Cash grew by your service fee earnings!',
+                onNext: () {
+                  ref.read(onboardingProvider.notifier).setStep(OnboardingStep.explainChargesPrompt);
+                },
+                onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+                nextLabel: 'Next',
+                borderRadius: 16.0,
+                shape: BoxShape.rectangle,
+              ),
+            if (onboardingState.step == OnboardingStep.explainChargesPrompt)
+              TutorialSpotlight(
+                targetKey: onboardingKeys.manageEarningsButtonKey,
+                title: 'Track Your Earnings',
+                description: 'Let\'s view your collected service fees. Tap the \'Manage Earnings\' button.',
+                onNext: () {
+                  _openChargesEarnings(dashboard);
+                },
+                onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+                nextLabel: 'Manage',
+                showNext: true,
+                shape: BoxShape.rectangle,
+                borderRadius: 12.0,
+              ),
+            if (onboardingState.step == OnboardingStep.demoDataPrompt && onboardingState.hasDemoData)
+              TutorialSpotlight(
+                targetKey: onboardingKeys.demoModeBannerKey,
+                title: 'Demo Data Options',
+                description: 'You are currently viewing demo data. To complete your setup, please choose how to handle the sample transactions:\n\n'
+                    '• Tap "Clear" inside the highlighted banner to wipe all demo data and start with a fresh, empty ledger.\n'
+                    '• Tap "Keep" inside the highlighted banner to save these sample entries as part of your real business records.\n\n'
+                    'Note: Tapping either button will execute that action and automatically complete the tutorial!',
+                onNext: () {
+                  ref.read(onboardingProvider.notifier).completeTour();
+                },
+                onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+                nextLabel: 'Finish Tour',
+                showNext: true,
+                shape: BoxShape.rectangle,
+                borderRadius: 16.0,
+                allowPassThrough: true,
+              ),
+          ],
         );
       },
     );
@@ -153,6 +311,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
     } else if (actionLabel == 'RESTOCK FUNDS') {
       screen = const AddOwnerMovementScreen(initialMovementType: 'Top-up');
+    } else if (actionLabel == 'TRANSFER FUNDS') {
+      screen = const AddOwnerMovementScreen(
+        initialMovementType: 'Cash Transfer (on-hand to wallet)',
+      );
     }
 
     if (screen == null) {
@@ -172,6 +334,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _openChargesEarnings(DashboardSnapshot dashboard) async {
+    final onboarding = ref.read(onboardingProvider);
+    if (onboarding.step == OnboardingStep.explainChargesPrompt) {
+      ref.read(onboardingProvider.notifier).setStep(OnboardingStep.chargesScreenPrompt);
+    }
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ChargesEarningsScreen(
@@ -227,79 +393,59 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const spacing = 12.0;
             final tileWidth = (constraints.maxWidth - spacing) / 2;
 
-            return Column(
+            return Wrap(
+              key: ref.read(onboardingKeysProvider).walletGridKey,
+              spacing: spacing,
+              runSpacing: spacing,
               children: [
-                Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: [
-                    _WalletCardAnimator(
-                      delay: const Duration(milliseconds: 0),
-                      child: _buildWalletMetricTile(
-                        width: tileWidth,
-                        title: context.l10n.gcashWallet,
-                        value: _dashboardRepository.formatCurrency(
-                          dashboard.walletBalance,
-                        ),
-                        caption: context.l10n.availableBalance,
-                        icon: Icons.account_balance_wallet_rounded,
-                        accentColor: AppColors.primary,
-                        onTap: () => _openWalletPerspectiveHistory(
-                          HistoryWalletPerspective.gcash,
-                        ),
-                      ),
+                _WalletCardAnimator(
+                  delay: const Duration(milliseconds: 0),
+                  child: _buildWalletMetricTile(
+                    width: tileWidth,
+                    title: context.l10n.gcashWallet,
+                    value: _dashboardRepository.formatCurrency(
+                      dashboard.walletBalance,
                     ),
-                    _WalletCardAnimator(
-                      delay: const Duration(milliseconds: 80),
-                      child: _buildWalletMetricTile(
-                        width: tileWidth,
-                        title: context.l10n.mayaWallet,
-                        value: _dashboardRepository.formatCurrency(
-                          dashboard.mayaWalletBalance,
-                        ),
-                        caption: context.l10n.availableBalance,
-                        icon: Icons.account_balance_rounded,
-                        accentColor: AppColors.secondary,
-                        onTap: () => _openWalletPerspectiveHistory(
-                          HistoryWalletPerspective.maya,
-                        ),
-                      ),
+                    caption: context.l10n.availableBalance,
+                    icon: Icons.account_balance_wallet_rounded,
+                    accentColor: AppColors.primary,
+                    onTap: () => _openWalletPerspectiveHistory(
+                      HistoryWalletPerspective.gcash,
                     ),
-                    _WalletCardAnimator(
-                      delay: const Duration(milliseconds: 160),
-                      child: _buildWalletMetricTile(
-                        width: tileWidth,
-                        title: context.l10n.onHandCash,
-                        value: _dashboardRepository.formatCurrency(
-                          dashboard.onHandCash,
-                        ),
-                        caption: context.l10n.physicalCash,
-                        icon: Icons.payments_outlined,
-                        accentColor: AppColors.onHand,
-                        onTap: () => _openWalletPerspectiveHistory(
-                          HistoryWalletPerspective.onHand,
-                        ),
-                      ),
-                    ),
-                    _WalletCardAnimator(
-                      delay: const Duration(milliseconds: 240),
-                      child: _buildWalletMetricTile(
-                        width: tileWidth,
-                        title: context.l10n.chargesEarnings,
-                        value: _dashboardRepository.formatCurrency(
-                          dashboard.remainingWithdrawableTotal,
-                        ),
-                        caption: 'Withdrawable now',
-                        icon: Icons.trending_up_rounded,
-                        accentColor: AppColors.softNavy,
-                        titleMaxLines: 2,
-                        onTap: () => _openChargesEarnings(dashboard),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                _buildTotalFundsTile(context, dashboard),
+                _WalletCardAnimator(
+                  delay: const Duration(milliseconds: 80),
+                  child: _buildWalletMetricTile(
+                    width: tileWidth,
+                    title: context.l10n.mayaWallet,
+                    value: _dashboardRepository.formatCurrency(
+                      dashboard.mayaWalletBalance,
+                    ),
+                    caption: context.l10n.availableBalance,
+                    icon: Icons.account_balance_rounded,
+                    accentColor: AppColors.secondary,
+                    onTap: () => _openWalletPerspectiveHistory(
+                      HistoryWalletPerspective.maya,
+                    ),
+                  ),
+                ),
+                _WalletCardAnimator(
+                  delay: const Duration(milliseconds: 160),
+                  child: _buildWalletMetricTile(
+                    width: constraints.maxWidth,
+                    title: context.l10n.onHandCash,
+                    value: _dashboardRepository.formatCurrency(
+                      dashboard.onHandCash,
+                    ),
+                    caption: context.l10n.physicalCash,
+                    icon: Icons.payments_outlined,
+                    accentColor: AppColors.onHand,
+                    onTap: () => _openWalletPerspectiveHistory(
+                      HistoryWalletPerspective.onHand,
+                    ),
+                  ),
+                ),
               ],
             );
           },
@@ -429,109 +575,260 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildTotalFundsTile(
+  Widget _buildBusinessCashHeroCard(BuildContext context, DashboardSnapshot dashboard) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalBusinessCash = dashboard.businessUsableCash;
+
+    final heroGradient = const LinearGradient(
+      colors: [AppColors.primary, Color(0xFF0F172A)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
+    return Container(
+      key: ref.read(onboardingKeysProvider).topUpButtonKey,
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: heroGradient,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: isDark ? 0.3 : 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'CURRENT BUSINESS CASH',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Active',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _dashboardRepository.formatCurrency(totalBusinessCash),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Available now for business operations',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _onAlertAction('RESTOCK FUNDS'),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('Top-Up'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _onAlertAction('TRANSFER FUNDS'),
+                  icon: const Icon(Icons.compare_arrows_rounded, size: 16),
+                  label: const Text('Transfer'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white30, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChargesEarningsAllocationCard(
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
-    final totalBusinessCash = dashboard.businessUsableCash;
-    final withdrawableEarnings = dashboard.remainingWithdrawableTotal;
-    const accentColor = AppColors.darkNavyTile;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tileBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest;
-    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant.withValues(alpha: 0.4);
-    final totalColor = isDark ? const Color(0xFFF8FAFC) : AppColors.darkNavyTile;
-    final textVarColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+    final withdrawable = dashboard.remainingWithdrawableTotal;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 16, 16, 16),
-        decoration: BoxDecoration(
-          color: tileBg,
-          border: Border(
-            left: BorderSide(color: isDark ? const Color(0xFF94A3B8) : accentColor, width: 4),
-            top: BorderSide(color: borderColor),
-            right: BorderSide(color: borderColor),
-            bottom: BorderSide(color: borderColor),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.onSurface.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    context.l10n.totalFunds,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.trending_up_rounded,
+                  color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Charges & Collected Fees',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Sub-allocation of your wallet balances',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _dashboardRepository.formatCurrency(withdrawable),
                     style: TextStyle(
-                      color: textVarColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                     ),
                   ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Withdrawable Earnings',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.secondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              ElevatedButton(
+                key: ref.read(onboardingKeysProvider).manageEarningsButtonKey,
+                onPressed: () => _openChargesEarnings(dashboard),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFF334155) : AppColors.primary.withValues(alpha: 0.08),
+                  foregroundColor: isDark ? const Color(0xFFF8FAFC) : AppColors.primary,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                ),
+                child: const Text('Manage Earnings'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : accentColor.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.account_balance_rounded,
-                    color: isDark ? const Color(0xFF94A3B8) : accentColor,
-                    size: 15,
+                Expanded(
+                  child: Text(
+                    'Collected fees are already physically inside your GCash, Maya, or On-hand Cash balances.',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _dashboardRepository.formatCurrency(totalBusinessCash),
-                maxLines: 1,
-                style: TextStyle(
-                  color: totalColor,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.l10n.businessCashComputation,
-              style: TextStyle(
-                color: textVarColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              context.l10n.withdrawableEarningsNote(
-                _dashboardRepository.formatCurrency(withdrawableEarnings),
-              ),
-              style: TextStyle(
-                color: textVarColor,
-                fontSize: 10,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

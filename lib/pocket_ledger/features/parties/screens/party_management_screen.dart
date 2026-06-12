@@ -42,7 +42,6 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
   @override
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.of(context).size.width < 380;
-    final isVeryCompact = MediaQuery.of(context).size.width < 340;
     final parties = ref.watch(partiesStreamProvider).value ?? const <Party>[];
     final hasData = parties.isNotEmpty;
     return Scaffold(
@@ -110,31 +109,42 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
           ? null
           : Padding(
               padding: const EdgeInsets.only(bottom: 72),
-              child: isVeryCompact
-                  ? FloatingActionButton(
-                      heroTag: null,
-                      onPressed: _onAddParty,
-                      tooltip: context.l10n.addNewPerson,
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      child: const Icon(Icons.add_rounded, color: Colors.white),
-                    )
-                  : FloatingActionButton.extended(
-                      heroTag: null,
-                      onPressed: _onAddParty,
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      label: Text(
-                        context.l10n.addNewPerson,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _onAddParty,
+                    borderRadius: BorderRadius.circular(28),
+                    child: Tooltip(
+                      message: context.l10n.addNewPerson,
+                      child: const Center(
+                        child: Icon(
+                          Icons.person_add_alt_1_rounded,
                           color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                          size: 24,
                         ),
                       ),
-                      icon: const Icon(Icons.add_rounded, color: Colors.white),
                     ),
+                  ),
+                ),
+              ),
             ),
     );
   }
@@ -275,20 +285,48 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
             ),
             if (!hasActiveSearch) ...[
               const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _onAddParty,
-                icon: const Icon(Icons.add_rounded),
-                label: Text(context.l10n.addNewPerson),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 44),
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.onPrimary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _onAddParty,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            context.l10n.addNewPerson,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -983,32 +1021,64 @@ class _AddPartyDialogState extends ConsumerState<_AddPartyDialog> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: _isSaving ? null : _onAdd,
-                      icon: _isSaving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: _isSaving
+                            ? null
+                            : const LinearGradient(
+                                colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                               ),
-                            )
-                          : const Icon(
-                              Icons.person_add_alt_1_rounded,
-                              size: 16,
-                              color: Colors.white,
+                        color: _isSaving ? Colors.white.withValues(alpha: 0.12) : null,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: _isSaving
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _isSaving ? null : _onAdd,
+                          borderRadius: BorderRadius.circular(14),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _isSaving
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.person_add_alt_1_rounded,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _isSaving ? context.l10n.saving : context.l10n.addParty,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
                             ),
-                      label: Text(
-                        _isSaving ? context.l10n.saving : context.l10n.addParty,
-                        style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
                       ),
                     ),
                   ),

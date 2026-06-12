@@ -1016,8 +1016,12 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
       runningBalanceText = 'Bal: ${_currencyFormat.format(currentBal)}';
     }
 
+    final isDemo = const ['CAP-INITIAL-3D', 'SAMPLE-REF-CASHIN-2D', 'SAMPLE-REF-CASHOUT-1D']
+        .contains(item.rawReference);
+    final displayTitle = isDemo ? '${item.title} (Demo)' : item.title;
+
     return ArchitectActivityTile(
-      title: item.title,
+      title: displayTitle,
       subtitle: _buildTileSubtitle(item),
       supportingText: supportingText,
       amount: amountText,
@@ -1568,7 +1572,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
           amount: (row['amount'] as num).toDouble(),
           tag: row['tag'] as String,
           iconKey: iconKey,
-          createdAt: DateTime.parse(row['created_at'] as String),
+          createdAt: DateTime.parse(row['created_at'] as String).toLocal(),
           ownerMovementType: row['owner_movement_type'] as String?,
           onHandDelta: onHandDelta,
           walletDelta: walletDelta,
@@ -1798,7 +1802,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
     double runningBalance = 0;
     return rows
         .map((row) {
-          final createdAt = DateTime.parse(row['created_at'] as String);
+          final createdAt = DateTime.parse(row['created_at'] as String).toLocal();
           final entryType = row['entry_type'] as String;
           final notes = (row['note'] as String?) ?? '';
           final iconKey = row['icon_key'] as String;
@@ -1868,155 +1872,743 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
     final pdf = pw.Document();
     final l10n = context.l10n;
     final timestamp = DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now());
-    final dateFormat = DateFormat('dd MMM yyyy HH:mm');
+    final dateFormat = DateFormat('MM/dd/yyyy, HH:mm');
 
+    // 1. Calculate stats for the KPI trend percentages
+    double cashInflow = 0;
+    double cashOutflow = 0;
+    double gcashInflow = 0;
+    double gcashOutflow = 0;
+    double mayaInflow = 0;
+    double mayaOutflow = 0;
+    double totalVolume = 0;
+
+    for (final entry in entries) {
+      if (entry.cashChange > 0) cashInflow += entry.cashChange;
+      if (entry.cashChange < 0) cashOutflow += entry.cashChange.abs();
+      if (entry.gcashChange > 0) gcashInflow += entry.gcashChange;
+      if (entry.gcashChange < 0) gcashOutflow += entry.gcashChange.abs();
+      if (entry.mayaChange > 0) mayaInflow += entry.mayaChange;
+      if (entry.mayaChange < 0) mayaOutflow += entry.mayaChange.abs();
+      totalVolume += entry.inflow + entry.outflow;
+    }
+
+    final double cashTrend = (cashInflow + cashOutflow > 0)
+        ? (totals.cashMovement / (cashInflow + cashOutflow)) * 100
+        : 0.0;
+    final double gcashTrend = (gcashInflow + gcashOutflow > 0)
+        ? (totals.gcashMovement / (gcashInflow + gcashOutflow)) * 100
+        : 0.0;
+    final double mayaTrend = (mayaInflow + mayaOutflow > 0)
+        ? (totals.mayaMovement / (mayaInflow + mayaOutflow)) * 100
+        : 0.0;
+    final double feeTrend = (totalVolume > 0)
+        ? (totals.totalCharges / totalVolume) * 100
+        : 0.0;
+
+    // Define colors matching the mockup
+    final darkBgColor = PdfColor.fromHex('#0f172a'); // Slate 900
+
+    // Split transactions for Page 1 and continuation pages
+    // Page 1 displays up to 10 rows
+    final int firstPageLimit = 10;
+    final List<_LedgerExportRow> firstPageEntries = entries.take(firstPageLimit).toList();
+    final List<_LedgerExportRow> remainingEntries = entries.skip(firstPageLimit).toList();
+
+    // Define Page Theme with dark slate background
+    final pageTheme = pw.PageTheme(
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.all(16),
+      buildBackground: (context) => pw.FullPage(
+        ignoreMargins: true,
+        child: pw.Container(color: darkBgColor),
+      ),
+    );
+
+    final int totalPages = 1 + (remainingEntries.isEmpty ? 0 : (remainingEntries.length / 20).ceil());
+
+    // Page 1: Dashboard
     pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(20),
-        build: (_) {
-          return [
-            pw.Text(
-              _pdfSafeText(l10n.walletFlowReport),
-              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 4),
-            pw.Text(
-              '${_pdfSafeText(l10n.periodLabel)}: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
-              style: const pw.TextStyle(fontSize: 11),
-            ),
-            pw.Text(
-              '${_pdfSafeText(l10n.generatedLabel)}: $timestamp',
-              style: const pw.TextStyle(fontSize: 10),
-            ),
-            pw.SizedBox(height: 8),
-            pw.Container(
-              padding: const pw.EdgeInsets.all(8),
-              decoration: pw.BoxDecoration(
-                color: PdfColors.blue50,
-                border: pw.Border.all(color: PdfColors.blue100),
-              ),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
+      pw.Page(
+        pageTheme: pageTheme,
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Header Block
+              _buildPdfDashboardHeader(l10n, beginDate, endDate, timestamp),
+              pw.SizedBox(height: 12),
+
+              // KPI Summary Cards
+              pw.Row(
                 children: [
-                  pw.Text(
-                    _pdfSafeText(l10n.legendTitle),
-                    style: pw.TextStyle(
-                      fontSize: 9,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
+                  _buildPdfKpiCard(
+                    title: 'On-Hand Cash:',
+                    value: _reportSignedCurrency(totals.cashMovement),
+                    trendPercent: cashTrend,
+                    isFeatured: true,
                   ),
-                  pw.SizedBox(height: 2),
-                  pw.Text(
-                    _pdfSafeText(l10n.legendPlusMinus),
-                    style: const pw.TextStyle(fontSize: 8),
+                  pw.SizedBox(width: 10),
+                  _buildPdfKpiCard(
+                    title: 'GCash Net Change:',
+                    value: _reportSignedCurrency(totals.gcashMovement),
+                    trendPercent: gcashTrend,
+                    isFeatured: false,
+                    isGcash: true,
                   ),
-                  pw.Text(
-                    _pdfSafeText(l10n.legendAmountShownNote),
-                    style: const pw.TextStyle(fontSize: 8),
+                  pw.SizedBox(width: 10),
+                  _buildPdfKpiCard(
+                    title: 'Maya Net Change:',
+                    value: _reportSignedCurrency(totals.mayaMovement),
+                    trendPercent: mayaTrend,
+                    isFeatured: false,
+                    isMaya: true,
+                  ),
+                  pw.SizedBox(width: 10),
+                  _buildPdfKpiCard(
+                    title: 'Total Service Fees:',
+                    value: _reportCurrency(totals.totalCharges),
+                    trendPercent: feeTrend,
+                    isFeatured: false,
                   ),
                 ],
               ),
-            ),
-            pw.SizedBox(height: 12),
-            pw.TableHelper.fromTextArray(
-              headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-                fontSize: 9,
+              pw.SizedBox(height: 12),
+
+              // Side-by-Side Analytics Section
+              pw.Expanded(
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                  children: [
+                    // Left Column: Donut Chart
+                    _buildPdfChartCard(totals, entries),
+                    pw.SizedBox(width: 12),
+                    // Right Column: Table
+                    pw.Expanded(
+                      child: _buildPdfTableCard(firstPageEntries, dateFormat, isContinuation: false),
+                    ),
+                  ],
+                ),
               ),
-              headerDecoration: const pw.BoxDecoration(
-                color: PdfColors.blue700,
-              ),
-              cellStyle: const pw.TextStyle(fontSize: 8),
-              cellAlignment: pw.Alignment.centerLeft,
-              headers: [
-                _pdfSafeText(l10n.reportDateTimeLabel),
-                _pdfSafeText(l10n.reportTypeLabel),
-                _pdfSafeText(l10n.walletUsedLabel),
-                _pdfSafeText(l10n.reportAmountLabel),
-                _pdfSafeText(l10n.reportFeeLabel),
-                _pdfSafeText(l10n.reportWalletDeltaLabel),
-                _pdfSafeText(l10n.reportCashDeltaLabel),
-                _pdfSafeText(l10n.reportReferenceLabel),
-                _pdfSafeText(l10n.reportDetailsLabel),
-              ],
-              data: entries
-                  .map(
-                    (entry) => [
-                      dateFormat.format(entry.createdAt),
-                      _pdfSafeText(
-                        entry.entryType == 'owner_movement'
-                            ? l10n.historyOwnerActivityLabel
-                            : l10n.historyTransactionLabel,
-                      ),
-                      _pdfSafeText(
-                        _displayWalletAccountLabel(entry.walletAccount),
-                      ),
-                      _reportCurrency(entry.amountShown),
-                      entry.chargeAmount > 0
-                          ? _reportCurrency(entry.chargeAmount)
-                          : '',
-                      _reportSignedCurrency(entry.walletChange),
-                      _reportSignedCurrency(entry.cashChange),
-                      _pdfSafeText(entry.reference),
-                      _pdfSafeText(entry.title),
-                    ],
-                  )
-                  .toList(growable: false),
-            ),
-            pw.SizedBox(height: 12),
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: PdfColors.grey100,
-                border: pw.Border.all(color: PdfColors.grey400),
-              ),
-              child: pw.Row(
+              pw.SizedBox(height: 8),
+
+              // Footer
+              pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    '${_pdfSafeText(l10n.gcashMovementLabel)}: ${_reportSignedCurrency(totals.gcashMovement)}',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
+                    DateFormat('MMMM dd, yyyy').format(DateTime.now()),
+                    style: pw.TextStyle(color: PdfColor.fromHex('#64748b'), fontSize: 8),
                   ),
                   pw.Text(
-                    '${_pdfSafeText(l10n.mayaMovementLabel)}: ${_reportSignedCurrency(totals.mayaMovement)}',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(
-                    '${_pdfSafeText(l10n.cashOnHandMovementLabel)}: ${_reportSignedCurrency(totals.cashMovement)}',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(
-                    '${_pdfSafeText(l10n.totalFeesPaidLabel)}: ${_reportCurrency(totals.totalCharges)}',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
+                    'Page 1 of $totalPages',
+                    style: pw.TextStyle(color: PdfColor.fromHex('#64748b'), fontSize: 8),
                   ),
                 ],
               ),
-            ),
-            pw.SizedBox(height: 6),
-            pw.Text(
-              '${_pdfSafeText(l10n.feesRoutedLabel)}: ${_pdfSafeText(_formatFeeRoutingSummary(totals))}',
-              style: const pw.TextStyle(fontSize: 9),
-            ),
-          ];
+            ],
+          );
         },
       ),
     );
 
+    // Page 2+: Table continuation
+    if (remainingEntries.isNotEmpty) {
+      final int itemsPerPage = 20;
+      for (int i = 0; i < remainingEntries.length; i += itemsPerPage) {
+        final chunk = remainingEntries.skip(i).take(itemsPerPage).toList();
+        final pageNum = 2 + (i / itemsPerPage).floor();
+
+        pdf.addPage(
+          pw.Page(
+            pageTheme: pageTheme,
+            build: (context) {
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  _buildPdfDashboardHeader(l10n, beginDate, endDate, timestamp, isContinued: true),
+                  pw.SizedBox(height: 12),
+                  pw.Expanded(
+                    child: _buildPdfTableCard(chunk, dateFormat, isContinuation: true),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        DateFormat('MMMM dd, yyyy').format(DateTime.now()),
+                        style: pw.TextStyle(color: PdfColor.fromHex('#64748b'), fontSize: 8),
+                      ),
+                      pw.Text(
+                        'Page $pageNum of $totalPages',
+                        style: pw.TextStyle(color: PdfColor.fromHex('#64748b'), fontSize: 8),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      }
+    }
+
     return pdf.save();
+  }
+
+  pw.Widget _buildPdfDashboardHeader(
+    AppLocalizations l10n,
+    DateTime beginDate,
+    DateTime endDate,
+    String timestamp, {
+    bool isContinued = false,
+  }) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
+      children: [
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              isContinued
+                  ? 'POCKET LEDGER - Business Financial Report (Continued)'
+                  : 'POCKET LEDGER - Business Financial Report',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+              ),
+            ),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              'Period: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
+              style: pw.TextStyle(
+                fontSize: 9,
+                color: PdfColor.fromHex('#94a3b8'),
+              ),
+            ),
+          ],
+        ),
+        // Pocket Ledger Logo
+        pw.Row(
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            pw.Container(
+              width: 18,
+              height: 15,
+              decoration: const pw.BoxDecoration(
+                color: PdfColors.blue600,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
+              ),
+              child: pw.Center(
+                child: pw.Container(
+                  width: 8,
+                  height: 4,
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.teal400,
+                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(1)),
+                  ),
+                ),
+              ),
+            ),
+            pw.SizedBox(width: 6),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                pw.Text(
+                  'Pocket',
+                  style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 10,
+                  ),
+                ),
+                pw.Text(
+                  'Ledger',
+                  style: pw.TextStyle(
+                    color: PdfColors.blue400,
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 7.5,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _buildPdfKpiCard({
+    required String title,
+    required String value,
+    required double trendPercent,
+    required bool isFeatured,
+    bool isGcash = false,
+    bool isMaya = false,
+  }) {
+    final cardBgColor = isFeatured
+        ? null
+        : PdfColor.fromHex('#1e293b');
+    final cardBorderColor = isFeatured
+        ? null
+        : PdfColor.fromHex('#334155');
+    final titleTextColor = isFeatured
+        ? PdfColor.fromHex('#e2e8f0')
+        : PdfColor.fromHex('#94a3b8');
+    final valueTextColor = PdfColors.white;
+
+    final String trendSign = trendPercent > 0 ? '+' : '';
+    final String trendArrow = trendPercent > 0 ? '^' : (trendPercent < 0 ? 'v' : '-');
+    final String trendText = '$trendSign${trendPercent.toStringAsFixed(1)}% $trendArrow';
+
+    final PdfColor trendColor = isFeatured
+        ? PdfColor.fromHex('#e2e8f0')
+        : (trendPercent > 0
+            ? PdfColor.fromHex('#4ade80')
+            : (trendPercent < 0 ? PdfColor.fromHex('#fca5a5') : PdfColor.fromHex('#94a3b8')));
+
+    pw.Widget iconWidget;
+    if (isFeatured) {
+      iconWidget = pw.Container(
+        width: 28,
+        height: 28,
+        decoration: pw.BoxDecoration(
+          color: PdfColor.fromHex('#ffffff33'),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+        ),
+        child: pw.Center(
+          child: pw.Container(
+            width: 14,
+            height: 8,
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.white, width: 1),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(1)),
+            ),
+            child: pw.Center(
+              child: pw.Container(
+                width: 4,
+                height: 4,
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.white,
+                  shape: pw.BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else if (isGcash) {
+      iconWidget = pw.Container(
+        width: 28,
+        height: 28,
+        decoration: const pw.BoxDecoration(
+          color: PdfColors.blue800,
+          shape: pw.BoxShape.circle,
+        ),
+        child: pw.Center(
+          child: pw.Text(
+            'G',
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+    } else if (isMaya) {
+      iconWidget = pw.Container(
+        width: 28,
+        height: 28,
+        decoration: const pw.BoxDecoration(
+          color: PdfColors.teal800,
+          shape: pw.BoxShape.circle,
+        ),
+        child: pw.Center(
+          child: pw.Text(
+            'm',
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+    } else {
+      iconWidget = pw.Container(
+        width: 28,
+        height: 28,
+        decoration: pw.BoxDecoration(
+          color: PdfColor.fromHex('#475569'),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+        ),
+        child: pw.Center(
+          child: pw.Text(
+            '%',
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return pw.Expanded(
+      child: pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: pw.BoxDecoration(
+          color: cardBgColor,
+          gradient: isFeatured
+              ? pw.LinearGradient(
+                  colors: [PdfColor.fromHex('#22c55e'), PdfColor.fromHex('#059669')],
+                  begin: pw.Alignment.topLeft,
+                  end: pw.Alignment.bottomRight,
+                )
+              : null,
+          border: cardBorderColor != null ? pw.Border.all(color: cardBorderColor, width: 1) : null,
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+        ),
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            iconWidget,
+            pw.SizedBox(width: 8),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                mainAxisSize: pw.MainAxisSize.min,
+                children: [
+                  pw.Text(
+                    title,
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      color: titleTextColor,
+                      fontWeight: pw.FontWeight.normal,
+                    ),
+                  ),
+                  pw.SizedBox(height: 1),
+                  pw.Text(
+                    value,
+                    style: pw.TextStyle(
+                      fontSize: 12.5,
+                      color: valueTextColor,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        'KPI summary',
+                        style: pw.TextStyle(
+                          fontSize: 7,
+                          color: isFeatured ? PdfColor.fromHex('#cbd5e1') : PdfColor.fromHex('#64748b'),
+                        ),
+                      ),
+                      pw.Text(
+                        trendText,
+                        style: pw.TextStyle(
+                          fontSize: 7,
+                          color: trendColor,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfChartCard(_LedgerTotals totals, List<_LedgerExportRow> entries) {
+    final absGcash = totals.gcashMovement.abs();
+    final absMaya = totals.mayaMovement.abs();
+    final absCash = totals.cashMovement.abs();
+    final totalVol = absGcash + absMaya + absCash;
+
+    final double gcashPct = totalVol > 0 ? (absGcash / totalVol) * 100 : 0.0;
+    final double mayaPct = totalVol > 0 ? (absMaya / totalVol) * 100 : 0.0;
+    final double cashPct = totalVol > 0 ? (absCash / totalVol) * 100 : 0.0;
+
+    return pw.Container(
+      width: 220,
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromHex('#1e293b'),
+        border: pw.Border.all(color: PdfColor.fromHex('#334155'), width: 1),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'Payment Method Share',
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 10,
+            ),
+          ),
+          pw.SizedBox(height: 12),
+          pw.Expanded(
+            child: pw.Center(
+              child: totalVol <= 0
+                  ? pw.Text(
+                      'No wallet movements',
+                      style: pw.TextStyle(color: PdfColor.fromHex('#94a3b8'), fontSize: 8),
+                    )
+                  : pw.SizedBox(
+                      width: 110,
+                      height: 110,
+                      child: pw.Chart(
+                        grid: pw.PieGrid(startAngle: 1.5),
+                        datasets: [
+                          if (absGcash > 0)
+                            pw.PieDataSet(
+                              legend: '${gcashPct.toStringAsFixed(0)}%',
+                              value: absGcash,
+                              color: PdfColor.fromHex('#2563eb'),
+                              innerRadius: 36.0,
+                              legendStyle: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 9,
+                              ),
+                              legendPosition: pw.PieLegendPosition.inside,
+                            ),
+                          if (absMaya > 0)
+                            pw.PieDataSet(
+                              legend: '${mayaPct.toStringAsFixed(0)}%',
+                              value: absMaya,
+                              color: PdfColor.fromHex('#10b981'),
+                              innerRadius: 36.0,
+                              legendStyle: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 9,
+                              ),
+                              legendPosition: pw.PieLegendPosition.inside,
+                            ),
+                          if (absCash > 0)
+                            pw.PieDataSet(
+                              legend: '${cashPct.toStringAsFixed(0)}%',
+                              value: absCash,
+                              color: PdfColor.fromHex('#4ade80'),
+                              innerRadius: 36.0,
+                              legendStyle: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 9,
+                              ),
+                              legendPosition: pw.PieLegendPosition.inside,
+                            ),
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+          pw.SizedBox(height: 12),
+          if (totalVol > 0)
+            pw.Column(
+              children: [
+                if (absGcash > 0)
+                  _buildLegendRow('GCash', '${gcashPct.toStringAsFixed(0)}%', PdfColor.fromHex('#2563eb')),
+                if (absMaya > 0)
+                  _buildLegendRow('Maya', '${mayaPct.toStringAsFixed(0)}%', PdfColor.fromHex('#10b981')),
+                if (absCash > 0)
+                  _buildLegendRow('Cash On-Hand', '${cashPct.toStringAsFixed(0)}%', PdfColor.fromHex('#4ade80')),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _buildLegendRow(String label, String value, PdfColor color) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Row(
+            children: [
+              pw.Container(
+                width: 7,
+                height: 7,
+                decoration: pw.BoxDecoration(
+                  color: color,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+                ),
+              ),
+              pw.SizedBox(width: 6),
+              pw.Text(
+                label,
+                style: pw.TextStyle(
+                  color: PdfColor.fromHex('#cbd5e1'),
+                  fontSize: 7.5,
+                ),
+              ),
+            ],
+          ),
+          pw.Row(
+            children: [
+              pw.Text(
+                value,
+                style: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 7.5,
+                ),
+              ),
+              pw.SizedBox(width: 4),
+              pw.Container(
+                width: 3,
+                height: 3,
+                decoration: pw.BoxDecoration(
+                  color: color,
+                  shape: pw.BoxShape.circle,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfTableCard(
+    List<_LedgerExportRow> entries,
+    DateFormat dateFormat, {
+    required bool isContinuation,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromHex('#1e293b'),
+        border: pw.Border.all(color: PdfColor.fromHex('#334155'), width: 1),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            isContinuation ? 'Transaction History Log (Continued)' : 'Transaction History Log',
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 10,
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Table(
+            columnWidths: const {
+              0: pw.FixedColumnWidth(80),
+              1: pw.FixedColumnWidth(65),
+              2: pw.FixedColumnWidth(60),
+              3: pw.FlexColumnWidth(),
+              4: pw.FixedColumnWidth(85),
+              5: pw.FixedColumnWidth(55),
+            },
+            children: [
+              pw.TableRow(
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromHex('#0f172a'),
+                  borderRadius: const pw.BorderRadius.only(
+                    topLeft: pw.Radius.circular(6),
+                    topRight: pw.Radius.circular(6),
+                  ),
+                ),
+                children: [
+                  _buildPdfTableHeader('Date/Time'),
+                  _buildPdfTableHeader('Transaction ID'),
+                  _buildPdfTableHeader('Money Flow'),
+                  _buildPdfTableHeader('Description'),
+                  _buildPdfTableHeader('Amount'),
+                  _buildPdfTableHeader('Status'),
+                ],
+              ),
+              ...entries.map((entry) {
+                final isOutflow = entry.outflow > 0;
+                final rowBgColor = isOutflow
+                    ? PdfColor.fromHex('#2d1a1a')
+                    : PdfColor.fromHex('#13251e');
+                final rowTextColor = isOutflow
+                    ? PdfColor.fromHex('#fca5a5')
+                    : PdfColor.fromHex('#86efac');
+
+                final typeText = isOutflow ? 'Money Out' : 'Money In';
+                final prefix = isOutflow ? '-' : '+';
+                final txId = entry.reference.isNotEmpty ? entry.reference : '-';
+
+                return pw.TableRow(
+                  decoration: pw.BoxDecoration(color: rowBgColor),
+                  children: [
+                    _buildPdfTableCell(dateFormat.format(entry.createdAt), rowTextColor),
+                    _buildPdfTableCell(txId, rowTextColor),
+                    _buildPdfTableCell(typeText, rowTextColor, fontWeight: pw.FontWeight.bold),
+                    _buildPdfTableCell(_pdfSafeText(entry.title), rowTextColor),
+                    _buildPdfTableCell(
+                      '$prefix${_reportCurrency(entry.amountShown)}',
+                      rowTextColor,
+                      fontWeight: pw.FontWeight.bold,
+                      alignRight: true,
+                    ),
+                    _buildPdfTableCell('Completed', rowTextColor),
+                  ],
+                );
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfTableHeader(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.white,
+          fontSize: 7.5,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfTableCell(
+    String text,
+    PdfColor textColor, {
+    pw.FontWeight fontWeight = pw.FontWeight.normal,
+    bool alignRight = false,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      child: pw.Container(
+        alignment: alignRight ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(
+            color: textColor,
+            fontWeight: fontWeight,
+            fontSize: 7,
+          ),
+        ),
+      ),
+    );
   }
 
   List<int> _buildExcelReport({
@@ -2027,110 +2619,251 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
   }) {
     final excel = ex.Excel.createExcel();
     final sheet = excel[context.l10n.walletFlowSheetName];
-    final dateFormat = DateFormat('dd MMM yyyy HH:mm');
+    final dateFormat = DateFormat('MM/dd/yyyy, HH:mm');
 
-    sheet.appendRow([
-      ex.TextCellValue(context.l10n.walletFlowReport),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-    ]);
-    sheet.appendRow([
-      ex.TextCellValue(
-        '${context.l10n.periodLabel}: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}',
-      ),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-    ]);
-    sheet.appendRow([
-      ex.TextCellValue(
-        '${context.l10n.generatedLabel}: ${DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now())}',
-      ),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-    ]);
-    sheet.appendRow([
-      ex.TextCellValue(context.l10n.legendTitle),
-      ex.TextCellValue(context.l10n.legendPlusMinus),
-      ex.TextCellValue(context.l10n.legendAmountShownNote),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-    ]);
-    sheet.appendRow([
-      ex.TextCellValue(context.l10n.reportDateTimeLabel),
-      ex.TextCellValue(context.l10n.reportTypeLabel),
-      ex.TextCellValue(context.l10n.walletUsedLabel),
-      ex.TextCellValue(context.l10n.reportAmountLabel),
-      ex.TextCellValue(context.l10n.reportFeeLabel),
-      ex.TextCellValue(context.l10n.reportWalletDeltaLabel),
-      ex.TextCellValue(context.l10n.reportCashDeltaLabel),
-      ex.TextCellValue(context.l10n.reportReferenceLabel),
-      ex.TextCellValue(context.l10n.reportDetailsLabel),
-    ]);
+    // Create styles using the compiler-verified excelColor extension method
+    final titleStyle = ex.CellStyle(
+      bold: true,
+      fontSize: 14,
+      fontColorHex: 'FFFFFFFF'.excelColor,
+      backgroundColorHex: 'FF0F172A'.excelColor, // Slate 900
+    );
+    final subtitleStyle = ex.CellStyle(
+      fontSize: 10,
+      fontColorHex: 'FF94A3B8'.excelColor, // Slate 400
+      backgroundColorHex: 'FF0F172A'.excelColor, // Slate 900
+    );
+    final cardHeaderStyle = ex.CellStyle(
+      bold: true,
+      fontSize: 9,
+      fontColorHex: 'FFFFFFFF'.excelColor,
+      backgroundColorHex: 'FF1E293B'.excelColor, // Slate 800
+    );
+    final cashCardHeaderStyle = ex.CellStyle(
+      bold: true,
+      fontSize: 9,
+      fontColorHex: 'FFFFFFFF'.excelColor,
+      backgroundColorHex: 'FF10B981'.excelColor, // Emerald 500
+    );
+    final cardValueStyle = ex.CellStyle(
+      bold: true,
+      fontSize: 12,
+      fontColorHex: 'FFFFFFFF'.excelColor,
+      backgroundColorHex: 'FF1E293B'.excelColor, // Slate 800
+    );
+    final cashCardValueStyle = ex.CellStyle(
+      bold: true,
+      fontSize: 12,
+      fontColorHex: 'FFFFFFFF'.excelColor,
+      backgroundColorHex: 'FF10B981'.excelColor, // Emerald 500
+    );
+    final cardSubStyle = ex.CellStyle(
+      fontSize: 8,
+      fontColorHex: 'FF94A3B8'.excelColor, // Slate 400
+      backgroundColorHex: 'FF1E293B'.excelColor, // Slate 800
+    );
+    final cashCardSubStyle = ex.CellStyle(
+      fontSize: 8,
+      fontColorHex: 'FFD1FAE5'.excelColor, // Light green
+      backgroundColorHex: 'FF10B981'.excelColor, // Emerald 500
+    );
+    final tableHeaderStyle = ex.CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: 'FFFFFFFF'.excelColor,
+      backgroundColorHex: 'FF334155'.excelColor, // Slate 700
+    );
+    final inflowStyle = ex.CellStyle(
+      fontSize: 9,
+      fontColorHex: 'FF065F46'.excelColor, // Dark green
+      backgroundColorHex: 'FFD1FAE5'.excelColor, // Light green
+    );
+    final outflowStyle = ex.CellStyle(
+      fontSize: 9,
+      fontColorHex: 'FF991B1B'.excelColor, // Dark red
+      backgroundColorHex: 'FFFEE2E2'.excelColor, // Light red
+    );
+    final legendLabelStyle = ex.CellStyle(
+      fontSize: 9,
+      fontColorHex: 'FFCBD5E1'.excelColor, // Slate 300
+      backgroundColorHex: 'FF1E293B'.excelColor, // Slate 800
+    );
+    final legendValueStyle = ex.CellStyle(
+      bold: true,
+      fontSize: 9,
+      fontColorHex: 'FFFFFFFF'.excelColor,
+      backgroundColorHex: 'FF1E293B'.excelColor, // Slate 800
+    );
+    final totalsStyle = ex.CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: 'FF0F172A'.excelColor, // Slate 900
+      backgroundColorHex: 'FFF1F5F9'.excelColor, // Slate 100
+    );
+
+    // Calculate stats for the KPI trend percentages (same as PDF)
+    double cashInflow = 0;
+    double cashOutflow = 0;
+    double gcashInflow = 0;
+    double gcashOutflow = 0;
+    double mayaInflow = 0;
+    double mayaOutflow = 0;
+    double totalVolume = 0;
 
     for (final entry in entries) {
-      sheet.appendRow([
-        ex.TextCellValue(dateFormat.format(entry.createdAt)),
-        ex.TextCellValue(
-          entry.entryType == 'owner_movement'
-              ? context.l10n.historyOwnerActivityLabel
-              : context.l10n.historyTransactionLabel,
-        ),
-        ex.TextCellValue(_displayWalletAccountLabel(entry.walletAccount)),
-        ex.TextCellValue(_reportCurrency(entry.amountShown)),
-        ex.TextCellValue(
-          entry.chargeAmount > 0 ? _reportCurrency(entry.chargeAmount) : '',
-        ),
-        ex.TextCellValue(_reportSignedCurrency(entry.walletChange)),
-        ex.TextCellValue(_reportSignedCurrency(entry.cashChange)),
-        ex.TextCellValue(entry.reference),
-        ex.TextCellValue(entry.title),
-      ]);
+      if (entry.cashChange > 0) cashInflow += entry.cashChange;
+      if (entry.cashChange < 0) cashOutflow += entry.cashChange.abs();
+      if (entry.gcashChange > 0) gcashInflow += entry.gcashChange;
+      if (entry.gcashChange < 0) gcashOutflow += entry.gcashChange.abs();
+      if (entry.mayaChange > 0) mayaInflow += entry.mayaChange;
+      if (entry.mayaChange < 0) mayaOutflow += entry.mayaChange.abs();
+      totalVolume += entry.inflow + entry.outflow;
     }
 
-    sheet.appendRow([
-      ex.TextCellValue(context.l10n.gcashMovementLabel),
-      ex.TextCellValue(_reportSignedCurrency(totals.gcashMovement)),
-      ex.TextCellValue(context.l10n.mayaMovementLabel),
-      ex.TextCellValue(_reportSignedCurrency(totals.mayaMovement)),
-      ex.TextCellValue(context.l10n.cashOnHandMovementLabel),
-      ex.TextCellValue(_reportSignedCurrency(totals.cashMovement)),
-      ex.TextCellValue(context.l10n.totalFeesPaidLabel),
-      ex.TextCellValue(_reportCurrency(totals.totalCharges)),
-      ex.TextCellValue(''),
-    ]);
-    sheet.appendRow([
-      ex.TextCellValue(context.l10n.feesRoutedLabel),
-      ex.TextCellValue(_formatFeeRoutingSummary(totals)),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-      ex.TextCellValue(''),
-    ]);
+    final double cashTrend = (cashInflow + cashOutflow > 0)
+        ? (totals.cashMovement / (cashInflow + cashOutflow)) * 100
+        : 0.0;
+    final double gcashTrend = (gcashInflow + gcashOutflow > 0)
+        ? (totals.gcashMovement / (gcashInflow + gcashOutflow)) * 100
+        : 0.0;
+    final double mayaTrend = (mayaInflow + mayaOutflow > 0)
+        ? (totals.mayaMovement / (mayaInflow + mayaOutflow)) * 100
+        : 0.0;
+    final double feeTrend = (totalVolume > 0)
+        ? (totals.totalCharges / totalVolume) * 100
+        : 0.0;
+
+    String getTrendText(double trendPercent) {
+      final String trendSign = trendPercent > 0 ? '+' : '';
+      final String trendArrow = trendPercent > 0 ? '^' : (trendPercent < 0 ? 'v' : '-');
+      return '$trendSign${trendPercent.toStringAsFixed(1)}% $trendArrow';
+    }
+
+    // Payment method share calculation
+    final absGcash = totals.gcashMovement.abs();
+    final absMaya = totals.mayaMovement.abs();
+    final absCash = totals.cashMovement.abs();
+    final totalVol = absGcash + absMaya + absCash;
+
+    final double gcashPct = totalVol > 0 ? (absGcash / totalVol) * 100 : 0.0;
+    final double mayaPct = totalVol > 0 ? (absMaya / totalVol) * 100 : 0.0;
+    final double cashPct = totalVol > 0 ? (absCash / totalVol) * 100 : 0.0;
+
+    void setCell(int col, int row, ex.CellValue value, ex.CellStyle style) {
+      final cell = sheet.cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
+      cell.value = value;
+      cell.cellStyle = style;
+    }
+
+    // 1. Header block
+    for (int col = 0; col < 9; col++) {
+      setCell(col, 0, ex.TextCellValue(col == 0 ? 'POCKET LEDGER - Business Financial Report' : ''), titleStyle);
+      setCell(col, 1, ex.TextCellValue(col == 0 ? 'Period: ${_fullDateFormat.format(beginDate)} - ${_fullDateFormat.format(endDate)}' : ''), subtitleStyle);
+      setCell(col, 2, ex.TextCellValue(col == 0 ? 'Generated: ${DateFormat('dd MMM yyyy hh:mm a').format(DateTime.now())}' : ''), subtitleStyle);
+    }
+
+    // 2. KPI Cards Row (Row 4-6)
+    // Card 1: On-Hand Cash (A-B)
+    setCell(0, 4, ex.TextCellValue('On-Hand Cash:'), cashCardHeaderStyle);
+    setCell(1, 4, ex.TextCellValue(''), cashCardHeaderStyle);
+    setCell(0, 5, ex.TextCellValue(_reportSignedCurrency(totals.cashMovement)), cashCardValueStyle);
+    setCell(1, 5, ex.TextCellValue(''), cashCardValueStyle);
+    setCell(0, 6, ex.TextCellValue('KPI summary  ${getTrendText(cashTrend)}'), cashCardSubStyle);
+    setCell(1, 6, ex.TextCellValue(''), cashCardSubStyle);
+
+    // Card 2: GCash Net Change (D-E)
+    setCell(3, 4, ex.TextCellValue('GCash Net Change:'), cardHeaderStyle);
+    setCell(4, 4, ex.TextCellValue(''), cardHeaderStyle);
+    setCell(3, 5, ex.TextCellValue(_reportSignedCurrency(totals.gcashMovement)), cardValueStyle);
+    setCell(4, 5, ex.TextCellValue(''), cardValueStyle);
+    setCell(3, 6, ex.TextCellValue('KPI summary  ${getTrendText(gcashTrend)}'), cardSubStyle);
+    setCell(4, 6, ex.TextCellValue(''), cardSubStyle);
+
+    // Card 3: Maya Net Change (F-G)
+    setCell(5, 4, ex.TextCellValue('Maya Net Change:'), cardHeaderStyle);
+    setCell(6, 4, ex.TextCellValue(''), cardHeaderStyle);
+    setCell(5, 5, ex.TextCellValue(_reportSignedCurrency(totals.mayaMovement)), cardValueStyle);
+    setCell(6, 5, ex.TextCellValue(''), cardValueStyle);
+    setCell(5, 6, ex.TextCellValue('KPI summary  ${getTrendText(mayaTrend)}'), cardSubStyle);
+    setCell(6, 6, ex.TextCellValue(''), cardSubStyle);
+
+    // Card 4: Total Service Fees (H-I)
+    setCell(7, 4, ex.TextCellValue('Total Service Fees:'), cardHeaderStyle);
+    setCell(8, 4, ex.TextCellValue(''), cardHeaderStyle);
+    setCell(7, 5, ex.TextCellValue(_reportCurrency(totals.totalCharges)), cardValueStyle);
+    setCell(8, 5, ex.TextCellValue(''), cardValueStyle);
+    setCell(7, 6, ex.TextCellValue('KPI summary  ${getTrendText(feeTrend)}'), cardSubStyle);
+    setCell(8, 6, ex.TextCellValue(''), cardSubStyle);
+
+    // 3. Side-by-Side Analytics Section
+    // Row 8 Header Row
+    setCell(0, 8, ex.TextCellValue('Payment Method Share'), cardHeaderStyle);
+    setCell(1, 8, ex.TextCellValue(''), cardHeaderStyle);
+
+    setCell(3, 8, ex.TextCellValue('Date/Time'), tableHeaderStyle);
+    setCell(4, 8, ex.TextCellValue('Transaction ID'), tableHeaderStyle);
+    setCell(5, 8, ex.TextCellValue('Money Flow'), tableHeaderStyle);
+    setCell(6, 8, ex.TextCellValue('Description'), tableHeaderStyle);
+    setCell(7, 8, ex.TextCellValue('Amount'), tableHeaderStyle);
+    setCell(8, 8, ex.TextCellValue('Status'), tableHeaderStyle);
+
+    // Row 9, 10, 11: Left Legend
+    setCell(0, 9, ex.TextCellValue('GCash'), legendLabelStyle);
+    setCell(1, 9, ex.TextCellValue('${gcashPct.toStringAsFixed(0)}%'), legendValueStyle);
+
+    setCell(0, 10, ex.TextCellValue('Maya'), legendLabelStyle);
+    setCell(1, 10, ex.TextCellValue('${mayaPct.toStringAsFixed(0)}%'), legendValueStyle);
+
+    setCell(0, 11, ex.TextCellValue('Cash On-Hand'), legendLabelStyle);
+    setCell(1, 11, ex.TextCellValue('${cashPct.toStringAsFixed(0)}%'), legendValueStyle);
+
+    // Fill remaining rows of Left Column with blank space or default cell style
+    for (int r = 12; r < 9 + entries.length; r++) {
+      setCell(0, r, ex.TextCellValue(''), legendLabelStyle);
+      setCell(1, r, ex.TextCellValue(''), legendLabelStyle);
+    }
+
+    // Right Column transaction log rows (starting at Row 9)
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final r = 9 + i;
+      final isOutflow = entry.outflow > 0;
+      final style = isOutflow ? outflowStyle : inflowStyle;
+      final flowText = isOutflow ? 'Money Out' : 'Money In';
+      final txId = entry.reference.isNotEmpty ? entry.reference : '-';
+      final displayAmount = isOutflow ? -entry.amountShown : entry.amountShown;
+
+      setCell(3, r, ex.TextCellValue(dateFormat.format(entry.createdAt)), style);
+      setCell(4, r, ex.TextCellValue(txId), style);
+      setCell(5, r, ex.TextCellValue(flowText), style);
+      setCell(6, r, ex.TextCellValue(entry.title), style);
+      setCell(7, r, ex.DoubleCellValue(displayAmount), style);
+      setCell(8, r, ex.TextCellValue('Completed'), style);
+    }
+
+    // 4. Totals Row at the bottom of Right Table
+    final rTotals = 9 + entries.length;
+    setCell(3, rTotals, ex.TextCellValue(''), totalsStyle);
+    setCell(4, rTotals, ex.TextCellValue(''), totalsStyle);
+    setCell(5, rTotals, ex.TextCellValue(''), totalsStyle);
+    setCell(6, rTotals, ex.TextCellValue('Net Business Change:'), totalsStyle);
+    setCell(7, rTotals, ex.DoubleCellValue(totals.cashMovement + totals.gcashMovement + totals.mayaMovement), totalsStyle);
+    setCell(8, rTotals, ex.TextCellValue(''), totalsStyle);
+
+    // 5. Fee Destination summary row below totals
+    final rFeeRouting = rTotals + 2;
+    setCell(3, rFeeRouting, ex.TextCellValue('Fee Destination:'), totalsStyle);
+    setCell(4, rFeeRouting, ex.TextCellValue(_formatFeeRoutingSummary(totals)), totalsStyle);
+    setCell(5, rFeeRouting, ex.TextCellValue(''), totalsStyle);
+    setCell(6, rFeeRouting, ex.TextCellValue(''), totalsStyle);
+    setCell(7, rFeeRouting, ex.TextCellValue(''), totalsStyle);
+    setCell(8, rFeeRouting, ex.TextCellValue(''), totalsStyle);
+
+    // Set human-readable column widths to avoid cell truncation
+    final colWidths = [18.0, 12.0, 4.0, 18.0, 16.0, 14.0, 25.0, 15.0, 12.0];
+    for (var col = 0; col < colWidths.length; col++) {
+      sheet.setColumnWidth(col, colWidths[col]);
+    }
 
     final bytes = excel.encode();
     if (bytes == null) {
@@ -2216,7 +2949,10 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
   }
 
   String _reportCurrency(double amount) {
-    return 'PHP ${amount.toStringAsFixed(2)}';
+    final parts = amount.toStringAsFixed(2).split('.');
+    final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+    final formattedInt = parts[0].replaceAllMapped(reg, (Match m) => '${m[1]},');
+    return 'PHP $formattedInt.${parts[1]}';
   }
 
   String _reportSignedCurrency(double amount) {

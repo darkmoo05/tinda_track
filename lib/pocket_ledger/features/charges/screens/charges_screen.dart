@@ -233,15 +233,39 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
       ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 72),
-        child: FloatingActionButton.extended(
-          onPressed: () => _showAddBracketBottomSheet(context),
-          backgroundColor: AppColors.primary,
-          icon: const Icon(Icons.add_rounded, color: Colors.white),
-          label: Text(
-            context.l10n.addNewBracket,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _showAddBracketBottomSheet(context),
+              borderRadius: BorderRadius.circular(28),
+              child: Tooltip(
+                message: context.l10n.addNewBracket,
+                child: const Center(
+                  child: Icon(
+                    Icons.add_box_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -513,27 +537,50 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () async {
-                        await _addBracket();
-                        if (_lowerBoundController.text.isEmpty) {
-                          if (context.mounted) {
-                            Navigator.of(context).pop();
-                          }
-                        }
-                      },
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: activeColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: _selectedWalletPrefix == 'maya'
+                              ? [activeColor, const Color(0xFF059669)]
+                              : [activeColor, const Color(0xFF1D4ED8)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: activeColor.withValues(alpha: 0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        context.l10n.addNewBracket.toUpperCase(),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () async {
+                            await _addBracket();
+                            if (_lowerBoundController.text.isEmpty) {
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                              }
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: Center(
+                              child: Text(
+                                context.l10n.addNewBracket.toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
