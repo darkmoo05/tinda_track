@@ -563,7 +563,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get movements => 'Wallet History';
 
   @override
-  String get walletHistorySubtitle => 'Track GCash, Maya, and cash movement.';
+  String get walletHistorySubtitle => 'Track GCash, Maya, and cash movements.';
 
   @override
   String get reports => 'Download Report';
@@ -632,7 +632,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your saved transactions and owner activity will appear here.';
 
   @override
-  String get searchAccountRefParty => 'Search by account, ref no., or note';
+  String get searchAccountRefParty => 'Search by account, ref no.';
 
   @override
   String get beginningDate => 'From date';
@@ -1669,4 +1669,93 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scanOrTypeSerial => 'Scan or type a serial number to add.';
+
+  @override
+  String get businessTypeRetail => 'Sari-Sari / Retail';
+
+  @override
+  String get businessTypeFoodService => 'Carinderia / Food Service';
+
+  @override
+  String get businessTypeAutoParts => 'Auto Shop / Services';
+
+  @override
+  String get businessTypeHardware => 'Hardware Store';
+
+  @override
+  String get businessTypeMarketplace => 'Public Market Stall';
+
+  @override
+  String get businessTypeGeneral => 'General / Other';
+
+  @override
+  String get showPassword => 'Show Password';
+
+  @override
+  String get hidePassword => 'Hide Password';
+
+  @override
+  String get usernameValidator =>
+      'Username must be at least 4 characters and contain only letters and numbers';
+
+  @override
+  String get passwordValidator => 'Password must be at least 6 characters';
+
+  @override
+  String get authErrorConnection =>
+      'Cannot connect to the server. Please check your internet connection.';
+
+  @override
+  String get authErrorTimeout =>
+      'Connection timed out. Please try again later.';
+
+  @override
+  String get authErrorInvalidCredentials => 'Incorrect username or password.';
+
+  @override
+  String get authErrorUsernameTaken =>
+      'This username is already taken. Please try another one.';
+
+  @override
+  String get authErrorGeneric => 'Authentication failed. Please try again.';
+
+  @override
+  String get tutorialWelcomeTitlePocketLedger => 'Welcome to PocketLedger!';
+
+  @override
+  String get tutorialWelcomeDescPocketLedger =>
+      'Let\'s take a quick 1-minute tour to see how to track your cash drawer and digital wallets (GCash/Maya) easily!';
+
+  @override
+  String get tutorialCashTitle => 'Current Business Cash';
+
+  @override
+  String get tutorialCashDesc =>
+      'This shows the total money you have available to run your shop. It combines your GCash, Maya, and physical On-hand Cash, minus any personal expenses you withdrew.';
+
+  @override
+  String get tutorialWalletsTitle => 'GCash, Maya & On-hand Cash';
+
+  @override
+  String get tutorialWalletsDesc =>
+      'GCash and Maya are digital money in your phone. On-hand Cash is the physical cash in your drawer. When a customer pays you cash to cash-in, your GCash goes down, but your cash drawer goes up!';
+
+  @override
+  String get tutorialSampleTitlePocketLedger => 'See it in Action!';
+
+  @override
+  String get tutorialSampleDescPocketLedger =>
+      'Would you like to pre-populate a sample transaction (e.g. ₱100 GCash Cash-In with a ₱10 fee) to see how the dashboard, charts, and collected fees update instantly?';
+
+  @override
+  String get addSampleDataButton => 'Add Sample Transaction';
+
+  @override
+  String get startEmptyButton => 'Start Fresh (Empty)';
+
+  @override
+  String get nextButton => 'Next';
+
+  @override
+  String get skipButton => 'Skip';
 }

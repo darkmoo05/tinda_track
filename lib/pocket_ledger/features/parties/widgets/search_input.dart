@@ -13,22 +13,28 @@ class ArchitectSearchInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFEEEEF0), // Matching the gray from screenshot
+        color: isDark ? AppColors.darkIndigo : AppColors.lightGrey,
         borderRadius: BorderRadius.circular(12),
+        border: isDark ? Border.all(color: const Color(0xFF1E293B)) : null,
       ),
       child: TextField(
         onChanged: onChanged,
+        style: TextStyle(
+          color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+          fontSize: 14,
+        ),
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: const TextStyle(
-            color: AppColors.onSurfaceVariant,
+          hintStyle: TextStyle(
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             fontSize: 14,
           ),
-          prefixIcon: const Icon(
+          prefixIcon: Icon(
             Icons.search_rounded,
-            color: AppColors.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             size: 20,
           ),
           border: InputBorder.none,

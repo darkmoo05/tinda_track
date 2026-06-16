@@ -352,9 +352,12 @@ class _ShelfLabelsScreenState extends ConsumerState<ShelfLabelsScreen> {
     // so we don't block the PDF builder closure.
     final imageByShelf = <String, pw.ImageProvider?>{};
     if (_includePhoto) {
-      for (final s in shelves) {
-        imageByShelf[s.syncId] = await _loadShelfImage(s);
-      }
+      final futures = shelves.map((s) async {
+        final img = await _loadShelfImage(s);
+        return MapEntry(s.syncId, img);
+      });
+      final results = await Future.wait(futures);
+      imageByShelf.addEntries(results);
     }
 
     final perPage = _cols * _rows;
@@ -414,7 +417,7 @@ class _ShelfLabelsScreenState extends ConsumerState<ShelfLabelsScreen> {
               mainAxisAlignment: pw.MainAxisAlignment.center,
               children: [
                 pw.Text(
-                  shelf.name,
+                  _pdfSafeText(shelf.name),
                   maxLines: 2,
                   overflow: pw.TextOverflow.clip,
                   style: pw.TextStyle(
@@ -472,5 +475,28 @@ class _ShelfLabelsScreenState extends ConsumerState<ShelfLabelsScreen> {
       // Best-effort; label still prints with QR + name.
     }
     return null;
+  }
+
+  String _pdfSafeText(String value) {
+    var result = value
+        .replaceAll('₱', 'PHP ')
+        .replaceAll(RegExp(r'[\u2018\u2019\u201C\u201D]'), '"');
+
+    // Replace common accented/Filipino characters with standard ASCII equivalents
+    final replacements = {
+      'ñ': 'n', 'Ñ': 'N',
+      'á': 'a', 'Á': 'A',
+      'é': 'e', 'É': 'E',
+      'í': 'i', 'Í': 'I',
+      'ó': 'o', 'Ó': 'O',
+      'ú': 'u', 'Ú': 'U',
+      'ü': 'u', 'Ü': 'U',
+    };
+
+    replacements.forEach((key, val) {
+      result = result.replaceAll(key, val);
+    });
+
+    return result.replaceAll(RegExp(r'[^\x20-\x7E]'), ' ').trim();
   }
 }

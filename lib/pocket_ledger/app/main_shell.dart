@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_theme.dart';
 import '../../core/sync/sync_orchestrator.dart';
+import '../features/dashboard/logic/onboarding_provider.dart';
+import '../../shared/widgets/tutorial_spotlight.dart';
 import '../../core/sync/sync_result.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
+import '../features/more/logic/monitoring_session_provider.dart';
+
 import '../features/activity/screens/activity_history_screen.dart';
 import '../features/parties/screens/party_management_screen.dart';
 import '../features/charges/screens/charges_screen.dart';
@@ -147,6 +151,21 @@ class _MainShellState extends ConsumerState<MainShell>
 
   Future<void> _openTransaction() async {
     _dismissFabMenuImmediate();
+    final selectedSession = ref.read(selectedSessionProvider).value;
+    if (selectedSession != null && selectedSession.status == 'CLOSED') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot record transactions on a closed monitoring session.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final onboardingState = ref.read(onboardingProvider);
+    if (onboardingState.step == OnboardingStep.tapFabPrompt) {
+      ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addTxForm);
+    }
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
     );
@@ -155,19 +174,41 @@ class _MainShellState extends ConsumerState<MainShell>
         _selectedIndex = 0;
         _refreshToken++;
       });
+      if (ref.read(onboardingProvider).step == OnboardingStep.addTxForm) {
+        ref.read(onboardingProvider.notifier).setStep(OnboardingStep.explainDeltas);
+      }
     }
   }
 
   Future<void> _openOwnerMovement() async {
     _dismissFabMenuImmediate();
+    final selectedSession = ref.read(selectedSessionProvider).value;
+    if (selectedSession != null && selectedSession.status == 'CLOSED') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot record movements on a closed monitoring session.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final onboardingState = ref.read(onboardingProvider);
+    if (onboardingState.step == OnboardingStep.setupCapitalPrompt) {
+      ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addCapitalForm);
+    }
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const AddOwnerMovementScreen()),
     );
 
     if (saved == true && mounted) {
       _handleDataChanged();
+      if (ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm) {
+        ref.read(onboardingProvider.notifier).setStep(OnboardingStep.tapFabPrompt);
+      }
     }
   }
+
 
   void _openHistoryWithPerspective(HistoryWalletPerspective perspective) {
     _dismissFabMenuImmediate();
@@ -196,7 +237,7 @@ class _MainShellState extends ConsumerState<MainShell>
       360.0,
     );
 
-    return Scaffold(
+    final scaffold = Scaffold(
       key: _shellScaffoldKey,
       drawer: AppSideDrawer(
         config: buildPocketLedgerDrawerConfig(
@@ -206,6 +247,9 @@ class _MainShellState extends ConsumerState<MainShell>
             setState(() => _selectedIndex = i);
           },
           onSwitchApp: widget.onSwitchApp,
+          onRestartTutorial: () {
+            ref.read(onboardingProvider.notifier).resetTour();
+          },
         ),
       ),
       body: Stack(
@@ -222,22 +266,25 @@ class _MainShellState extends ConsumerState<MainShell>
             index: _selectedIndex,
             children: [
               DashboardScreen(
-                key: ValueKey('dashboard-$_refreshToken'),
+                key: const ValueKey('dashboardScreen'),
+                refreshToken: _refreshToken,
                 openDrawer: () => _shellScaffoldKey.currentState?.openDrawer(),
                 onDataChanged: _handleDataChanged,
                 onWalletPerspectiveSelected: _openHistoryWithPerspective,
               ),
               ActivityHistoryScreen(
-                key: ValueKey('history-$_refreshToken-$_historyViewToken'),
+                key: const ValueKey('historyScreen'),
+                refreshToken: _refreshToken,
+                viewToken: _historyViewToken,
                 openDrawer: () => _shellScaffoldKey.currentState?.openDrawer(),
                 initialWalletPerspective: _historyWalletPerspective,
               ),
               PartyManagementScreen(
-                key: ValueKey('parties-$_refreshToken'),
+                key: const ValueKey('partiesScreen'),
                 openDrawer: () => _shellScaffoldKey.currentState?.openDrawer(),
               ),
               ChargesScreen(
-                key: ValueKey('charges-$_refreshToken'),
+                key: const ValueKey('chargesScreen'),
                 openDrawer: () => _shellScaffoldKey.currentState?.openDrawer(),
               ),
             ],
@@ -315,42 +362,53 @@ class _MainShellState extends ConsumerState<MainShell>
           ],
         ],
       ),
-      floatingActionButton: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 160),
-        reverseDuration: const Duration(milliseconds: 120),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) {
-          return FadeTransition(
-            opacity: animation,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.92, end: 1.0).animate(animation),
-              child: child,
-            ),
-          );
-        },
-        child: isKeyboardVisible
-            ? const SizedBox.shrink(key: ValueKey('mainShellFabHidden'))
-            : FloatingActionButton(
-                key: const ValueKey('mainShellFabVisible'),
-                heroTag: null,
-                onPressed: _toggleFab,
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: AnimatedRotation(
-                  turns: _fabOpen ? 0.125 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: const Icon(Icons.add, color: Colors.white, size: 32),
-                ),
+      floatingActionButton: KeyedSubtree(
+        key: ref.read(onboardingKeysProvider).fabButtonKey,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 160),
+          reverseDuration: const Duration(milliseconds: 120),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.92, end: 1.0).animate(animation),
+                child: child,
               ),
+            );
+          },
+          child: isKeyboardVisible
+              ? const SizedBox.shrink(key: ValueKey('mainShellFabHidden'))
+              : FloatingActionButton(
+                  key: const ValueKey('mainShellFabButton'),
+                  heroTag: null,
+                  onPressed: () {
+                    final onboarding = ref.read(onboardingProvider);
+                    if (onboarding.step == OnboardingStep.tapFabPrompt) {
+                      ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addTxForm);
+                    }
+                    _toggleFab();
+                  },
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: AnimatedRotation(
+                    turns: _fabOpen ? 0.125 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.add, color: Colors.white, size: 32),
+                  ),
+                ),
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomAppBar(
         padding: EdgeInsets.zero,
         height: 72,
-        color: AppColors.surfaceContainerLowest,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF161D30)
+            : AppColors.surfaceContainerLowest,
         shape: isKeyboardVisible ? null : const CircularNotchedRectangle(),
         notchMargin: isKeyboardVisible ? 0 : 8,
         child: Row(
@@ -364,6 +422,33 @@ class _MainShellState extends ConsumerState<MainShell>
           ],
         ),
       ),
+    );
+
+    final onboardingState = ref.watch(onboardingProvider);
+    final onboardingKeys = ref.watch(onboardingKeysProvider);
+
+    return Stack(
+      children: [
+        scaffold,
+        if (onboardingState.step == OnboardingStep.tapFabPrompt)
+          TutorialSpotlight(
+            targetKey: onboardingKeys.fabButtonKey,
+            title: 'Record a Transaction',
+            description: 'Now, let\'s record a customer transaction. Tap the plus [+] button.',
+            onNext: () {
+              final onboarding = ref.read(onboardingProvider);
+              if (onboarding.step == OnboardingStep.tapFabPrompt) {
+                ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addTxForm);
+              }
+              _toggleFab();
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 16.0,
+          ),
+      ],
     );
   }
 
@@ -387,7 +472,8 @@ class _MainShellState extends ConsumerState<MainShell>
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isActive = _selectedIndex == index;
-    return InkWell(
+    final onboardingKeys = ref.read(onboardingKeysProvider);
+    final itemWidget = InkWell(
       onTap: () => _onItemTapped(index),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
@@ -414,6 +500,14 @@ class _MainShellState extends ConsumerState<MainShell>
         ),
       ),
     );
+
+    if (index == 3) {
+      return KeyedSubtree(
+        key: onboardingKeys.chargesTabKey,
+        child: itemWidget,
+      );
+    }
+    return itemWidget;
   }
 }
 
@@ -470,10 +564,14 @@ class _AnimatedSubFabButtonState extends State<_AnimatedSubFabButton> {
                   onTap: widget.onTap,
                   child: Ink(
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLowest,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF1E293B)
+                          : AppColors.surfaceContainerLowest,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: widget.color.withValues(alpha: 0.18),
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? widget.color.withValues(alpha: 0.40)
+                            : widget.color.withValues(alpha: 0.18),
                         width: 1.2,
                       ),
                       boxShadow: [

@@ -17,6 +17,9 @@ import '../../../../shared/receipt_scan/receipt_scan_service.dart';
 import '../../charges/domain/entities/charge.dart';
 import '../../charges/presentation/providers/charge_providers.dart';
 import '../../charges/screens/charges_screen.dart';
+import '../../dashboard/logic/onboarding_provider.dart';
+import '../../more/logic/monitoring_session_provider.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
 import '../../parties/domain/entities/party.dart';
 import '../../parties/presentation/providers/party_providers.dart';
 import '../data/transaction_repository.dart';
@@ -54,6 +57,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   final _referenceController = TextEditingController();
   final _principalController = TextEditingController();
   final _notesController = TextEditingController();
+  final _accountFieldKey = GlobalKey(debugLabel: 'onboardingAccountField');
+  final _amountFieldKey = GlobalKey(debugLabel: 'onboardingAmountField');
+  final _saveButtonKey = GlobalKey(debugLabel: 'onboardingSaveButton');
+
   final TransactionRepository _transactionRepository =
       TransactionRepository.instance;
   AppDatabase get _database => ref.read(currentAppDatabaseProvider);
@@ -63,7 +70,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   bool _showRequiredIndicators = false;
   bool _isSaving = false;
   TransactionPreviewResponse? _lastPreview;
-  String? _previewErrorMessage;
   _ChargeHandlingMode? _chargeHandlingMode;
   bool _showSummaryDetails = false;
 
@@ -115,6 +121,22 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     final typeKey = _selectedTypeKey;
     if (typeKey == null) {
       return null;
+    }
+
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addTxForm;
+    if (isTourActive && typeKey == 'gcash_cashin' && principal == 100.0) {
+      return Charge(
+        id: 'mock-tutorial-charge',
+        lowerBound: 0.0,
+        upperBound: 10000.0,
+        chargeAmount: 10.0,
+        transactionTypeKey: 'gcash_cashin',
+        sync: SyncMetadata(
+          syncId: 'mock-tutorial-sync-id',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
     }
 
     final brackets =
@@ -184,6 +206,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   double get _walletDeltaPreview {
     final amount = _enteredAmount;
     final fee = _chargeFee;
+    if (_isQrPayment) {
+      return amount + fee;
+    }
     if (!_isOutflowSelection) {
       return _effectiveChargeHandlingMode ==
               _ChargeHandlingMode.deductFromEnteredAmount
@@ -213,27 +238,27 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         : -amount;
   }
 
+  String get _localFeeRoutingExplanation {
+    final amount = _enteredAmount;
+    final fee = _chargeFee;
+    final chargeHandling = _effectiveChargeHandlingMode;
+
+    if (_isQrPayment) {
+      return 'QR Payment (Top-up): customer sends ₱${(amount + fee).toStringAsFixed(2)} via QR (₱${amount.toStringAsFixed(2)} + ₱${fee.toStringAsFixed(2)} service fee). Business wallet increases by ₱${(amount + fee).toStringAsFixed(2)}, no cash exchange.';
+    } else if (!_isOutflowSelection) {
+      return chargeHandling == _ChargeHandlingMode.addOnTop
+          ? 'Inflow: customer pays ₱${amount.toStringAsFixed(2)} + ₱${fee.toStringAsFixed(2)} in cash. Business wallet decreases by ₱${amount.toStringAsFixed(2)} and on-hand increases by ₱${(amount + fee).toStringAsFixed(2)}.'
+          : 'Inflow: customer pays ₱${amount.toStringAsFixed(2)} cash. Business wallet decreases by ₱${(amount - fee).toStringAsFixed(2)} (fee deducted from wallet transfer) and on-hand increases by ₱${amount.toStringAsFixed(2)}.';
+    } else {
+      return chargeHandling == _ChargeHandlingMode.addOnTop
+          ? 'Outflow: customer\'s wallet is charged ₱${amount.toStringAsFixed(2)} + ₱${fee.toStringAsFixed(2)}. Business wallet increases by ₱${(amount + fee).toStringAsFixed(2)} and on-hand decreases by ₱${amount.toStringAsFixed(2)}.'
+          : 'Outflow: customer\'s wallet is charged ₱${amount.toStringAsFixed(2)}. Business wallet increases by ₱${amount.toStringAsFixed(2)} and on-hand decreases by ₱${(amount - fee).toStringAsFixed(2)} (fee deducted from cash payout).';
+    }
+  }
+
   String _signedMoney(double value) {
     final sign = value < 0 ? '-' : '+';
     return '$sign$_pesoLabel ${value.abs().toStringAsFixed(2)}';
-  }
-
-  bool get _useLocalBreakdownInDialog => !_canCustomizeFeeHandling;
-
-  double _dialogFeeAmount(TransactionPreviewResponse preview) {
-    return _useLocalBreakdownInDialog ? _chargeFee : preview.chargeAmount;
-  }
-
-  double _dialogWalletChange(TransactionPreviewResponse preview) {
-    return _useLocalBreakdownInDialog
-        ? _walletDeltaPreview
-        : preview.walletCredit;
-  }
-
-  double _dialogCashChange(TransactionPreviewResponse preview) {
-    return _useLocalBreakdownInDialog
-        ? _cashDeltaPreview
-        : preview.onHandChange;
   }
 
 
@@ -299,12 +324,18 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       });
 
   @override
+  @override
   void initState() {
     super.initState();
+    _selectedServiceKey = 'cashin';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_accountController.text.trim().isNotEmpty) {
         _resolvePartyFromAccount(_accountController.text);
+      }
+      final onboardingState = ref.read(onboardingProvider);
+      if (onboardingState.step == OnboardingStep.tapFabPrompt) {
+        ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addTxForm);
       }
     });
   }
@@ -320,6 +351,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final isClosed = selectedSession != null && selectedSession.status == 'CLOSED';
+
     // Watch partiesStreamProvider to keep it active and ensure cache matches database
     ref.watch(partiesStreamProvider);
 
@@ -331,12 +366,29 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       }
     });
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    final onboardingState = ref.watch(onboardingProvider);
+    final isTourActive = onboardingState.step == OnboardingStep.addTxForm;
+
+    final showAccountSpotlight = isTourActive && _accountController.text.isEmpty;
+    final showAmountSpotlight = isTourActive && _accountController.text.isNotEmpty && _principalController.text.isEmpty;
+    final showChargesHandlingSpotlight = isTourActive &&
+        _accountController.text.isNotEmpty &&
+        _principalController.text.isNotEmpty &&
+        _chargeHandlingMode == null;
+    final showSaveSpotlight = isTourActive &&
+        _accountController.text.isNotEmpty &&
+        _principalController.text.isNotEmpty &&
+        _chargeHandlingMode != null;
+
+    final scaffold = Scaffold(
+      backgroundColor: isDark ? AppColors.darkNavy : AppColors.background,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: AppColors.onSurface),
+          icon: Icon(
+            Icons.close_rounded,
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: const [],
@@ -347,144 +399,186 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(24),
             children: [
-              ScreenHeaderCard(
-                title: 'New Transaction',
-                subtitle:
-                    'Select wallet & service, then enter the customer account and amount.',
-              ),
-              const SizedBox(height: 16),
-              _buildCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionTitle('Transaction Details'),
-                    const SizedBox(height: 12),
-                    _buildTypeSelector(),
-                    const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _accountController,
-                      label: context.l10n.accountNumber,
-                      hint: context.l10n.searchOrEnterAccountNumber,
-                      isUnderline: true,
-                      suffixWidget: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          GestureDetector(
-                            onTap: _openAccountSearchPicker,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.search,
-                                size: 18,
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ReceiptScanButton(
-                            onDraftReady: _applyReceiptDraft,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: const BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.camera_alt_outlined,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      onChanged: _resolvePartyFromAccount,
-                      isRequired: true,
-                      hasError: _isAccountNumberMissing,
-                    ),
-                    if (_hasTypedAccount && _isRegisteredAccount) ...[
-                      const SizedBox(height: 8),
-                      _buildPartyFoundBanner(_matchedParty!.name),
-                    ] else if (_hasTypedAccount) ...[
-                      const SizedBox(height: 8),
-                      _buildPartyNotRegisteredAlert(),
-                    ],
-                    const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _principalController,
-                      label: context.l10n.transactionAmount,
-                      hint: '0.00',
-                      prefixText: '$_pesoLabel  ',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [_amountInputFormatter],
-                      onChanged: _onPrincipalChanged,
-                      isRequired: true,
-                      hasError: _isPrincipalMissing,
-                    ),
-                    if (_canCustomizeFeeHandling) ...[
-                      const SizedBox(height: 16),
-                      _buildChargeHandlingSelector(),
-                    ],
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Divider(color: AppColors.outlineVariant, thickness: 0.5),
-                    ),
-                    Theme(
-                      data: Theme.of(context).copyWith(
-                        dividerColor: Colors.transparent,
-                        hoverColor: Colors.transparent,
-                        splashColor: Colors.transparent,
-                        highlightColor: Colors.transparent,
-                      ),
-                      child: ExpansionTile(
-                        title: Text(
-                          'Additional Details (Optional)',
+              if (isClosed)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Viewing historical session: Recording transactions is disabled.',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.onSurface.withValues(alpha: 0.8),
+                            color: isDark ? Colors.red.shade300 : Colors.red.shade800,
                           ),
                         ),
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: const EdgeInsets.only(top: 8, bottom: 8),
-                        iconColor: AppColors.onSurfaceVariant,
-                        collapsedIconColor: AppColors.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              IgnorePointer(
+                ignoring: isClosed,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ScreenHeaderCard(
+                      title: 'New Transaction',
+                      subtitle:
+                          'Select wallet & service, then enter the customer account and amount.',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildTextField(
-                            controller: _referenceController,
-                            label: context.l10n.referenceOptional,
-                            hint: context.l10n.enterReferenceNumber,
-                            isBorderless: true,
-                          ),
+                          _buildSectionTitle('Transaction Details'),
+                          const SizedBox(height: 12),
+                          _buildTypeSelector(),
                           const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _notesController,
-                            label: context.l10n.notesOptional,
-                            hint: context.l10n.additionalDetails,
-                            maxLines: 3,
-                            isBorderless: true,
+                          KeyedSubtree(
+                            key: _accountFieldKey,
+                            child: _buildTextField(
+                              controller: _accountController,
+                              label: context.l10n.accountNumber,
+                              hint: context.l10n.searchOrEnterAccountNumber,
+                              isUnderline: true,
+                              suffixWidget: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  GestureDetector(
+                                    onTap: _openAccountSearchPicker,
+                                    child: Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.search,
+                                        size: 18,
+                                        color: AppColors.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ReceiptScanButton(
+                                    onDraftReady: _applyReceiptDraft,
+                                    child: Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.camera_alt_outlined,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                              ),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              onChanged: _resolvePartyFromAccount,
+                              isRequired: true,
+                              hasError: _isAccountNumberMissing,
+                            ),
+                          ),
+                          if (_hasTypedAccount && _isRegisteredAccount) ...[
+                            const SizedBox(height: 8),
+                            _buildPartyFoundBanner(_matchedParty!.name),
+                          ] else if (_hasTypedAccount) ...[
+                            const SizedBox(height: 8),
+                            _buildPartyNotRegisteredAlert(),
+                          ],
+                          const SizedBox(height: 16),
+                          KeyedSubtree(
+                            key: _amountFieldKey,
+                            child: _buildTextField(
+                              controller: _principalController,
+                              label: context.l10n.transactionAmount,
+                              hint: '0.00',
+                              prefixText: '$_pesoLabel  ',
+                              keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              inputFormatters: [_amountInputFormatter],
+                              onChanged: _onPrincipalChanged,
+                              isRequired: true,
+                              hasError: _isPrincipalMissing,
+                            ),
+                          ),
+                          if (_canCustomizeFeeHandling) ...[
+                            const SizedBox(height: 16),
+                            _buildChargeHandlingSelector(),
+                          ],
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Divider(color: AppColors.outlineVariant, thickness: 0.5),
+                          ),
+                          Theme(
+                            data: Theme.of(context).copyWith(
+                              dividerColor: Colors.transparent,
+                              hoverColor: Colors.transparent,
+                              splashColor: Colors.transparent,
+                              highlightColor: Colors.transparent,
+                            ),
+                            child: ExpansionTile(
+                              title: Text(
+                                'Additional Details (Optional)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? const Color(0xFFF8FAFC).withValues(alpha: 0.8)
+                                      : AppColors.onSurface.withValues(alpha: 0.8),
+                                ),
+                              ),
+                              tilePadding: EdgeInsets.zero,
+                              childrenPadding: const EdgeInsets.only(top: 8, bottom: 8),
+                              iconColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                              collapsedIconColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                              children: [
+                                _buildTextField(
+                                  controller: _referenceController,
+                                  label: context.l10n.referenceOptional,
+                                  hint: context.l10n.enterReferenceNumber,
+                                  isBorderless: true,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _notesController,
+                                  label: context.l10n.notesOptional,
+                                  hint: context.l10n.additionalDetails,
+                                  maxLines: 3,
+                                  isBorderless: true,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    _buildCalculationPreview(context),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _buildCalculationPreview(context),
               const SizedBox(height: 24),
               _buildSaveButton(context),
               const SizedBox(height: 40),
@@ -493,35 +587,104 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         ],
       ),
     );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (showAccountSpotlight)
+          TutorialSpotlight(
+            targetKey: _accountFieldKey,
+            title: 'Enter Customer Account',
+            description: 'Type a phone number or reference account for the customer receiving the cash-in.',
+            onNext: () {
+              setState(() {
+                _accountController.text = '09171234567';
+                _resolvePartyFromAccount('09171234567');
+              });
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Fill Sample',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (showAmountSpotlight)
+          TutorialSpotlight(
+            targetKey: _amountFieldKey,
+            title: 'Enter Transaction Amount',
+            description: 'Enter the amount the customer wants to cash-in (e.g., 100).',
+            onNext: () {
+              setState(() {
+                _principalController.text = '100';
+                _onPrincipalChanged('100');
+              });
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Fill 100',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (showChargesHandlingSpotlight)
+          TutorialSpotlight(
+            targetKey: ref.watch(onboardingKeysProvider).chargesHandlingKey,
+            title: 'Fee Handling Option',
+            description: 'Select who pays the service fee. Choose "Customer pays fee" to add the fee to the transaction total.',
+            onNext: () {
+              setState(() {
+                _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+              });
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Customer Pays',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (showSaveSpotlight)
+          TutorialSpotlight(
+            targetKey: _saveButtonKey,
+            title: 'Record Transaction',
+            description: 'Perfect! Tapping \'Save\' will record this GCash cash-in transaction. Note how the service fee is automatically computed!',
+            onNext: _onSaveTransaction,
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Save',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+      ],
+    );
   }
 
   Widget _buildPartyFoundBanner(String name) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: const Color(0xFFE8F5E9), // very soft light green
+          color: isDark ? const Color(0xFF022C22) : AppColors.successLight,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: const Color(0xFFC8E6C9),
+            color: isDark ? const Color(0xFF065F46) : AppColors.successBorder,
             width: 1.0,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.check_circle,
-              color: Color(0xFF2E7D32), // soft dark green
+              color: isDark ? const Color(0xFF34D399) : AppColors.success,
               size: 14,
             ),
             const SizedBox(width: 6),
             Text(
               context.l10n.verifiedAccountFound(name),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: Color(0xFF2E7D32),
+                color: isDark ? const Color(0xFF34D399) : AppColors.success,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -532,6 +695,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildPartyNotRegisteredAlert() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -551,26 +715,28 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
+            color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: AppColors.outlineVariant.withValues(alpha: 0.5),
+              color: isDark
+                  ? const Color(0xFF1E293B)
+                  : AppColors.outlineVariant.withValues(alpha: 0.5),
             ),
           ),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.info_outline_rounded,
-                color: AppColors.onSurfaceVariant,
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 size: 16,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   context.l10n.accountNotInContacts,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -580,7 +746,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 '+ Register',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.primary,
+                  color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -592,15 +758,26 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildCalculationPreview(BuildContext context) {
-    final activeColor = _selectedWalletColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark
+        ? (_selectedWalletSelection == _WalletSelection.maya
+            ? AppColors.mayaNeon
+            : AppColors.gcashNeon)
+        : _selectedWalletColor;
+    final surfaceColor = isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest;
+    final borderColor = isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.6);
+    final labelColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+    final valueColor = isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface;
+    final dashedColor = isDark ? const Color(0xFF334155) : AppColors.outlineVariant.withValues(alpha: 0.8);
+
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.6)),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -623,10 +800,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 Expanded(
                   child: Text(
                     context.l10n.reviewTotals,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
+                      color: valueColor,
                     ),
                   ),
                 ),
@@ -667,22 +844,30 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     _chargeHandlingMode == null
                         ? 'Select fee handling'
                         : _chargeHandlingDisplayLabel,
+                    labelColor: labelColor,
+                    valueColor: valueColor,
                   ),
                   const SizedBox(height: 6),
                   _buildPreviewRow(
                     context.l10n.usingWallet,
                     _selectedWalletAccount,
+                    labelColor: labelColor,
+                    valueColor: valueColor,
                   ),
                   const SizedBox(height: 6),
                   _buildPreviewRow(
                     context.l10n.feeDestination,
                     _chargeDestinationAccount,
+                    labelColor: labelColor,
+                    valueColor: valueColor,
                   ),
                   if (_matchedChargeBracket != null) ...[
                     const SizedBox(height: 6),
                     _buildPreviewRow(
                       context.l10n.feeRange,
                       '$_pesoLabel ${_matchedChargeBracket!.lowerBound.toStringAsFixed(2)} - $_pesoLabel ${_matchedChargeBracket!.upperBound.toStringAsFixed(2)}',
+                      labelColor: labelColor,
+                      valueColor: valueColor,
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -700,7 +885,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: CustomPaint(
               size: const Size(double.infinity, 1),
-              painter: DashedLinePainter(),
+              painter: DashedLinePainter(color: dashedColor),
             ),
           ),
 
@@ -713,19 +898,22 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 _buildReceiptLine(
                   'Principal Amount',
                   '$_pesoLabel ${_enteredAmount.toStringAsFixed(2)}',
+                  labelColor: labelColor,
+                  valueColor: valueColor,
                 ),
                 const SizedBox(height: 8),
                 _buildReceiptLine(
                   'Service Fee',
                   '$_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
-                  valueColor: _chargeFee > 0 ? AppColors.error : null,
+                  labelColor: labelColor,
+                  valueColor: _chargeFee > 0 ? AppColors.error : valueColor,
                 ),
                 const SizedBox(height: 14),
 
                 // Dashed separator for total
                 CustomPaint(
                   size: const Size(double.infinity, 1),
-                  painter: DashedLinePainter(),
+                  painter: DashedLinePainter(color: dashedColor),
                 ),
                 const SizedBox(height: 14),
 
@@ -739,13 +927,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            _isOutflowSelection
-                                ? 'Total Charged to Wallet'
-                                : 'Total Sent to Wallet',
-                            style: const TextStyle(
+                            _isQrPayment
+                                ? 'Total Received in Wallet'
+                                : _isOutflowSelection
+                                    ? 'Total Charged to Wallet'
+                                    : 'Total Sent to Wallet',
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.onSurfaceVariant,
+                              color: labelColor,
                             ),
                           ),
                         ),
@@ -756,11 +946,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
-                          style: const TextStyle(
+                          '$_pesoLabel ${(_isQrPayment
+                              ? _walletDeltaPreview
+                              : _isOutflowSelection
+                                  ? _totalCollected
+                                  : _amountToSend).toStringAsFixed(2)}',
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.onSurface,
+                            color: valueColor,
                           ),
                         ),
                       ),
@@ -779,13 +973,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            _isOutflowSelection
-                                ? 'Cash to Hand to Customer'
-                                : 'Cash to Collect from Customer',
-                            style: const TextStyle(
+                            _isQrPayment
+                                ? 'Cash Exchange (Digital)'
+                                : _isOutflowSelection
+                                    ? 'Cash to Hand to Customer'
+                                    : 'Cash to Collect from Customer',
+                            style: TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.onSurfaceVariant,
+                              color: labelColor,
                             ),
                           ),
                         ),
@@ -796,7 +992,11 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          '$_pesoLabel ${(_isOutflowSelection ? _amountToSend : _totalCollected).toStringAsFixed(2)}',
+                          '$_pesoLabel ${(_isQrPayment
+                              ? 0.0
+                              : _isOutflowSelection
+                                  ? _amountToSend
+                                  : _totalCollected).toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -820,7 +1020,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     );
   }
 
-  Widget _buildReceiptLine(String label, String value, {Color? valueColor}) {
+  Widget _buildReceiptLine(
+    String label,
+    String value, {
+    Color? labelColor,
+    Color? valueColor,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -831,9 +1037,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               fit: BoxFit.scaleDown,
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
-                  color: AppColors.onSurfaceVariant,
+                  color: labelColor ?? (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                 ),
               ),
             ),
@@ -848,7 +1054,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: valueColor ?? AppColors.onSurface,
+                color: valueColor ?? (isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface),
               ),
             ),
           ),
@@ -857,8 +1063,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     );
   }
 
+  Widget _buildPreviewRow(
+    String label,
+    String value, {
+    Color? labelColor,
+    Color? valueColor,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final resolvedLabelColor = labelColor ?? (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant);
+    final resolvedValueColor = valueColor ?? (isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface);
 
-  Widget _buildPreviewRow(String label, String value) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 340;
@@ -868,9 +1082,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
+                  color: resolvedLabelColor,
                 ),
               ),
               const SizedBox(height: 2),
@@ -881,10 +1095,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   textAlign: TextAlign.end,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
+                    color: resolvedValueColor,
                   ),
                 ),
               ),
@@ -899,9 +1113,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               flex: 6,
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
+                  color: resolvedLabelColor,
                 ),
               ),
             ),
@@ -913,10 +1127,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 textAlign: TextAlign.end,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface,
+                  color: resolvedValueColor,
                 ),
               ),
             ),
@@ -927,27 +1141,28 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildNoBracketWarning() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
+        color: isDark ? const Color(0xFF450A0A) : AppColors.error.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+        border: Border.all(color: isDark ? const Color(0xFF991B1B) : AppColors.error.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.warning_amber_rounded,
-            color: AppColors.error,
+            color: isDark ? const Color(0xFFFCA5A5) : AppColors.error,
             size: 14,
           ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               context.l10n.noFeeRuleForAmount,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: AppColors.error,
+                color: isDark ? const Color(0xFFFCA5A5) : AppColors.error,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -958,92 +1173,110 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildChargeHandlingSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addTxForm;
     final showChargeHandlingError =
         _showRequiredIndicators &&
         _canCustomizeFeeHandling &&
         _chargeHandlingMode == null;
-    final activeColor = _selectedWalletColor;
+    final activeColor = isDark
+        ? (_selectedWalletSelection == _WalletSelection.maya
+            ? AppColors.mayaNeon
+            : AppColors.gcashNeon)
+        : _selectedWalletColor;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _fieldLabel(
-            context.l10n.whoPaysServiceFee,
-            isRequired: true,
-            showErrorIndicator: showChargeHandlingError,
+    return KeyedSubtree(
+      key: ref.read(onboardingKeysProvider).chargesHandlingKey,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.55),
           ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: showChargeHandlingError
-                    ? AppColors.error
-                    : AppColors.outlineVariant.withValues(alpha: 0.55),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _fieldLabel(
+              context.l10n.whoPaysServiceFee,
+              isRequired: true,
+              showErrorIndicator: showChargeHandlingError,
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0B0F19) : AppColors.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: showChargeHandlingError
+                      ? AppColors.error
+                      : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.55)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildFeeHandlingOption(
+                      label: context.l10n.customerPaysFeeLabel,
+                      selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
+                      activeColor: activeColor,
+                      onTap: () {
+                        setState(() {
+                          _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: _buildFeeHandlingOption(
+                      label: context.l10n.deductedFromSentLabel,
+                      selected: _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount,
+                      activeColor: activeColor,
+                      onTap: () {
+                        if (isTourActive) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('This is locked to Customer Pays Fee during the tutorial.'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                          return;
+                        }
+                        setState(() {
+                          _chargeHandlingMode = _ChargeHandlingMode.deductFromEnteredAmount;
+                        });
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildFeeHandlingOption(
-                    label: context.l10n.customerPaysFeeLabel,
-                    selected: _chargeHandlingMode == _ChargeHandlingMode.addOnTop,
-                    activeColor: activeColor,
-                    onTap: () {
-                      setState(() {
-                        _chargeHandlingMode = _ChargeHandlingMode.addOnTop;
-                      });
-                    },
-                  ),
+            if (showChargeHandlingError) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Please choose a fee handling option.',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: _buildFeeHandlingOption(
-                    label: context.l10n.deductedFromSentLabel,
-                    selected: _chargeHandlingMode == _ChargeHandlingMode.deductFromEnteredAmount,
-                    activeColor: activeColor,
-                    onTap: () {
-                      setState(() {
-                        _chargeHandlingMode = _ChargeHandlingMode.deductFromEnteredAmount;
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (showChargeHandlingError) ...[
-            const SizedBox(height: 6),
+              ),
+            ],
+            const SizedBox(height: 10),
             Text(
-              'Please choose a fee handling option.',
-              style: const TextStyle(
+              'Applicable fee: $_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.error,
                 fontWeight: FontWeight.w600,
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
               ),
             ),
           ],
-          const SizedBox(height: 10),
-          Text(
-            'Applicable fee: $_pesoLabel ${_chargeFee.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1054,6 +1287,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     required Color activeColor,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -1077,7 +1311,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-              color: selected ? activeColor : AppColors.onSurfaceVariant,
+              color: selected
+                  ? activeColor
+                  : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
             ),
           ),
         ),
@@ -1086,80 +1322,94 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildSaveButton(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryContainer],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ElevatedButton(
-        onPressed: _isSaving ? null : _onSaveTransaction,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: _isSaving
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: Colors.white,
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final isClosed = selectedSession != null && selectedSession.status == 'CLOSED';
+
+    return KeyedSubtree(
+      key: _saveButtonKey,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: isClosed
+              ? null
+              : const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primary, AppColors.primaryContainer],
                 ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.check_rounded,
-                    color: Colors.white,
-                    size: 20,
+          color: isClosed ? (Theme.of(context).brightness == Brightness.dark ? Colors.white24 : Colors.grey.shade400) : null,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isClosed
+              ? null
+              : [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        context.l10n.saveTransactionAction,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          letterSpacing: 0.5,
+                ],
+        ),
+        child: ElevatedButton(
+          onPressed: (isClosed || _isSaving) ? null : _onSaveTransaction,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isClosed ? (Theme.of(context).brightness == Brightness.dark ? Colors.white12 : Colors.grey.shade300) : Colors.transparent,
+            shadowColor: Colors.transparent,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: _isSaving
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          context.l10n.saveTransactionAction,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
 
   Widget _buildCard({required Widget child}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1168,10 +1418,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       child: child,
     );
   }
+
   Widget _buildTypeSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addTxForm;
     final showTypeError =
         _showRequiredIndicators && _selectedServiceKey == null;
-    final activeColor = _selectedWalletColor;
+    final activeColor = isDark
+        ? (_selectedWalletSelection == _WalletSelection.maya
+            ? AppColors.mayaNeon
+            : AppColors.gcashNeon)
+        : _selectedWalletColor;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1190,16 +1447,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               child: _buildWalletButton(
                 label: 'GCash',
                 selected: _selectedWalletSelection == _WalletSelection.gcash,
-                activeBgColor: const Color(0xFF005DAC),
-                activeTextColor: Colors.white,
-                activeBorderColor: const Color(0xFF005DAC),
+                activeBgColor: isDark ? AppColors.gcash.withValues(alpha: 0.2) : AppColors.gcash,
+                activeTextColor: isDark ? AppColors.gcashNeon : Colors.white,
+                activeBorderColor: isDark ? AppColors.gcashNeon : AppColors.gcash,
                 logoWidget: Container(
                   width: 20,
                   height: 20,
                   decoration: BoxDecoration(
                     color: _selectedWalletSelection == _WalletSelection.gcash 
-                        ? Colors.white 
-                        : const Color(0xFF005DAC),
+                        ? (isDark ? AppColors.gcashNeon : Colors.white) 
+                        : (isDark ? const Color(0xFF161D30) : AppColors.gcash),
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
@@ -1207,14 +1464,23 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     'G',
                     style: TextStyle(
                       color: _selectedWalletSelection == _WalletSelection.gcash 
-                          ? const Color(0xFF005DAC) 
-                          : Colors.white,
+                          ? (isDark ? Colors.black : AppColors.gcash) 
+                          : (isDark ? const Color(0xFF94A3B8) : Colors.white),
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 onTap: () {
+                  if (isTourActive) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This is locked to GCash during the tutorial.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    return;
+                  }
                   setState(() {
                     _selectedWalletSelection = _WalletSelection.gcash;
                   });
@@ -1227,27 +1493,40 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               child: _buildWalletButton(
                 label: 'Maya',
                 selected: _selectedWalletSelection == _WalletSelection.maya,
-                activeBgColor: Colors.white,
-                activeTextColor: const Color(0xFF106D20),
-                activeBorderColor: const Color(0xFF106D20),
+                activeBgColor: isDark ? AppColors.secondary.withValues(alpha: 0.2) : Colors.white,
+                activeTextColor: isDark ? AppColors.mayaNeon : AppColors.maya,
+                activeBorderColor: isDark ? AppColors.mayaNeon : AppColors.maya,
                 logoWidget: Container(
                   width: 20,
                   height: 20,
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
+                  decoration: BoxDecoration(
+                    color: _selectedWalletSelection == _WalletSelection.maya
+                        ? (isDark ? AppColors.mayaNeon : Colors.black)
+                        : (isDark ? const Color(0xFF161D30) : Colors.black),
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
+                  child: Text(
                     'm',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: _selectedWalletSelection == _WalletSelection.maya
+                          ? (isDark ? Colors.black : Colors.white)
+                          : (isDark ? const Color(0xFF94A3B8) : Colors.white),
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 onTap: () {
+                  if (isTourActive) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This is locked to GCash during the tutorial.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    return;
+                  }
                   setState(() {
                     _selectedWalletSelection = _WalletSelection.maya;
                   });
@@ -1274,6 +1553,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   padding: const EdgeInsets.only(right: 10),
                   child: GestureDetector(
                     onTap: () {
+                      if (isTourActive) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('This is locked to Cash-In during the tutorial.'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                        return;
+                      }
                       setState(() {
                         _selectedServiceKey = serviceKey;
                       });
@@ -1286,10 +1574,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       decoration: BoxDecoration(
                         color: isSelected 
                             ? activeColor.withValues(alpha: 0.08) 
-                            : AppColors.surfaceContainerLow,
+                            : (isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected ? activeColor : Colors.transparent,
+                          color: isSelected
+                              ? activeColor
+                              : (isDark ? const Color(0xFF1E293B) : Colors.transparent),
                           width: 1.5,
                         ),
                       ),
@@ -1302,13 +1592,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                             decoration: BoxDecoration(
                               color: isSelected 
                                   ? activeColor 
-                                  : Colors.grey.withValues(alpha: 0.15),
+                                  : (isDark ? const Color(0xFF1E293B) : Colors.grey.withValues(alpha: 0.15)),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
                               icon,
                               size: 16,
-                              color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
+                              color: isSelected
+                                  ? (isDark ? Colors.black : Colors.white)
+                                  : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1323,7 +1615,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                  color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+                                  color: isSelected
+                                      ? activeColor
+                                      : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                                 ),
                               ),
                             ),
@@ -1361,16 +1655,19 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     required Widget logoWidget,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         height: 48,
         decoration: BoxDecoration(
-          color: selected ? activeBgColor : Colors.white,
+          color: selected ? activeBgColor : (isDark ? AppColors.darkNavyTile : Colors.white),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? activeBorderColor : AppColors.outlineVariant,
+            color: selected
+                ? activeBorderColor
+                : (isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant),
             width: selected ? 1.5 : 1.0,
           ),
           boxShadow: selected
@@ -1396,7 +1693,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
-                    color: selected ? activeTextColor : AppColors.onSurfaceVariant,
+                    color: selected
+                        ? activeTextColor
+                        : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                   ),
                 ),
               ),
@@ -1441,10 +1740,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     bool isUnderline = false,
     bool isBorderless = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     InputDecoration decoration;
     if (isUnderline) {
       final borderSide = BorderSide(
-        color: hasError ? AppColors.error : AppColors.outlineVariant,
+        color: hasError
+            ? AppColors.error
+            : (isDark ? const Color(0xFF334155) : AppColors.outlineVariant),
         width: 1.0,
       );
       final activeBorderSide = BorderSide(
@@ -1460,7 +1762,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         enabledBorder: underlineBorder,
         focusedBorder: activeUnderlineBorder,
         contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
-        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+        hintStyle: TextStyle(
+          color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+          fontSize: 13,
+        ),
       );
     } else if (isBorderless) {
       final border = OutlineInputBorder(
@@ -1469,12 +1774,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       );
       decoration = InputDecoration(
         filled: true,
-        fillColor: AppColors.surfaceContainerLow,
+        fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
         border: border,
         enabledBorder: border,
         focusedBorder: border,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+        hintStyle: TextStyle(
+          color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+          fontSize: 13,
+        ),
       );
     } else {
       decoration = _inputDecoration(hasError: hasError);
@@ -1495,16 +1803,22 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           maxLines: maxLines,
           inputFormatters: inputFormatters,
           onChanged: onChanged,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+          ),
           decoration: decoration.copyWith(
             hintText: hint,
             prefixText: prefixText,
+            prefixStyle: TextStyle(
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            ),
             suffixIcon: suffixWidget ?? (suffixIcon == null
                 ? null
                 : IconButton(
                     icon: Icon(
                       suffixIcon,
                       size: 18,
-                      color: AppColors.onSurfaceVariant,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     ),
                     onPressed: onSuffixPressed == null
                         ? null
@@ -1538,11 +1852,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   Future<void> _openAccountSearchPicker() async {
     if (!mounted) return;
     final parties = ref.read(partiesStreamProvider).value ?? const <Party>[];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final selected = await showModalBottomSheet<Party>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
@@ -1684,11 +1999,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     }
 
     _missingRangeAlertVisible = true;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final goToCharges = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.56),
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLowest,
+        backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         titlePadding: EdgeInsets.zero,
         contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
@@ -1701,12 +2017,14 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.10),
+                  color: isDark
+                      ? AppColors.primary.withValues(alpha: 0.25)
+                      : AppColors.primary.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.payments_outlined,
-                  color: AppColors.primary,
+                  color: isDark ? AppColors.gcashNeon : AppColors.primary,
                   size: 28,
                 ),
               ),
@@ -1714,19 +2032,19 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               Text(
                 context.l10n.noFeeRangeFoundTitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 context.l10n.noFeeRangeFoundMessage,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.onSurfaceVariant,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
               ),
             ],
@@ -1740,7 +2058,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: const BorderSide(color: AppColors.outlineVariant),
+                    side: BorderSide(color: isDark ? const Color(0xFF334155) : AppColors.outlineVariant),
+                    foregroundColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1753,6 +2072,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               Expanded(
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
+                    backgroundColor: isDark ? AppColors.primaryContainer : AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1804,6 +2124,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   Future<void> _runSaveTransaction() async {
     final l10n = context.l10n;
+
+    // Fix 4: Re-check session status at save time — the session could have been
+    // closed on another device while this form was already open.
+    final currentSession = ref.read(selectedSessionProvider).value;
+    if (currentSession != null &&
+        currentSession.status.toUpperCase() == 'CLOSED') {
+      _showMessage('Cannot save to a closed session. Switch to the active session first.',
+          isError: true);
+      return;
+    }
+
     final accountNumber = _accountController.text.trim();
     final principal = _parseAmount(_principalController.text);
 
@@ -1912,11 +2243,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     if (!mounted) return;
 
     // Try backend preview when available, but do not block local save if
-    // preview cannot be loaded.
+    // preview cannot be loaded (instead, fallback to local calculation breakdown).
     final previewLoaded = await _loadAndValidatePreview();
-    final proceed = previewLoaded
-        ? await _showFeeBreakdownDialog()
-        : await _showProceedWithoutPreviewDialog();
+    final proceed = await _showFeeBreakdownDialog(isOffline: !previewLoaded);
 
     if (!proceed) {
       if (!mounted) return;
@@ -2002,11 +2331,14 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     final mayaWalletDelta = usesMayaWallet ? selectedWalletDelta : 0.0;
     final chargeDestination = _chargeDestinationAccount;
     final now = DateTime.now();
-    final reference = referenceText.isNotEmpty
-        ? referenceText
-        : accountNumber.isNotEmpty
-        ? accountNumber
-        : 'QR-${DateTime.now().millisecondsSinceEpoch}';
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addTxForm;
+    final reference = isTourActive
+        ? 'SAMPLE-REF-CASHIN-2D'
+        : (referenceText.isNotEmpty
+            ? referenceText
+            : accountNumber.isNotEmpty
+            ? accountNumber
+            : 'QR-${DateTime.now().millisecondsSinceEpoch}');
     final iconKey = isOutflow ? 'cash_out' : 'cash_in';
     final title = selectedType;
     final noteBase = notes.isNotEmpty
@@ -2044,7 +2376,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           deviceId: deviceId,
           createdAt: now,
           updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
-          isDirty: true,
+          isDirty: !isTourActive,
         ),
       );
 
@@ -2065,12 +2397,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               deviceId: deviceId,
               createdAt: now,
               updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
-              isDirty: true,
+              isDirty: !isTourActive,
             ),
           );
           await ref.read(feeTransactionRepositoryProvider).save(fee);
         }
       });
+
+      if (isTourActive) {
+        ref.read(onboardingProvider.notifier).setHasDemoData(true);
+        ref.read(onboardingProvider.notifier).setStep(OnboardingStep.explainDeltas);
+      }
 
       return true;
     } on Exception catch (error, stackTrace) {
@@ -2085,9 +2422,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   Future<bool> _loadAndValidatePreview() async {
     final amount = _enteredAmount;
     if (amount <= 0) {
-      setState(
-        () => _previewErrorMessage = context.l10n.amountMustBeGreaterThanZero,
-      );
       return false;
     }
 
@@ -2112,103 +2446,129 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
       setState(() {
         _lastPreview = preview;
-        _previewErrorMessage = null;
       });
       return true;
     } on TransactionApiException catch (e) {
-      final status = e.statusCode == null ? '' : ' (${e.statusCode})';
-      setState(
-        () => _previewErrorMessage = context.l10n.feeValidationFailedStatus(
-          status,
-          e.message,
-        ),
-      );
+      debugPrint('Failed to load transaction preview: ${e.message}');
       return false;
     } catch (e) {
-      setState(
-        () => _previewErrorMessage = context.l10n.feeValidationFailed('$e'),
-      );
+      debugPrint('Failed to load transaction preview: $e');
       return false;
     }
   }
 
-  Future<bool> _showProceedWithoutPreviewDialog() async {
-    final proceed =
-        await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(context.l10n.backendPreviewUnavailable),
-            content: Text(
-              _previewErrorMessage ??
-                  context.l10n.unableToValidateFeePreviewNow,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(context.l10n.cancel),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(context.l10n.saveLocally),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+  Future<bool> _showFeeBreakdownDialog({bool isOffline = false}) async {
+    final preview = _lastPreview;
+    if (!isOffline && preview == null) return false;
 
-    return proceed;
-  }
+    final chargeAmount = isOffline ? _chargeFee : preview!.chargeAmount;
+    final walletCredit = isOffline ? _walletDeltaPreview : preview!.walletCredit;
+    final onHandChange = isOffline ? _cashDeltaPreview : preview!.onHandChange;
+    final explanation = isOffline ? _localFeeRoutingExplanation : preview!.feeRoutingExplanation;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark
+        ? (_selectedWalletSelection == _WalletSelection.maya
+            ? AppColors.mayaNeon
+            : AppColors.gcashNeon)
+        : _selectedWalletColor;
 
-  /// Show fee breakdown dialog to user with backend-calculated details.
-  Future<bool> _showFeeBreakdownDialog() async {
-    if (_lastPreview == null) return false;
-
-    final preview = _lastPreview!;
     final confirmed =
         await showDialog<bool>(
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            title: Text(context.l10n.feeBreakdownTitle),
+            backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
+            title: Text(
+              context.l10n.feeBreakdownTitle,
+              style: TextStyle(
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (isOffline) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: activeColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: activeColor.withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.cloud_off_rounded,
+                            color: activeColor,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Offline Mode • Calculating locally. Syncs when connection is restored.',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: activeColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Text(
                     context.l10n.reviewTotals,
-                    style: Theme.of(context).textTheme.titleSmall,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   _buildPreviewField(
-                    _isOutflowSelection
-                        ? context.l10n.amountCustomerSends
-                        : context.l10n.amountSentToCustomerWallet,
-                    '$_pesoLabel ${(_isOutflowSelection ? _totalCollected : _amountToSend).toStringAsFixed(2)}',
+                    _isQrPayment
+                        ? 'Total Received in Wallet'
+                        : _isOutflowSelection
+                            ? 'Total Charged to Wallet'
+                            : 'Total Sent to Wallet',
+                    '$_pesoLabel ${(isOffline
+                        ? (_isOutflowSelection ? _totalCollected : _amountToSend)
+                        : _isOutflowSelection
+                            ? preview!.totalCollected
+                            : preview!.walletCredit.abs()).toStringAsFixed(2)}',
                   ),
                   _buildPreviewField(
                     context.l10n.serviceFee,
-                    '$_pesoLabel ${_dialogFeeAmount(preview).toStringAsFixed(2)}',
+                    '$_pesoLabel ${chargeAmount.toStringAsFixed(2)}',
                   ),
                   _buildPreviewField(
-                    context.l10n.walletChangeLabel,
-                    _signedMoney(_dialogWalletChange(preview)),
+                    '$_selectedWalletAccount Balance Change',
+                    _signedMoney(walletCredit),
                   ),
                   _buildPreviewField(
-                    context.l10n.cashChangeLabel,
-                    _signedMoney(_dialogCashChange(preview)),
+                    'Cash Balance Change',
+                    _signedMoney(onHandChange),
                   ),
                   const SizedBox(height: 16),
-                  const Divider(),
+                  Divider(color: isDark ? const Color(0xFF1E293B) : null),
                   const SizedBox(height: 8),
                   Text(
                     context.l10n.feeRouting,
-                    style: Theme.of(context).textTheme.titleSmall,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    preview.feeRoutingExplanation,
-                    style: Theme.of(context).textTheme.bodySmall,
+                    explanation,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -2216,10 +2576,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
+                style: TextButton.styleFrom(
+                  foregroundColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                ),
                 child: Text(context.l10n.cancel),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? AppColors.primaryContainer : AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
                 child: Text(context.l10n.confirmAndSave),
               ),
             ],
@@ -2231,13 +2598,25 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildPreviewField(String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: TextStyle(
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            ),
+          ),
         ],
       ),
     );
@@ -2245,6 +2624,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   Future<(double walletBalance, double mayaWalletBalance, double onHandBalance)>
   _loadCurrentBalances() async {
+    // Fix 3: Scope to active session start so the check uses only this cycle's
+    // balance, matching the "fresh start at ₱0" session design.
+    final session = ref.read(selectedSessionProvider).value;
+    final sessionFilter = (session != null)
+        ? 'AND created_at_ms >= ${session.startDateMs}'
+        : '';
+
     final rawRows = await _database.customSelect('''
       SELECT
         COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
@@ -2252,6 +2638,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ledger_entries
       WHERE is_deleted = 0
+        $sessionFilter
     ''').get();
 
     if (rawRows.isEmpty) {
@@ -2321,7 +2708,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               ),
             ],
           ),
-          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          backgroundColor: isError ? AppColors.error : AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -2336,10 +2723,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     bool isRequired = false,
     bool showErrorIndicator = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final labelStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: showErrorIndicator ? AppColors.error : AppColors.onSurfaceVariant,
+      color: showErrorIndicator
+          ? AppColors.error
+          : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
     );
 
     if (!isRequired) {
@@ -2364,20 +2754,22 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildSectionTitle(String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w700,
-        color: AppColors.onSurface,
+        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
       ),
     );
   }
 
   InputDecoration _inputDecoration({bool hasError = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InputDecoration(
       filled: true,
-      fillColor: AppColors.surfaceContainerLow,
+      fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(
@@ -2398,7 +2790,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      hintStyle: TextStyle(
+        color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+        fontSize: 13,
+      ),
     );
   }
 }
@@ -2454,6 +2849,7 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final filtered = _filteredParties;
     final maxHeight = MediaQuery.of(context).size.height * 0.78;
 
@@ -2470,7 +2866,7 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.outlineVariant.withValues(alpha: 0.7),
+                    color: isDark ? const Color(0xFF334155) : AppColors.outlineVariant.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -2481,17 +2877,26 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: _searchController,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                ),
                 decoration: InputDecoration(
                   hintText: context.l10n.searchNameOrAccount,
-                  prefixIcon: const Icon(Icons.search_rounded),
+                  hintStyle: TextStyle(
+                    color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
                   filled: true,
-                  fillColor: AppColors.surfaceContainerLow,
+                  fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
@@ -2513,9 +2918,9 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                           : ListView.separated(
                               itemCount: filtered.length,
                               separatorBuilder: (context, index) =>
-                                  const Divider(
+                                  Divider(
                                     height: 1,
-                                    color: AppColors.outlineVariant,
+                                    color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
                                   ),
                               itemBuilder: (context, index) {
                                 final party = filtered[index];
@@ -2525,26 +2930,31 @@ class _PartyContactPickerSheetState extends State<_PartyContactPickerSheet> {
                                     vertical: 4,
                                   ),
                                   leading: CircleAvatar(
-                                    backgroundColor: AppColors.primary
-                                        .withValues(alpha: 0.15),
-                                    child: const Icon(
+                                    backgroundColor: isDark
+                                        ? AppColors.primary.withValues(alpha: 0.25)
+                                        : AppColors.primary.withValues(alpha: 0.15),
+                                    child: Icon(
                                       Icons.person_rounded,
-                                      color: AppColors.primary,
+                                      color: isDark ? AppColors.gcashNeon : AppColors.primary,
                                       size: 18,
                                     ),
                                   ),
                                   title: Text(
                                     party.name,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w700,
+                                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                                     ),
                                   ),
                                   subtitle: Text(
                                     context.l10n.accountWithNumber(
                                       party.accountNumber,
                                     ),
-                                    style: const TextStyle(fontSize: 12),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                    ),
                                   ),
                                   trailing: party.isVerified
                                       ? const Icon(
@@ -2574,6 +2984,7 @@ class _PartyPickerEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -2583,16 +2994,16 @@ class _PartyPickerEmptyState extends StatelessWidget {
             Icon(
               Icons.manage_search_rounded,
               size: 32,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),
+              color: isDark ? const Color(0xFF64748B) : AppColors.onSurfaceVariant.withValues(alpha: 0.7),
             ),
             const SizedBox(height: 10),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
               ),
             ),
             const SizedBox(height: 6),
@@ -2601,7 +3012,7 @@ class _PartyPickerEmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: AppColors.onSurfaceVariant.withValues(alpha: 0.9),
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant.withValues(alpha: 0.9),
               ),
             ),
           ],
@@ -2726,8 +3137,9 @@ class _PartyRegistrationDialogState
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titlePadding: EdgeInsets.zero,
       contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -2735,7 +3147,9 @@ class _PartyRegistrationDialogState
       title: Container(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
         decoration: BoxDecoration(
-          color: AppColors.secondary.withValues(alpha: 0.06),
+          color: isDark
+              ? AppColors.secondary.withValues(alpha: 0.12)
+              : AppColors.secondary.withValues(alpha: 0.06),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Row(
@@ -2744,12 +3158,14 @@ class _PartyRegistrationDialogState
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.14),
+                color: isDark
+                    ? AppColors.secondary.withValues(alpha: 0.25)
+                    : AppColors.secondary.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.person_add_alt_1_rounded,
-                color: AppColors.secondary,
+                color: isDark ? AppColors.secondaryContainer : AppColors.secondary,
                 size: 20,
               ),
             ),
@@ -2757,10 +3173,10 @@ class _PartyRegistrationDialogState
             Expanded(
               child: Text(
                 context.l10n.partyRegistrationTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
             ),
@@ -2774,9 +3190,9 @@ class _PartyRegistrationDialogState
           const SizedBox(height: 12),
           Text(
             context.l10n.defineFinancialEntityBeforeTransaction,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.onSurfaceVariant,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 16),
@@ -2812,7 +3228,8 @@ class _PartyRegistrationDialogState
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: AppColors.outlineVariant),
+                  side: BorderSide(color: isDark ? const Color(0xFF334155) : AppColors.outlineVariant),
+                  foregroundColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2827,7 +3244,7 @@ class _PartyRegistrationDialogState
             Expanded(
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.secondary,
+                  backgroundColor: isDark ? AppColors.secondaryContainer : AppColors.secondary,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -2865,25 +3282,32 @@ class _PartyRegistrationDialogState
     required String hint,
     TextInputType? keyboardType,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppColors.onSurfaceVariant,
+            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+          ),
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: TextStyle(
+              color: isDark ? const Color(0xFF64748B) : AppColors.outlineVariant,
+            ),
             filled: true,
-            fillColor: AppColors.surfaceContainerLow,
+            fillColor: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide.none,
@@ -2900,11 +3324,14 @@ class _PartyRegistrationDialogState
 }
 
 class DashedLinePainter extends CustomPainter {
+  final Color color;
+  DashedLinePainter({this.color = const Color(0xFFCBD5E1)});
+
   @override
   void paint(Canvas canvas, Size size) {
     double dashWidth = 5, dashSpace = 3, startX = 0;
     final paint = Paint()
-      ..color = AppColors.outlineVariant.withValues(alpha: 0.8)
+      ..color = color
       ..strokeWidth = 1.2;
     while (startX < size.width) {
       canvas.drawLine(Offset(startX, 0), Offset(startX + dashWidth, 0), paint);

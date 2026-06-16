@@ -25,6 +25,10 @@ class PartyListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final errorColor = isDark ? const Color(0xFFF87171) : AppColors.error;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: ArchitectCard(
@@ -34,13 +38,13 @@ class PartyListItem extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 22,
-              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+              backgroundColor: primaryColor.withValues(alpha: 0.12),
               child: Text(
                 name.isEmpty ? '?' : name[0].toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
-                  color: AppColors.primary,
+                  color: primaryColor,
                 ),
               ),
             ),
@@ -51,10 +55,10 @@ class PartyListItem extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
-                      color: AppColors.onSurface,
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -64,6 +68,7 @@ class PartyListItem extends StatelessWidget {
                     context.l10n.theirAccount(accountNumber),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       fontSize: 11,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -73,6 +78,7 @@ class PartyListItem extends StatelessWidget {
                     context.l10n.joinedDate(joinDate),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       fontSize: 11,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -83,7 +89,7 @@ class PartyListItem extends StatelessWidget {
                       description,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontSize: 11.5,
-                        color: AppColors.onSurfaceVariant,
+                        color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -99,8 +105,8 @@ class PartyListItem extends StatelessWidget {
                 IconButton.filledTonal(
                   onPressed: onEdit,
                   style: IconButton.styleFrom(
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                    foregroundColor: AppColors.primary,
+                    backgroundColor: primaryColor.withValues(alpha: 0.08),
+                    foregroundColor: primaryColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -114,8 +120,8 @@ class PartyListItem extends StatelessWidget {
                 IconButton.filledTonal(
                   onPressed: onDelete,
                   style: IconButton.styleFrom(
-                    backgroundColor: AppColors.error.withValues(alpha: 0.08),
-                    foregroundColor: AppColors.error,
+                    backgroundColor: errorColor.withValues(alpha: 0.08),
+                    foregroundColor: errorColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),

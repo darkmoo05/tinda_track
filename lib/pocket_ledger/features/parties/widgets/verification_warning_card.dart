@@ -14,6 +14,7 @@ class VerificationWarningCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ArchitectCard(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -22,47 +23,54 @@ class VerificationWarningCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFCC99).withValues(alpha: 0.4),
+              color: isDark
+                  ? const Color(0xFF2C1B03)
+                  : AppColors.warningContainer.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.contact_page_outlined,
-              color: Color(0xFF8B4513),
+              color: isDark ? const Color(0xFFFFD060) : AppColors.warningText,
               size: 20,
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'AWAITING VERIFICATION',
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.0,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '$count',
-            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            ),
           ),
           const SizedBox(height: 12),
           GestureDetector(
             onTap: onReview,
             child: Row(
-              children: const [
+              children: [
                 Text(
                   'Review Queue',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                    color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                   ),
                 ),
-                SizedBox(width: 4),
+                const SizedBox(width: 4),
                 Icon(
                   Icons.arrow_forward_rounded,
                   size: 14,
-                  color: AppColors.primary,
+                  color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                 ),
               ],
             ),

@@ -112,10 +112,14 @@ class _TindaNavBar extends StatelessWidget {
       _NavItem(icon: Icons.bar_chart_rounded, label: 'Reports'),
     ];
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        boxShadow: [
+        color: isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest,
+        border: isDark
+            ? Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08)))
+            : null,
+        boxShadow: isDark ? null : [
           BoxShadow(
             color: AppColors.onSurface.withValues(alpha: 0.08),
             blurRadius: 16,

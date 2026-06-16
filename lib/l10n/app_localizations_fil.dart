@@ -634,8 +634,7 @@ class AppLocalizationsFil extends AppLocalizations {
       'Lalabas dito ang mga nai-save mong transaksyon at aktibidad ng may-ari.';
 
   @override
-  String get searchAccountRefParty =>
-      'Maghanap ayon sa account, ref no., o tala';
+  String get searchAccountRefParty => 'Maghanap ayon sa account, ref no.';
 
   @override
   String get beginningDate => 'Mula petsa';
@@ -1681,4 +1680,96 @@ class AppLocalizationsFil extends AppLocalizations {
   @override
   String get scanOrTypeSerial =>
       'Mag-scan o mag-type ng serial number upang idagdag.';
+
+  @override
+  String get businessTypeRetail => 'Sari-Sari / Tingi';
+
+  @override
+  String get businessTypeFoodService => 'Carinderia / Serbisyo sa Pagkain';
+
+  @override
+  String get businessTypeAutoParts => 'Tindahan ng Piyesa / Serbisyo';
+
+  @override
+  String get businessTypeHardware => 'Tindahan ng Hardware';
+
+  @override
+  String get businessTypeMarketplace => 'Pwesto sa Palengke';
+
+  @override
+  String get businessTypeGeneral => 'Pangkalahatan / Iba pa';
+
+  @override
+  String get showPassword => 'Ipakita ang password';
+
+  @override
+  String get hidePassword => 'Itago ang password';
+
+  @override
+  String get usernameValidator =>
+      'Ang username ay dapat hindi bababa sa 4 na karakter at titik o numero lamang';
+
+  @override
+  String get passwordValidator =>
+      'Ang password ay dapat hindi bababa sa 6 na karakter';
+
+  @override
+  String get authErrorConnection =>
+      'Hindi makakonekta sa server. Pakisuri ang iyong koneksyon sa internet.';
+
+  @override
+  String get authErrorTimeout =>
+      'Na-timeout ang koneksyon. Pakisubukan muli mamaya.';
+
+  @override
+  String get authErrorInvalidCredentials => 'Maling username o password.';
+
+  @override
+  String get authErrorUsernameTaken =>
+      'Ang username na ito ay nakuha na. Pakisubukan ang iba.';
+
+  @override
+  String get authErrorGeneric =>
+      'Nabigo ang pag-authenticate. Pakisubukan muli.';
+
+  @override
+  String get tutorialWelcomeTitlePocketLedger =>
+      'Maligayang pagdating sa PocketLedger!';
+
+  @override
+  String get tutorialWelcomeDescPocketLedger =>
+      'Kumuha tayo ng mabilis na 1-minutong tour para makita kung paano subaybayan ang iyong cash drawer at digital wallets (GCash/Maya) nang madali!';
+
+  @override
+  String get tutorialCashTitle => 'Kasalukuyang Pera ng Negosyo';
+
+  @override
+  String get tutorialCashDesc =>
+      'Ipinapakita nito ang kabuuang pera na magagamit mo para sa iyong tindahan. Pinagsasama nito ang iyong GCash, Maya, at pisikal na On-hand Cash, minus ang mga personal na gastusin na kinuha mo.';
+
+  @override
+  String get tutorialWalletsTitle => 'GCash, Maya at On-hand Cash';
+
+  @override
+  String get tutorialWalletsDesc =>
+      'Ang GCash at Maya ay digital na pera sa iyong telepono. Ang On-hand Cash ay ang pisikal na barya o papel sa iyong drawer. Kapag nagbayad ang customer ng cash para sa cash-in, bababa ang GCash mo ngunit tataas ang iyong cash drawer!';
+
+  @override
+  String get tutorialSampleTitlePocketLedger => 'Tingnan Natin sa Aksyon!';
+
+  @override
+  String get tutorialSampleDescPocketLedger =>
+      'Gusto mo bang magdagdag ng sample na transaksyon (hal. ₱100 GCash Cash-In na may ₱10 fee) upang makita kung paano nag-a-update ang dashboard, mga chart, at mga nakolektang fee?';
+
+  @override
+  String get addSampleDataButton => 'Magdagdag ng Sample na Transaksyon';
+
+  @override
+  String get startEmptyButton => 'Magsimula nang Walang Laman';
+
+  @override
+  String get nextButton => 'Susunod';
+
+  @override
+  String get skipButton => 'Laktawan';
 }

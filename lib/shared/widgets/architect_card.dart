@@ -15,18 +15,21 @@ class ArchitectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: padding ?? const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(8),
           // Traditional shadows are discouraged, but we use a very subtle one for elevation if needed
           boxShadow: [
             BoxShadow(
-              color: AppColors.onSurface.withValues(alpha: 0.04),
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.15)
+                  : AppColors.onSurface.withValues(alpha: 0.04),
               blurRadius: 24,
               offset: const Offset(0, 8),
             ),

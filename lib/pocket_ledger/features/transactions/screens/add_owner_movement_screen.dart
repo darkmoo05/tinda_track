@@ -17,6 +17,17 @@ import '../domain/entities/movement_category.dart';
 import '../logic/owner_movement_fee_logic.dart';
 import '../presentation/providers/ledger_entry_providers.dart';
 import '../presentation/providers/movement_category_providers.dart';
+import '../../dashboard/logic/onboarding_provider.dart';
+import '../../more/logic/monitoring_session_provider.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
+
+enum _MovementOnboardingStep {
+  inactive,
+  selectType,
+  walletTransferDetails,
+  saveMovement,
+  completed,
+}
 
 class AddOwnerMovementScreen extends ConsumerStatefulWidget {
   const AddOwnerMovementScreen({
@@ -39,6 +50,14 @@ class _AddOwnerMovementScreenState
   final _amountController = TextEditingController();
   final _referenceController = TextEditingController();
   final _notesController = TextEditingController();
+  final _amountFieldKey = GlobalKey(debugLabel: 'onboardingAmountField');
+  final _saveButtonKey = GlobalKey(debugLabel: 'onboardingSaveButton');
+
+  _MovementOnboardingStep _microOnboardingStep = _MovementOnboardingStep.inactive;
+
+  final GlobalKey _typeSelectorKey = GlobalKey(debugLabel: 'ownerMovementTypeSelector');
+  final GlobalKey _transferDetailsKey = GlobalKey(debugLabel: 'ownerMovementTransferDetails');
+
   static const List<String> _movementTypes = [
     'Top-up',
     'Cash Transfer (On-hand to Wallet)',
@@ -188,6 +207,39 @@ class _AddOwnerMovementScreenState
     _destination = _resolveInitialDestination();
     _loadExpenseCategories();
     _refreshAvailableFeeIncome();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final onboardingState = ref.read(onboardingProvider);
+        if (onboardingState.step == OnboardingStep.setupCapitalPrompt) {
+          ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addCapitalForm);
+        } else {
+          _checkMicroTutorialStatus();
+        }
+      }
+    });
+  }
+
+  Future<void> _checkMicroTutorialStatus() async {
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      final completed = await appMeta.get('tutorial_completed_owner_movement');
+      if (completed != 'true' && mounted) {
+        setState(() {
+          _microOnboardingStep = _MovementOnboardingStep.selectType;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _completeMicroTutorial() async {
+    setState(() {
+      _microOnboardingStep = _MovementOnboardingStep.completed;
+    });
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      await appMeta.set('tutorial_completed_owner_movement', 'true');
+    } catch (_) {}
   }
 
   @override
@@ -373,13 +425,22 @@ class _AddOwnerMovementScreenState
   @override
   Widget build(BuildContext context) {
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final isClosed = selectedSession != null && selectedSession.status == 'CLOSED';
+
+    final onboardingState = ref.watch(onboardingProvider);
+    final isTourActive = onboardingState.step == OnboardingStep.addCapitalForm;
+    final showSaveSpotlight = isTourActive && _amountController.text.isNotEmpty;
+    final showAmountSpotlight = isTourActive && _amountController.text.isEmpty;
+
+    final scaffold = Scaffold(
+      backgroundColor: isDark ? AppColors.darkNavy : AppColors.background,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: AppColors.onSurface),
+          icon: Icon(Icons.close_rounded, color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: const [],
@@ -387,332 +448,457 @@ class _AddOwnerMovementScreenState
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          ScreenHeaderCard(
-            title: 'Owner Movement',
-            subtitle:
-                'Record a top-up, cash transfer, borrowed funds, or fee withdrawal.',
-          ),
-          const SizedBox(height: 16),
-          _buildCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSectionTitle('Movement Details'),
-                const SizedBox(height: 14),
-                _buildMovementTypeSelector(),
-                const SizedBox(height: 20),
-                _buildFlowMetaCard(),
-                const SizedBox(height: 20),
-                _buildAccountSelector(context),
-                if (_isFeeWithdrawal) ...[
-                  const SizedBox(height: 16),
-                ] else if (_isCashTransferToWallet) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.outlineVariant.withValues(alpha: 0.5),
+          if (isClosed)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Viewing historical session: Recording movements is disabled.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.red.shade300 : Colors.red.shade800,
                       ),
                     ),
-                    child: _isLoadingFeeIncome
-                        ? const Center(
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                              ),
+                  ),
+                ],
+              ),
+            ),
+          IgnorePointer(
+            ignoring: isClosed,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ScreenHeaderCard(
+                  title: 'Owner Movement',
+                  subtitle:
+                      'Record a top-up, cash transfer, borrowed funds, or fee withdrawal.',
+                ),
+                const SizedBox(height: 16),
+                _buildCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle('Movement Details'),
+                      const SizedBox(height: 14),
+                      _buildMovementTypeSelector(),
+                      const SizedBox(height: 20),
+                      _buildFlowMetaCard(),
+                      const SizedBox(height: 20),
+                      _buildAccountSelector(context),
+                      if (_isFeeWithdrawal) ...[
+                        const SizedBox(height: 16),
+                      ] else if (_isCashTransferToWallet) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          key: _transferDetailsKey,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF1E293B)
+                                  : AppColors.outlineVariant.withValues(alpha: 0.5),
                             ),
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                          ),
+                          child: _isLoadingFeeIncome
+                              ? Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(isDark ? const Color(0xFF60A5FA) : AppColors.primary),
+                                    ),
+                                  ),
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
                                       children: [
-                                        const Text(
-                                          'Transfer Fee Earnings?',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.onSurface,
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Transfer Fee Earnings?',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Avail. Fee On-Hand: ₱ ${(_availableFeeIncomeOnHand ?? 0).toStringAsFixed(2)}',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Avail. Fee On-Hand: ₱ ${(_availableFeeIncomeOnHand ?? 0).toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: AppColors.onSurfaceVariant,
-                                          ),
+                                        Switch(
+                                          value: _includeFeeIncomeInTransfer,
+                                          activeThumbColor: AppColors.primary,
+                                          onChanged: (_availableFeeIncomeOnHand ?? 0) <= 0
+                                              ? null
+                                              : (v) => setState(
+                                                  () => _includeFeeIncomeInTransfer = v,
+                                                ),
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  Switch(
-                                    value: _includeFeeIncomeInTransfer,
-                                    activeThumbColor: AppColors.primary,
-                                    onChanged: (_availableFeeIncomeOnHand ?? 0) <= 0
-                                        ? null
-                                        : (v) => setState(
-                                            () => _includeFeeIncomeInTransfer = v,
-                                          ),
-                                  ),
-                                ],
-                              ),
-                              if (_onHandFeeIncomeTotal > 0 ||
-                                  _onHandFeeWithdrawnTotal > 0) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Earned: ₱ ${_onHandFeeIncomeTotal.toStringAsFixed(2)} • Moved: ₱ ${_onHandFeeWithdrawnTotal.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.onSurfaceVariant,
-                                  ),
+                                    if (_onHandFeeIncomeTotal > 0 ||
+                                        _onHandFeeWithdrawnTotal > 0) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Earned: ₱ ${_onHandFeeIncomeTotal.toStringAsFixed(2)} • Moved: ₱ ${_onHandFeeWithdrawnTotal.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                    if (_onHandFeeAdjustment > 0) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Historical over-withdrawal adjusted: ₱ ${_onHandFeeAdjustment.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                    if ((_availableFeeIncomeOnHand ?? 0) <= 0 &&
+                                        _onHandFeeIncomeTotal > 0) ...[
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'No On-Hand fee is currently available because previous withdrawals/transfers already consumed it.',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.error,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                              ],
-                              if (_onHandFeeAdjustment > 0) ...[
-                                const SizedBox(height: 2),
+                        ),
+                        const SizedBox(height: 12),
+                      ] else ...[
+                        const SizedBox(height: 16),
+                      ],
+
+                      if (_isPersonalExpense) ...[
+                        _buildCategorySection(),
+                        const SizedBox(height: 16),
+                      ],
+
+                      KeyedSubtree(
+                        key: _amountFieldKey,
+                        child: _buildTextField(
+                          controller: _amountController,
+                          label: 'Amount',
+                          hint: '0.00',
+                          prefixText: '₱  ',
+                          isRequired: true,
+                          hasError: _isAmountMissing,
+                          isUnderline: true,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                        ),
+                      ),
+                      if (_isCashTransferToWallet) ...[
+                        const SizedBox(height: 6),
+                        Builder(
+                          builder: (context) {
+                            final availableFeeOnHand = _availableFeeIncomeOnHand ?? 0;
+                            final totalToWallet = amount + _cashTransferFeeMoveAmount;
+                            final requiredOnHand =
+                                amount + _cashTransferFeeMoveAmount;
+                            final showFeeCapHint =
+                                _includeFeeIncomeInTransfer &&
+                                availableFeeOnHand > 0 &&
+                                amount > 0;
+                            final showFeeConsumeHint =
+                                !_includeFeeIncomeInTransfer &&
+                                availableFeeOnHand > 0 &&
+                                amount > 0;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  'Historical over-withdrawal adjusted: ₱ ${_onHandFeeAdjustment.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                              if ((_availableFeeIncomeOnHand ?? 0) <= 0 &&
-                                  _onHandFeeIncomeTotal > 0) ...[
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'No On-Hand fee is currently available because previous withdrawals/transfers already consumed it.',
+                                  _includeFeeIncomeInTransfer &&
+                                          _cashTransferFeeMoveAmount > 0
+                                      ? 'Total to wallet: ₱ ${totalToWallet.toStringAsFixed(2)} = Transfer ₱ ${amount.toStringAsFixed(2)} + Fee Move ₱ ${_cashTransferFeeMoveAmount.toStringAsFixed(2)}'
+                                      : 'Total to wallet: ₱ ${amount.toStringAsFixed(2)}',
                                   style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.error,
+                                    fontSize: 12,
+                                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                                   ),
                                 ),
+                                Text(
+                                  'Requested On-Hand: ₱ ${requiredOnHand.toStringAsFixed(2)} = Transfer ₱ ${amount.toStringAsFixed(2)} + Fee Move ₱ ${_cashTransferFeeMoveAmount.toStringAsFixed(2)}. Fee move is capped by remaining On-Hand after transfer.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                                if (showFeeCapHint)
+                                  const Text(
+                                    'To move fee earnings, leave enough On-hand Cash after transfer or turn off the fee transfer option.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.error,
+                                    ),
+                                  ),
+                                if (showFeeConsumeHint)
+                                  Text(
+                                    'On-Hand Cash contains ₱ ${availableFeeOnHand.toStringAsFixed(2)} of undrawn fee earnings. '
+                                    'If your transfer exceeds the non-fee portion, it will be blocked. '
+                                    'Enable the fee toggle to move fee earnings along with the transfer.',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.error,
+                                    ),
+                                  ),
                               ],
-                            ],
-                          ),
-                  ),
-                  const SizedBox(height: 12),
-                ] else ...[
-                  const SizedBox(height: 16),
-                ],
-
-                if (_isPersonalExpense) ...[
-                  _buildCategorySection(),
-                  const SizedBox(height: 16),
-                ],
-
-                _buildTextField(
-                  controller: _amountController,
-                  label: 'Amount',
-                  hint: '0.00',
-                  prefixText: '₱  ',
-                  isRequired: true,
-                  hasError: _isAmountMissing,
-                  isUnderline: true,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                ),
-                if (_isCashTransferToWallet) ...[
-                  const SizedBox(height: 6),
-                  Builder(
-                    builder: (context) {
-                      final availableFeeOnHand = _availableFeeIncomeOnHand ?? 0;
-                      final totalToWallet = amount + _cashTransferFeeMoveAmount;
-                      final requiredOnHand =
-                          amount + _cashTransferFeeMoveAmount;
-                      final showFeeCapHint =
-                          _includeFeeIncomeInTransfer &&
-                          availableFeeOnHand > 0 &&
-                          amount > 0;
-                      final showFeeConsumeHint =
-                          !_includeFeeIncomeInTransfer &&
-                          availableFeeOnHand > 0 &&
-                          amount > 0;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _includeFeeIncomeInTransfer &&
-                                    _cashTransferFeeMoveAmount > 0
-                                ? 'Total to wallet: ₱ ${totalToWallet.toStringAsFixed(2)} = Transfer ₱ ${amount.toStringAsFixed(2)} + Fee Move ₱ ${_cashTransferFeeMoveAmount.toStringAsFixed(2)}'
-                                : 'Total to wallet: ₱ ${amount.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                          Text(
-                            'Requested On-Hand: ₱ ${requiredOnHand.toStringAsFixed(2)} = Transfer ₱ ${amount.toStringAsFixed(2)} + Fee Move ₱ ${_cashTransferFeeMoveAmount.toStringAsFixed(2)}. Fee move is capped by remaining On-Hand after transfer.',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                          if (showFeeCapHint)
-                            const Text(
-                              'To move fee earnings, leave enough On-hand Cash after transfer or turn off the fee transfer option.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.error,
-                              ),
-                            ),
-                          if (showFeeConsumeHint)
-                            Text(
-                              'On-Hand Cash contains ₱ ${availableFeeOnHand.toStringAsFixed(2)} of undrawn fee earnings. '
-                              'If your transfer exceeds the non-fee portion, it will be blocked. '
-                              'Enable the fee toggle to move fee earnings along with the transfer.',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.error,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-                if (_isFeeWithdrawal) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(20),
+                            );
+                          },
                         ),
-                        child: _isLoadingFeeIncome
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                                ),
-                              )
-                            : Text(
-                                'Available Fee: ₱ ${(_availableFeeIncome ?? 0).toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 11,
-                                ),
-                              ),
-                      ),
-                      GestureDetector(
-                        onTap: _isLoadingFeeIncome ? null : _applyMaxFeeWithdrawalAmount,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'Use Max',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 20),
-
-                GestureDetector(
-                  onTap: () => setState(() => _showDetails = !_showDetails),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Row(
+                      ],
+                      if (_isFeeWithdrawal) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(
-                              Icons.receipt_long_rounded,
-                              color: AppColors.onSurfaceVariant,
-                              size: 18,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: isDark ? 0.15 : 0.08),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: _isLoadingFeeIncome
+                                  ? SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        valueColor: AlwaysStoppedAnimation<Color>(isDark ? const Color(0xFF60A5FA) : AppColors.primary),
+                                      ),
+                                    )
+                                  : Text(
+                                      'Available Fee: ₱ ${(_availableFeeIncome ?? 0).toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11,
+                                      ),
+                                    ),
                             ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Additional Details (Optional)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.onSurface,
+                            GestureDetector(
+                              onTap: _isLoadingFeeIncome ? null : _applyMaxFeeWithdrawalAmount,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: isDark ? 0.25 : 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'Use Max',
+                                  style: TextStyle(
+                                    color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                        Icon(
-                          _showDetails ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                          color: AppColors.onSurfaceVariant,
+                      ],
+                      const SizedBox(height: 20),
+
+                      GestureDetector(
+                        onTap: () => setState(() => _showDetails = !_showDetails),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.receipt_long_rounded,
+                                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Additional Details (Optional)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Icon(
+                                _showDetails ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_showDetails) ...[
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          controller: _referenceController,
+                          label: context.l10n.referenceOptional,
+                          hint: _referenceHint,
+                          isBorderless: true,
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ReceiptScanButton(onDraftReady: _applyReceiptDraft),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          controller: _notesController,
+                          label: context.l10n.notesOptional,
+                          hint: context.l10n.additionalDetails,
+                          maxLines: 3,
+                          isBorderless: true,
                         ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-                if (_showDetails) ...[
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _referenceController,
-                    label: context.l10n.referenceOptional,
-                    hint: _referenceHint,
-                    isBorderless: true,
-                  ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: ReceiptScanButton(onDraftReady: _applyReceiptDraft),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _notesController,
-                    label: context.l10n.notesOptional,
-                    hint: context.l10n.additionalDetails,
-                    maxLines: 3,
-                    isBorderless: true,
-                  ),
-                ],
+                const SizedBox(height: 16),
+                _buildSummaryCard(amount),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          _buildSummaryCard(amount),
           const SizedBox(height: 24),
-          _buildSaveButton(),
+          KeyedSubtree(
+            key: _saveButtonKey,
+            child: _buildSaveButton(),
+          ),
           const SizedBox(height: 40),
         ],
       ),
     );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (showAmountSpotlight)
+          TutorialSpotlight(
+            targetKey: _amountFieldKey,
+            title: 'Enter Starting Capital',
+            description: 'Type your starting GCash balance (e.g. 1000) here to fund your business.',
+            onNext: () {
+              setState(() {
+                _amountController.text = '1000';
+              });
+            },
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Fill 1,000',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (showSaveSpotlight)
+          TutorialSpotlight(
+            targetKey: _saveButtonKey,
+            title: 'Save Balance',
+            description: 'Awesome! Now tap \'Save\' to record this capital in your ledger.',
+            onNext: _handleSave,
+            onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+            nextLabel: 'Save',
+            showNext: true,
+            borderRadius: 12.0,
+            shape: BoxShape.rectangle,
+          ),
+        if (_microOnboardingStep == _MovementOnboardingStep.selectType)
+          TutorialSpotlight(
+            targetKey: _typeSelectorKey,
+            title: 'Select Movement Type',
+            description: 'Choose the movement category. Select "Cash Transfer" to move funds from physical cash on-hand to your digital wallets.',
+            onNext: () {
+              setState(() {
+                _movementType = 'Cash Transfer (On-hand to Wallet)';
+                _microOnboardingStep = _MovementOnboardingStep.walletTransferDetails;
+              });
+            },
+            onSkip: _completeMicroTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 14.0,
+          ),
+        if (_microOnboardingStep == _MovementOnboardingStep.walletTransferDetails)
+          TutorialSpotlight(
+            targetKey: _transferDetailsKey,
+            title: 'Shift Fee Earnings',
+            description: 'Here you can select the destination wallet. Toggle "Transfer Fee Earnings" to move collected fees back into your active wallet capital.',
+            onNext: () {
+              setState(() {
+                _microOnboardingStep = _MovementOnboardingStep.saveMovement;
+              });
+            },
+            onSkip: _completeMicroTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 12.0,
+          ),
+        if (_microOnboardingStep == _MovementOnboardingStep.saveMovement)
+          TutorialSpotlight(
+            targetKey: _saveButtonKey,
+            title: 'Record Movement',
+            description: 'After entering the transfer amount, tap "Save Record" to update your balances. GCash/Maya will increase and On-hand cash will decrease!',
+            onNext: _completeMicroTutorial,
+            onSkip: _completeMicroTutorial,
+            nextLabel: 'Finish',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 12.0,
+          ),
+      ],
+    );
   }
 
   Widget _buildFlowMetaCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final tone = _isCashTransferToWallet
-        ? AppColors.primary
+        ? (isDark ? const Color(0xFF60A5FA) : AppColors.primary)
         : (_isFeeWithdrawal
               ? AppColors.error
-              : (_isInflow ? AppColors.secondary : AppColors.error));
+              : (_isInflow
+                    ? (isDark ? const Color(0xFF34D399) : AppColors.secondary)
+                    : AppColors.error));
     final icon = _isCashTransferToWallet
         ? Icons.swap_horiz_rounded
         : (_isFeeWithdrawal
@@ -725,7 +911,7 @@ class _AddOwnerMovementScreenState
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.08),
+        color: tone.withValues(alpha: isDark ? 0.15 : 0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: tone.withValues(alpha: 0.18)),
       ),
@@ -735,7 +921,7 @@ class _AddOwnerMovementScreenState
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: tone.withValues(alpha: 0.15),
+              color: tone.withValues(alpha: isDark ? 0.25 : 0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 18, color: tone),
@@ -756,17 +942,17 @@ class _AddOwnerMovementScreenState
                 const SizedBox(height: 2),
                 Text(
                   _autoDirectionLabel(context),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _movementDescription,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -778,6 +964,7 @@ class _AddOwnerMovementScreenState
   }
 
   Widget _buildCategorySection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -810,14 +997,14 @@ class _AddOwnerMovementScreenState
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
+              color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               context.l10n.addCategoryFirst,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.onSurfaceVariant,
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
               ),
             ),
           )
@@ -826,10 +1013,15 @@ class _AddOwnerMovementScreenState
             initialValue: _selectedCategory,
             hint: Text(
               context.l10n.chooseExpenseCategory,
-              style: const TextStyle(
-                color: AppColors.outlineVariant,
+              style: TextStyle(
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.outlineVariant,
                 fontSize: 13,
               ),
+            ),
+            dropdownColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
+            style: TextStyle(
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+              fontSize: 14,
             ),
             onChanged: (value) {
               if (value == null) {
@@ -838,14 +1030,21 @@ class _AddOwnerMovementScreenState
               setState(() => _selectedCategory = value);
             },
             decoration: _inputDecoration(hasError: _isCategoryMissing),
-            icon: const Icon(
+            icon: Icon(
               Icons.expand_more_rounded,
-              color: AppColors.onSurfaceVariant,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
             ),
             items: _expenseCategories
                 .map(
-                  (category) =>
-                      DropdownMenuItem(value: category, child: Text(category)),
+                  (category) => DropdownMenuItem(
+                    value: category,
+                    child: Text(
+                      category,
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      ),
+                    ),
+                  ),
                 )
                 .toList(),
           ),
@@ -858,6 +1057,7 @@ class _AddOwnerMovementScreenState
     required IconData icon,
     required Future<void> Function() onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextButton.icon(
       onPressed: () {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -868,7 +1068,7 @@ class _AddOwnerMovementScreenState
         });
       },
       style: TextButton.styleFrom(
-        foregroundColor: AppColors.primary,
+        foregroundColor: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -883,11 +1083,12 @@ class _AddOwnerMovementScreenState
   }
 
   Widget _buildSummaryCard(double amount) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final color = _isCashTransferToWallet
-        ? AppColors.primary
+        ? (isDark ? const Color(0xFF60A5FA) : AppColors.primary)
         : (_isFeeWithdrawal
               ? AppColors.error
-              : (_isInflow ? AppColors.secondary : AppColors.error));
+              : (_isInflow ? (isDark ? const Color(0xFF34D399) : AppColors.secondary) : AppColors.error));
     final displayAmount = _isCashTransferToWallet
         ? amount + _cashTransferFeeMoveAmount
         : amount;
@@ -904,7 +1105,7 @@ class _AddOwnerMovementScreenState
 
     return Container(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
+        color: color.withValues(alpha: isDark ? 0.12 : 0.06),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: color.withValues(alpha: 0.15),
@@ -921,7 +1122,7 @@ class _AddOwnerMovementScreenState
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
+                    color: color.withValues(alpha: isDark ? 0.22 : 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, color: color, size: 20),
@@ -942,9 +1143,9 @@ class _AddOwnerMovementScreenState
                       const SizedBox(height: 2),
                       Text(
                         _movementDescription,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.onSurfaceVariant,
+                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -962,12 +1163,12 @@ class _AddOwnerMovementScreenState
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Record Summary',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   ),
                 ),
                 Flexible(
@@ -992,15 +1193,18 @@ class _AddOwnerMovementScreenState
   }
 
   Widget _buildCard({required Widget child}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1023,6 +1227,7 @@ class _AddOwnerMovementScreenState
     bool isUnderline = false,
     bool isBorderless = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1037,46 +1242,65 @@ class _AddOwnerMovementScreenState
           keyboardType: keyboardType,
           maxLines: maxLines,
           onChanged: (_) => setState(() {}),
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            fontSize: 14,
+          ),
           decoration: _inputDecoration(
             hasError: hasError,
             isUnderline: isUnderline,
             isBorderless: isBorderless,
-          ).copyWith(hintText: hint, prefixText: prefixText),
+          ).copyWith(
+            hintText: hint,
+            prefixText: prefixText,
+            prefixStyle: TextStyle(
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            ),
+          ),
         ),
       ],
     );
   }
 
   Widget _buildSectionTitle(String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w700,
-        color: AppColors.onSurface,
+        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
       ),
     );
   }
 
   Widget _buildSaveButton() {
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final isClosed = selectedSession != null && selectedSession.status == 'CLOSED';
+
     final color = _isInflow ? AppColors.secondary : AppColors.error;
     final endColor = _isInflow
-        ? const Color(0xFF388E3C)
-        : const Color(0xFFD32F2F);
+        ? AppColors.successMedium
+        : AppColors.errorDeep;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [color, endColor],
-        ),
+        gradient: isClosed
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color, endColor],
+              ),
+        color: isClosed ? (isDark ? Colors.white24 : Colors.grey.shade400) : null,
         borderRadius: BorderRadius.circular(12),
       ),
       child: ElevatedButton(
-        onPressed: _isSaving ? null : _handleSave,
+        onPressed: (isClosed || _isSaving) ? null : _handleSave,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
+          backgroundColor: isClosed ? (isDark ? Colors.white12 : Colors.grey.shade300) : Colors.transparent,
           shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
@@ -1109,6 +1333,20 @@ class _AddOwnerMovementScreenState
 
   Future<void> _handleSave() async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+
+    // Fix 4: Re-check session status at save time to guard against the race
+    // where the session was closed while this form was already open on screen.
+    final currentSession = ref.read(selectedSessionProvider).value;
+    if (currentSession != null &&
+        currentSession.status.toUpperCase() == 'CLOSED') {
+      _showSnackBar(
+        messenger,
+        'Cannot save to a closed session. Switch to the active session first.',
+        isError: true,
+      );
+      return;
+    }
+
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
     var feeTransferAmountForSave = 0.0;
     var requestedFeeTransferAmount = 0.0;
@@ -1249,6 +1487,10 @@ class _AddOwnerMovementScreenState
     }
 
     if (_isPersonalExpensePayment) {
+      // Repayment = owner brings money from their personal pocket INTO the
+      // business wallet. The money source is external (outside the system), so
+      // NO source balance check is needed — the wallet is the destination, not
+      // the source. The only meaningful check is how much debt is still outstanding.
       final (outstanding, _) = await _loadPersonalExpenseBalance();
       if (!mounted) {
         return;
@@ -1284,6 +1526,29 @@ class _AddOwnerMovementScreenState
           repaymentAmount: amount,
           topUpAmount: 0,
         );
+      }
+    }
+
+    // Fix 1: Guard unprotected outflow types (e.g. "Withdrawal") against
+    // driving the source balance negative. The other specific outflow types
+    // (CashTransferToWallet, FeeWithdrawal, PersonalExpense) each have their
+    // own tailored checks above — this catches everything else.
+    if (!_isInflow &&
+        !_isCashTransferToWallet &&
+        !_isFeeWithdrawal &&
+        !_isPersonalExpense &&
+        !_isPersonalExpensePayment) {
+      final sourceBalance = await _loadSelectedAccountBalance();
+      if (!mounted) return;
+      if (amount > sourceBalance) {
+        _showSnackBar(
+          messenger,
+          'Withdrawal cannot be processed due to insufficient '
+          '$_destinationLabel balance. '
+          'Available: \u20b1 ${sourceBalance.toStringAsFixed(2)}.',
+          isError: true,
+        );
+        return;
       }
     }
 
@@ -1377,9 +1642,12 @@ class _AddOwnerMovementScreenState
     final now = DateTime.now();
     final referenceInput = _referenceController.text.trim();
     final notes = _notesController.text.trim();
-    final reference = referenceInput.isNotEmpty
-        ? referenceInput
-        : _buildAutoReference(now);
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm;
+    final reference = isTourActive
+        ? 'CAP-INITIAL-3D'
+        : (referenceInput.isNotEmpty
+            ? referenceInput
+            : _buildAutoReference(now));
     final feeTransferAmount = _isCashTransferToWallet
         ? feeTransferAmountOverride.clamp(0.0, double.infinity)
         : 0.0;
@@ -1581,10 +1849,12 @@ class _AddOwnerMovementScreenState
       return '$sign ₱ ${v.abs().toStringAsFixed(2)}';
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     Color deltaColor(double v) {
-      if (v > 0) return const Color(0xFF2E7D32);
+      if (v > 0) return isDark ? const Color(0xFF34D399) : AppColors.success;
       if (v < 0) return AppColors.error;
-      return AppColors.onSurfaceVariant;
+      return isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
     }
 
     Widget deltaRow(String label, double delta) {
@@ -1596,9 +1866,9 @@ class _AddOwnerMovementScreenState
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppColors.onSurfaceVariant,
+                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
               ),
             ),
             Text(
@@ -1623,7 +1893,7 @@ class _AddOwnerMovementScreenState
       barrierDismissible: false,
       builder: (dialogContext) {
         return AlertDialog(
-          backgroundColor: AppColors.surfaceContainerLowest,
+          backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -1634,14 +1904,18 @@ class _AddOwnerMovementScreenState
             children: [
               Icon(
                 Icons.receipt_long_rounded,
-                color: _isInflow ? AppColors.secondary : AppColors.error,
+                color: _isInflow ? (isDark ? const Color(0xFF34D399) : AppColors.secondary) : AppColors.error,
                 size: 22,
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Confirm Movement',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  ),
                 ),
               ),
             ],
@@ -1655,10 +1929,10 @@ class _AddOwnerMovementScreenState
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerLow,
+                    color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: AppColors.outlineVariant.withValues(alpha: 0.5),
+                      color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant.withValues(alpha: 0.5),
                     ),
                   ),
                   child: Column(
@@ -1666,48 +1940,48 @@ class _AddOwnerMovementScreenState
                     children: [
                       Text(
                         movementLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
+                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '$_destinationLabel  •  ₱ ${displayAmount.toStringAsFixed(2)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
+                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text(
+                Text(
                   'Balance Changes',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 6),
                 deltaRow('GCash Wallet', walletDeltaDisplay),
                 deltaRow('Maya Wallet', mayaDeltaDisplay),
                 deltaRow('On-Hand Cash', onHandDeltaDisplay),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Divider(
-                    color: AppColors.outlineVariant,
+                    color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
                     thickness: 0.5,
                   ),
                 ),
                 Text(
                   _movementDescription,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.onSurfaceVariant,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
@@ -1716,17 +1990,17 @@ class _AddOwnerMovementScreenState
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.07),
+                      color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: isDark ? 0.15 : 0.07),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       repaymentPlan.repaymentAmount > 0
                           ? '₱ ${repaymentPlan.repaymentAmount.toStringAsFixed(2)} as repayment  +  ₱ ${repaymentPlan.topUpAmount.toStringAsFixed(2)} as Top-up'
                           : 'Full ₱ ${repaymentPlan.topUpAmount.toStringAsFixed(2)} saved as Top-up',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
+                        color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                       ),
                     ),
                   ),
@@ -1736,15 +2010,15 @@ class _AddOwnerMovementScreenState
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.07),
+                      color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: isDark ? 0.15 : 0.07),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       'Includes ₱ ${feeTransferAmount.toStringAsFixed(2)} of fee earnings moved to $_destinationLabel',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
+                        color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                       ),
                     ),
                   ),
@@ -1756,13 +2030,18 @@ class _AddOwnerMovementScreenState
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(context.l10n.cancel),
+              child: Text(
+                context.l10n.cancel,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                ),
+              ),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
               style: FilledButton.styleFrom(
                 backgroundColor: _isInflow
-                    ? AppColors.secondary
+                    ? (isDark ? const Color(0xFF34D399) : AppColors.secondary)
                     : AppColors.error,
               ),
               child: const Text('Confirm & Save'),
@@ -1783,8 +2062,15 @@ class _AddOwnerMovementScreenState
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return AlertDialog(
-          title: const Text('Convert extra amount to Top-up?'),
+          backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
+          title: Text(
+            'Convert extra amount to Top-up?',
+            style: TextStyle(
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+            ),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1792,24 +2078,43 @@ class _AddOwnerMovementScreenState
               if (outstanding > 0)
                 Text(
                   'Remaining borrowed balance: ₱ ${outstanding.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  ),
                 )
               else
-                const Text('There is no remaining borrowed balance to repay.'),
+                Text(
+                  'There is no remaining borrowed balance to repay.',
+                  style: TextStyle(
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  ),
+                ),
               const SizedBox(height: 10),
               Text(
                 repaymentAmount > 0
                     ? 'This will save ₱ ${repaymentAmount.toStringAsFixed(2)} as Borrowed Funds Repayment and ₱ ${topUpAmount.toStringAsFixed(2)} as Top-up.'
                     : 'This will save the full ₱ ${topUpAmount.toStringAsFixed(2)} as Top-up for business capital.',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                ),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(context.l10n.cancel),
+              child: Text(
+                context.l10n.cancel,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                ),
+              ),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+              ),
               child: const Text('Proceed'),
             ),
           ],
@@ -1884,6 +2189,7 @@ class _AddOwnerMovementScreenState
     required DateTime now,
     required int nowMs,
   }) async {
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm;
     final entry = LedgerEntry(
       id: '',
       entryType: 'owner_movement',
@@ -1907,10 +2213,14 @@ class _AddOwnerMovementScreenState
         deviceId: deviceId,
         createdAt: now,
         updatedAt: DateTime.fromMillisecondsSinceEpoch(nowMs),
-        isDirty: true,
+        isDirty: !isTourActive,
       ),
     );
     await ref.read(ledgerEntryRepositoryProvider).save(entry);
+    if (isTourActive) {
+      ref.read(onboardingProvider.notifier).setHasDemoData(true);
+      ref.read(onboardingProvider.notifier).setStep(OnboardingStep.tapFabPrompt);
+    }
   }
 
   String _buildReferenceForType(String movementType, DateTime timestamp) {
@@ -1981,6 +2291,13 @@ class _AddOwnerMovementScreenState
   }
 
   Future<double> _loadSelectedAccountBalance() async {
+    // Fix 3: Scope balance to the active session's start date so the check
+    // reflects only money earned/spent in the current accounting cycle.
+    final session = ref.read(selectedSessionProvider).value;
+    final sessionFilter = (session != null)
+        ? 'AND created_at_ms >= ${session.startDateMs}'
+        : '';
+
     final result = await _database.customSelect('''
       SELECT
         COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
@@ -1988,6 +2305,7 @@ class _AddOwnerMovementScreenState
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ledger_entries
       WHERE is_deleted = 0
+        $sessionFilter
     ''').get();
 
     if (result.isEmpty) {
@@ -2010,10 +2328,17 @@ class _AddOwnerMovementScreenState
   }
 
   Future<double> _loadOnHandCashBalance() async {
+    // Fix 3: Scope to current session so balance reflects this cycle only.
+    final session = ref.read(selectedSessionProvider).value;
+    final sessionFilter = (session != null)
+        ? 'AND created_at_ms >= ${session.startDateMs}'
+        : '';
+
     final result = await _database.customSelect('''
       SELECT COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ledger_entries
       WHERE is_deleted = 0
+        $sessionFilter
     ''').get();
 
     if (result.isEmpty) {
@@ -2404,10 +2729,11 @@ class _AddOwnerMovementScreenState
   }
 
   Future<void> _showManageCategoriesDialog() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final preferredCategory = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
@@ -2448,7 +2774,7 @@ class _AddOwnerMovementScreenState
               ),
             ],
           ),
-          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          backgroundColor: isError ? AppColors.error : AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -2463,10 +2789,13 @@ class _AddOwnerMovementScreenState
     bool isRequired = false,
     bool showErrorIndicator = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final labelStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: showErrorIndicator ? AppColors.error : AppColors.onSurfaceVariant,
+      color: showErrorIndicator
+          ? AppColors.error
+          : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
     );
 
     if (!isRequired) {
@@ -2495,10 +2824,17 @@ class _AddOwnerMovementScreenState
     bool isUnderline = false,
     bool isBorderless = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fillColor = isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow;
+    final hintColor = isDark ? const Color(0xFF94A3B8) : AppColors.outlineVariant;
+    final focusedBorderColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final defaultBorderColor = isDark ? const Color(0xFF1E293B) : Colors.transparent;
+    final underlineBorderColor = isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant;
+
     if (isBorderless) {
       return InputDecoration(
         filled: true,
-        fillColor: AppColors.surfaceContainerLow,
+        fillColor: fillColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
@@ -2509,10 +2845,10 @@ class _AddOwnerMovementScreenState
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+          borderSide: BorderSide(color: focusedBorderColor, width: 1.2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+        hintStyle: TextStyle(color: hintColor, fontSize: 13),
       );
     }
 
@@ -2521,53 +2857,55 @@ class _AddOwnerMovementScreenState
         filled: false,
         border: UnderlineInputBorder(
           borderSide: BorderSide(
-            color: hasError ? AppColors.error : AppColors.outlineVariant,
+            color: hasError ? AppColors.error : underlineBorderColor,
           ),
         ),
         enabledBorder: UnderlineInputBorder(
           borderSide: BorderSide(
-            color: hasError ? AppColors.error : AppColors.outlineVariant,
+            color: hasError ? AppColors.error : underlineBorderColor,
           ),
         ),
         focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(
-            color: hasError ? AppColors.error : AppColors.primary,
+            color: hasError ? AppColors.error : focusedBorderColor,
             width: hasError ? 1.6 : 1.2,
           ),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
-        hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+        hintStyle: TextStyle(color: hintColor, fontSize: 13),
       );
     }
 
     return InputDecoration(
       filled: true,
-      fillColor: AppColors.surfaceContainerLow,
+      fillColor: fillColor,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(
-          color: hasError ? AppColors.error : Colors.transparent,
+          color: hasError ? AppColors.error : defaultBorderColor,
         ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(
-          color: hasError ? AppColors.error : Colors.transparent,
+          color: hasError ? AppColors.error : defaultBorderColor,
         ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(
-          color: hasError ? AppColors.error : AppColors.primary,
+          color: hasError ? AppColors.error : focusedBorderColor,
           width: hasError ? 1.6 : 1.2,
         ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      hintStyle: TextStyle(color: hintColor, fontSize: 13),
     );
   }
 
   Widget _buildMovementTypeSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2578,6 +2916,7 @@ class _AddOwnerMovementScreenState
         ),
         const SizedBox(height: 10),
         SizedBox(
+          key: _typeSelectorKey,
           height: 82,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
@@ -2590,21 +2929,34 @@ class _AddOwnerMovementScreenState
               if (type == 'Borrowed Funds' || type == 'Fee Withdrawal') {
                 activeColor = AppColors.error;
               } else if (type == 'Cash Transfer (On-hand to Wallet)') {
-                activeColor = AppColors.primary;
+                activeColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
               } else {
-                activeColor = AppColors.secondary;
+                activeColor = isDark ? const Color(0xFF34D399) : AppColors.secondary;
               }
 
+              final inactiveTextColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+
               return GestureDetector(
-                onTap: () => _onMovementTypeChanged(type),
+                onTap: () {
+                  if (isTourActive) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This field is locked to Top-up during the tutorial.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    return;
+                  }
+                  _onMovementTypeChanged(type);
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: 90,
                   margin: const EdgeInsets.only(right: 10),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? activeColor.withValues(alpha: 0.08)
-                        : AppColors.surfaceContainerLow,
+                        ? activeColor.withValues(alpha: isDark ? 0.15 : 0.08)
+                        : (isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected ? activeColor : Colors.transparent,
@@ -2619,13 +2971,13 @@ class _AddOwnerMovementScreenState
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? activeColor.withValues(alpha: 0.15)
-                              : AppColors.onSurfaceVariant.withValues(alpha: 0.08),
+                              ? activeColor.withValues(alpha: isDark ? 0.25 : 0.15)
+                              : inactiveTextColor.withValues(alpha: 0.08),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           _typeIcon(type),
-                          color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+                          color: isSelected ? activeColor : inactiveTextColor,
                           size: 18,
                         ),
                       ),
@@ -2641,7 +2993,7 @@ class _AddOwnerMovementScreenState
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                               color: isSelected
                                   ? activeColor
-                                  : AppColors.onSurfaceVariant,
+                                  : inactiveTextColor,
                             ),
                           ),
                         ),
@@ -2680,7 +3032,9 @@ class _AddOwnerMovementScreenState
   }
 
   Widget _buildAccountSelector(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final options = _accountOptions;
+    final isTourActive = ref.read(onboardingProvider).step == OnboardingStep.addCapitalForm;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2696,33 +3050,33 @@ class _AddOwnerMovementScreenState
             final String displayText = option == 'On-hand Cash' ? 'Cash' : option;
 
             if (option == 'GCash') {
-              activeColor = const Color(0xFF005DAC);
+              activeColor = isDark ? AppColors.gcashNeon : AppColors.gcash;
               logoBgColor = Colors.white;
               logoWidget = const Text(
                 'G',
                 style: TextStyle(
-                  color: Color(0xFF005DAC),
+                  color: AppColors.gcash,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
               );
             } else if (option == 'Maya Wallet') {
-              activeColor = const Color(0xFF106D20);
-              logoBgColor = Colors.black;
-              logoWidget = const Text(
+              activeColor = isDark ? AppColors.mayaNeon : AppColors.maya;
+              logoBgColor = isDark ? Colors.white : Colors.black;
+              logoWidget = Text(
                 'm',
                 style: TextStyle(
-                  color: Color(0xFF106D20),
+                  color: isDark ? Colors.black : AppColors.maya,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
               );
             } else {
-              activeColor = const Color(0xFFD4AF37);
-              logoBgColor = const Color(0xFFFFF8E7);
-              logoWidget = const Icon(
+              activeColor = isDark ? AppColors.cashNeon : AppColors.onHandGold;
+              logoBgColor = isDark ? AppColors.darkNavy : AppColors.onHandLight;
+              logoWidget = Icon(
                 Icons.payments_rounded,
-                color: Color(0xFFD4AF37),
+                color: isDark ? AppColors.cashNeon : AppColors.onHandGold,
                 size: 12,
               );
             }
@@ -2730,6 +3084,15 @@ class _AddOwnerMovementScreenState
             return Expanded(
               child: GestureDetector(
                 onTap: () {
+                  if (isTourActive) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This is locked to GCash during the tutorial.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    return;
+                  }
                   setState(() => _destination = option);
                   if (_isFeeWithdrawal || _isCashTransferToWallet) {
                     _refreshAvailableFeeIncome();
@@ -2741,8 +3104,8 @@ class _AddOwnerMovementScreenState
                   height: 48,
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? activeColor.withValues(alpha: 0.08)
-                        : AppColors.surfaceContainerLow,
+                        ? activeColor.withValues(alpha: isDark ? 0.15 : 0.08)
+                        : (isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected ? activeColor : Colors.transparent,
@@ -2778,7 +3141,7 @@ class _AddOwnerMovementScreenState
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                               color: isSelected
                                   ? activeColor
-                                  : AppColors.onSurfaceVariant,
+                                  : (isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
                             ),
                           ),
                         ),
@@ -2999,13 +3362,30 @@ class _ManageCategoriesSheetState
         await showDialog<bool>(
           context: context,
           builder: (dialogContext) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
             return AlertDialog(
-              title: const Text('Delete category?'),
-              content: Text('Delete "$category"? This cannot be undone.'),
+              backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLowest,
+              title: Text(
+                'Delete category?',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                ),
+              ),
+              content: Text(
+                'Delete "$category"? This cannot be undone.',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                ),
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: Text(context.l10n.cancel),
+                  child: Text(
+                    context.l10n.cancel,
+                    style: TextStyle(
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                    ),
+                  ),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -3079,7 +3459,7 @@ class _ManageCategoriesSheetState
               ),
             ],
           ),
-          backgroundColor: isError ? AppColors.error : const Color(0xFF2E7D32),
+          backgroundColor: isError ? AppColors.error : AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -3091,6 +3471,7 @@ class _ManageCategoriesSheetState
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -3109,28 +3490,43 @@ class _ManageCategoriesSheetState
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.outlineVariant,
+                    color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
               ),
               const SizedBox(height: 14),
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.settings_rounded, size: 20),
-                  SizedBox(width: 8),
+                  Icon(
+                    Icons.settings_rounded,
+                    size: 20,
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     'Manage Categories',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
               TextField(
                 onChanged: (value) => setState(() => _searchQuery = value),
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  fontSize: 14,
+                ),
                 decoration: _inputDecoration().copyWith(
                   hintText: 'Search categories',
-                  prefixIcon: const Icon(Icons.search_rounded),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -3138,11 +3534,18 @@ class _ManageCategoriesSheetState
                 controller: _nameController,
                 textCapitalization: TextCapitalization.words,
                 onChanged: (_) => setState(() {}),
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  fontSize: 14,
+                ),
                 decoration: _inputDecoration().copyWith(
                   hintText: context.l10n.categoryName,
                   labelText: _isRenaming
                       ? 'Rename "$_editingCategory"'
                       : 'Add category',
+                  labelStyle: TextStyle(
+                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -3150,6 +3553,10 @@ class _ManageCategoriesSheetState
                 children: [
                   FilledButton.icon(
                     onPressed: _canSave ? _saveCategory : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                      foregroundColor: Colors.white,
+                    ),
                     icon: Icon(
                       _isRenaming ? Icons.save_rounded : Icons.add_rounded,
                     ),
@@ -3169,6 +3576,9 @@ class _ManageCategoriesSheetState
                       }
                       Navigator.of(context).pop(_preferredCategory);
                     },
+                    style: TextButton.styleFrom(
+                      foregroundColor: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                    ),
                     child: Text(
                       _isRenaming ? context.l10n.cancel : context.l10n.done,
                     ),
@@ -3178,39 +3588,48 @@ class _ManageCategoriesSheetState
               const SizedBox(height: 10),
               Text(
                 context.l10n.existingCategories,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
               Expanded(
                 child: _visibleCategories.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           'No category found.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.onSurfaceVariant,
+                            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                           ),
                         ),
                       )
                     : ListView.separated(
                         itemCount: _visibleCategories.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        separatorBuilder: (_, _) => Divider(
+                          height: 1,
+                          color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
+                        ),
                         itemBuilder: (context, index) {
                           final category = _visibleCategories[index];
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
-                            title: Text(category),
+                            title: Text(
+                              category,
+                              style: TextStyle(
+                                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                                fontSize: 14,
+                              ),
+                            ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   tooltip: context.l10n.rename,
                                   icon: const Icon(Icons.edit_outlined),
-                                  color: AppColors.primary,
+                                  color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                                   onPressed: () {
                                     setState(() {
                                       _editingCategory = category;
@@ -3247,23 +3666,29 @@ class _ManageCategoriesSheetState
   }
 
   InputDecoration _inputDecoration() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fillColor = isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow;
+    final hintColor = isDark ? const Color(0xFF94A3B8) : AppColors.outlineVariant;
+    final focusedBorderColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final defaultBorderColor = isDark ? const Color(0xFF1E293B) : Colors.transparent;
+
     return InputDecoration(
       filled: true,
-      fillColor: AppColors.surfaceContainerLow,
+      fillColor: fillColor,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Colors.transparent),
+        borderSide: BorderSide(color: defaultBorderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Colors.transparent),
+        borderSide: BorderSide(color: defaultBorderColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+        borderSide: BorderSide(color: focusedBorderColor, width: 1.2),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      hintStyle: TextStyle(color: hintColor, fontSize: 13),
     );
   }
 }
@@ -3279,9 +3704,11 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final value = _textController.text.trim();
 
     return Dialog(
+      backgroundColor: isDark ? AppColors.darkIndigo : AppColors.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Padding(
@@ -3291,28 +3718,40 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.add_circle_outline_rounded, size: 20),
-                  SizedBox(width: 8),
+                  Icon(
+                    Icons.add_circle_outline_rounded,
+                    size: 20,
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     'Add Category',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Create a category for borrowed-funds tracking (e.g. Food, Transport).',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: _textController,
                 textCapitalization: TextCapitalization.words,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                  fontSize: 14,
+                ),
                 decoration: _inputDecoration(
                   context,
                 ).copyWith(hintText: context.l10n.categoryName),
@@ -3324,6 +3763,12 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                          color: isDark ? const Color(0xFF1E293B) : AppColors.outlineVariant,
+                        ),
+                        foregroundColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                      ),
                       child: Text(context.l10n.cancel),
                     ),
                   ),
@@ -3333,6 +3778,10 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
                       onPressed: value.isEmpty
                           ? null
                           : () => Navigator.of(context).pop(value),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                        foregroundColor: Colors.white,
+                      ),
                       icon: const Icon(Icons.save_rounded),
                       label: Text(context.l10n.add),
                     ),
@@ -3347,23 +3796,29 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
   }
 
   InputDecoration _inputDecoration(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fillColor = isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow;
+    final hintColor = isDark ? const Color(0xFF94A3B8) : AppColors.outlineVariant;
+    final focusedBorderColor = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final defaultBorderColor = isDark ? const Color(0xFF1E293B) : Colors.transparent;
+
     return InputDecoration(
       filled: true,
-      fillColor: AppColors.surfaceContainerLow,
+      fillColor: fillColor,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Colors.transparent),
+        borderSide: BorderSide(color: defaultBorderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Colors.transparent),
+        borderSide: BorderSide(color: defaultBorderColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+        borderSide: BorderSide(color: focusedBorderColor, width: 1.2),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      hintStyle: const TextStyle(color: AppColors.outlineVariant, fontSize: 13),
+      hintStyle: TextStyle(color: hintColor, fontSize: 13),
     );
   }
 }

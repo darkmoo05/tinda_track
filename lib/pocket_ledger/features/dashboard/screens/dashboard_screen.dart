@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/app_theme.dart';
+import '../../../../core/database/app_database.dart' show MonitoringSessionRow;
 import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
-import '../../../../shared/widgets/screen_header_card.dart';
+import '../../../../shared/widgets/dashboard_tutorial_overlay.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
+import '../../more/logic/monitoring_session_provider.dart';
+import '../logic/onboarding_provider.dart';
+
 import '../../activity/screens/activity_history_screen.dart';
 import '../../charges/screens/charges_earnings_screen.dart';
 import '../../transactions/screens/add_owner_movement_screen.dart';
@@ -23,11 +28,13 @@ class DashboardScreen extends ConsumerStatefulWidget {
     this.openDrawer,
     this.onDataChanged,
     this.onWalletPerspectiveSelected,
+    this.refreshToken = 0,
   });
 
   final VoidCallback? openDrawer;
   final VoidCallback? onDataChanged;
   final ValueChanged<HistoryWalletPerspective>? onWalletPerspectiveSelected;
+  final int refreshToken;
 
   @override
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
@@ -44,17 +51,267 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _dashboardFuture = _dashboardRepository.loadSnapshot();
+    final initialSession = ref.read(selectedSessionProvider).value;
+    _dashboardFuture = _dashboardRepository.loadSnapshot(session: initialSession);
+  }
+
+  @override
+  void didUpdateWidget(covariant DashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshToken != oldWidget.refreshToken) {
+      _reloadDashboardSnapshot();
+    }
   }
 
   void _reloadDashboardSnapshot() {
+    final isAllTime = ref.read(allTimeViewProvider);
+    final selectedSession = isAllTime ? null : ref.read(selectedSessionProvider).value;
     setState(() {
-      _dashboardFuture = _dashboardRepository.loadSnapshot();
+      _dashboardFuture = _dashboardRepository.loadSnapshot(session: selectedSession);
     });
+  }
+
+
+  Widget _buildDemoModeBanner(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bannerBg = isDark ? const Color(0xFF1E293B) : Colors.yellow.shade50;
+    final borderCol = isDark ? const Color(0xFFFBBF24).withValues(alpha: 0.4) : Colors.yellow.shade200;
+    
+    return Container(
+      key: ref.read(onboardingKeysProvider).demoModeBannerKey,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderCol, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Demo Mode Active',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFD97706),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'These are sample transactions. You can clear them or keep them.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF78350F),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () async {
+              await ref.read(onboardingProvider.notifier).clearSampleData();
+              _reloadDashboardSnapshot();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFDC2626),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+          const SizedBox(width: 4),
+          TextButton(
+            onPressed: () async {
+              await ref.read(onboardingProvider.notifier).promoteDemoDataToReal();
+              _reloadDashboardSnapshot();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF059669),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Keep', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadOnlySessionBanner(BuildContext context, MonitoringSessionRow session) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bannerBg = isDark ? const Color(0xFF1E293B) : Colors.red.shade50;
+    final borderCol = isDark ? const Color(0xFFEF4444).withValues(alpha: 0.4) : Colors.red.shade200;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderCol, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_clock_rounded, color: Color(0xFFEF4444), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Historical Session: ${session.name}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFEF4444),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'You are viewing a closed session. Transaction recording is disabled.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF7F1D1D),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () async {
+              await ref.read(selectedSessionProvider.notifier).resetToActive();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Go Live', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllTimeBanner(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bannerBg = isDark ? const Color(0xFF1E1B3A) : const Color(0xFFF5F3FF);
+    final borderCol = isDark
+        ? const Color(0xFF7C3AED).withValues(alpha: 0.4)
+        : const Color(0xFFC4B5FD);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderCol, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.history_rounded, color: Color(0xFF7C3AED), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'All Sessions — All Time View',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF7C3AED),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Showing combined history from every monitoring session.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF5B21B6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () {
+              ref.read(allTimeViewProvider.notifier).state = false;
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Go Live', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final onboardingState = ref.watch(onboardingProvider);
+    final onboardingKeys = ref.watch(onboardingKeysProvider);
+    final selectedSessionAsync = ref.watch(selectedSessionProvider);
+    final selectedSession = selectedSessionAsync.value;
+    final isAllTime = ref.watch(allTimeViewProvider);
+
+    ref.listen(selectedSessionProvider, (previous, next) {
+      final prevId = previous?.value?.id;
+      final nextId = next.value?.id;
+      final prevStart = previous?.value?.startDateMs;
+      final nextStart = next.value?.startDateMs;
+      // Reload whenever the session ID or start timestamp changes — this
+      // catches the new-session case where startDateMs differs even if the
+      // ID comparison alone might be skipped due to async ordering.
+      if (prevId != nextId || prevStart != nextStart) {
+        final allTime = ref.read(allTimeViewProvider);
+        setState(() {
+          _dashboardFuture = _dashboardRepository.loadSnapshot(
+            session: allTime ? null : next.value,
+          );
+        });
+      }
+    });
+
+    // React when the user switches to/from All-Time view.
+    ref.listen<bool>(allTimeViewProvider, (prev, next) {
+      if (prev == next) return;
+      setState(() {
+        _dashboardFuture = _dashboardRepository.loadSnapshot(
+          session: next ? null : ref.read(selectedSessionProvider).value,
+        );
+      });
+    });
+
     return FutureBuilder<DashboardSnapshot>(
       future: _dashboardFuture,
       builder: (context, snapshot) {
@@ -92,7 +349,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           );
         }
 
-        return Scaffold(
+        final scaffold = Scaffold(
           key: _scaffoldKey,
           appBar: ArchitectAppBar(
             title: context.l10n.appTitle,
@@ -101,10 +358,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              ScreenHeaderCard(
-                title: context.l10n.walletOverview,
-                subtitle: context.l10n.walletCashBalanceTrend,
-              ),
+              if (isAllTime)
+                _buildAllTimeBanner(context)
+              else if (selectedSession != null && selectedSession.status == 'CLOSED')
+                _buildReadOnlySessionBanner(context, selectedSession),
+              if (onboardingState.hasDemoData)
+                _buildDemoModeBanner(context),
+              _buildBusinessCashHeroCard(context, dashboard),
+
               const SizedBox(height: 16),
               if (dashboard.showAlertCard)
                 ArchitectAlertCard(
@@ -115,6 +376,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               if (dashboard.showAlertCard) const SizedBox(height: 16),
               _buildWalletSummarySection(context, dashboard),
+              const SizedBox(height: 16),
+              _buildChargesEarningsAllocationCard(context, dashboard),
               const SizedBox(height: 16),
               _buildBalanceTrendSection(dashboard),
               const SizedBox(height: 16),
@@ -129,12 +392,98 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
         );
+
+        return Stack(
+          children: [
+            scaffold,
+            if (onboardingState.step == OnboardingStep.welcome)
+              DashboardTutorialOverlay(
+                onSkip: () {
+                  ref.read(onboardingProvider.notifier).startTour();
+                },
+              ),
+            if (onboardingState.step == OnboardingStep.setupCapitalPrompt)
+              TutorialSpotlight(
+                targetKey: onboardingKeys.topUpButtonKey,
+                title: 'Set Up Your Capital',
+                description: 'First, let\'s record your starting shop funds. Tap the \'Top-Up\' button to continue.',
+                onNext: () {
+                  _onAlertAction('RESTOCK FUNDS');
+                },
+                onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+                nextLabel: 'Next',
+                showNext: true,
+                shape: BoxShape.rectangle,
+                borderRadius: 24.0,
+              ),
+            if (onboardingState.step == OnboardingStep.explainDeltas)
+              TutorialSpotlight(
+                targetKey: onboardingKeys.walletGridKey,
+                title: 'Observe Balance Deltas',
+                description: 'Notice the math:\n'
+                    '• Your GCash balance decreased because you sent GCash to the customer.\n'
+                    '• Your physical On-Hand Cash increased because you collected cash plus your fee.\n'
+                    '• Your overall Business Cash grew by your service fee earnings!',
+                onNext: () {
+                  ref.read(onboardingProvider.notifier).setStep(OnboardingStep.explainChargesPrompt);
+                },
+                onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+                nextLabel: 'Next',
+                borderRadius: 16.0,
+                shape: BoxShape.rectangle,
+              ),
+            if (onboardingState.step == OnboardingStep.explainChargesPrompt)
+              TutorialSpotlight(
+                targetKey: onboardingKeys.manageEarningsButtonKey,
+                title: 'Track Your Earnings',
+                description: 'Let\'s view your collected service fees. Tap the \'Manage Earnings\' button.',
+                onNext: () {
+                  _openChargesEarnings(dashboard);
+                },
+                onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+                nextLabel: 'Manage',
+                showNext: true,
+                shape: BoxShape.rectangle,
+                borderRadius: 12.0,
+              ),
+            if (onboardingState.step == OnboardingStep.demoDataPrompt && onboardingState.hasDemoData)
+              TutorialSpotlight(
+                targetKey: onboardingKeys.demoModeBannerKey,
+                title: 'Demo Data Options',
+                description: 'You are currently viewing demo data. To complete your setup, please choose how to handle the sample transactions:\n\n'
+                    '• Tap "Clear" inside the highlighted banner to wipe all demo data and start with a fresh, empty ledger.\n'
+                    '• Tap "Keep" inside the highlighted banner to save these sample entries as part of your real business records.\n\n'
+                    'Note: Tapping either button will execute that action and automatically complete the tutorial!',
+                onNext: () {
+                  ref.read(onboardingProvider.notifier).completeTour();
+                },
+                onSkip: () => ref.read(onboardingProvider.notifier).completeTour(),
+                nextLabel: 'Finish Tour',
+                showNext: true,
+                shape: BoxShape.rectangle,
+                borderRadius: 16.0,
+                allowPassThrough: true,
+              ),
+          ],
+        );
       },
     );
   }
 
   Future<void> _onAlertAction(String actionLabel) async {
+    final selectedSession = ref.read(selectedSessionProvider).value;
+    if (selectedSession != null && selectedSession.status == 'CLOSED') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot perform movements on a closed monitoring session.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     AddOwnerMovementScreen? screen;
+
 
     if (actionLabel == 'LOAD WALLET' || actionLabel == 'LOAD GCASH WALLET') {
       screen = const AddOwnerMovementScreen(
@@ -153,6 +502,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
     } else if (actionLabel == 'RESTOCK FUNDS') {
       screen = const AddOwnerMovementScreen(initialMovementType: 'Top-up');
+    } else if (actionLabel == 'TRANSFER FUNDS') {
+      screen = const AddOwnerMovementScreen(
+        initialMovementType: 'Cash Transfer (on-hand to wallet)',
+      );
     }
 
     if (screen == null) {
@@ -172,6 +525,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _openChargesEarnings(DashboardSnapshot dashboard) async {
+    final onboarding = ref.read(onboardingProvider);
+    if (onboarding.step == OnboardingStep.explainChargesPrompt) {
+      ref.read(onboardingProvider.notifier).setStep(OnboardingStep.chargesScreenPrompt);
+    }
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ChargesEarningsScreen(
@@ -219,6 +576,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+
+    final gcashStart = selectedSession?.startGcash ?? 0.0;
+    final gcashChange = dashboard.walletBalance - gcashStart;
+    final gcashChangeSign = gcashChange >= 0 ? '+' : '';
+    final gcashCaption = selectedSession != null
+        ? 'Started: ${_dashboardRepository.formatCurrency(gcashStart)} ($gcashChangeSign${_dashboardRepository.formatCurrency(gcashChange)})'
+        : context.l10n.availableBalance;
+
+    final mayaStart = selectedSession?.startMaya ?? 0.0;
+    final mayaChange = dashboard.mayaWalletBalance - mayaStart;
+    final mayaChangeSign = mayaChange >= 0 ? '+' : '';
+    final mayaCaption = selectedSession != null
+        ? 'Started: ${_dashboardRepository.formatCurrency(mayaStart)} ($mayaChangeSign${_dashboardRepository.formatCurrency(mayaChange)})'
+        : context.l10n.availableBalance;
+
+    final onHandStart = selectedSession?.startOnHand ?? 0.0;
+    final onHandChange = dashboard.onHandCash - onHandStart;
+    final onHandChangeSign = onHandChange >= 0 ? '+' : '';
+    final onHandCaption = selectedSession != null
+        ? 'Started: ${_dashboardRepository.formatCurrency(onHandStart)} ($onHandChangeSign${_dashboardRepository.formatCurrency(onHandChange)})'
+        : context.l10n.physicalCash;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -227,79 +607,59 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const spacing = 12.0;
             final tileWidth = (constraints.maxWidth - spacing) / 2;
 
-            return Column(
+            return Wrap(
+              key: ref.read(onboardingKeysProvider).walletGridKey,
+              spacing: spacing,
+              runSpacing: spacing,
               children: [
-                Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: [
-                    _WalletCardAnimator(
-                      delay: const Duration(milliseconds: 0),
-                      child: _buildWalletMetricTile(
-                        width: tileWidth,
-                        title: context.l10n.gcashWallet,
-                        value: _dashboardRepository.formatCurrency(
-                          dashboard.walletBalance,
-                        ),
-                        caption: context.l10n.availableBalance,
-                        icon: Icons.account_balance_wallet_rounded,
-                        accentColor: AppColors.primary,
-                        onTap: () => _openWalletPerspectiveHistory(
-                          HistoryWalletPerspective.gcash,
-                        ),
-                      ),
+                _WalletCardAnimator(
+                  delay: const Duration(milliseconds: 0),
+                  child: _buildWalletMetricTile(
+                    width: tileWidth,
+                    title: context.l10n.gcashWallet,
+                    value: _dashboardRepository.formatCurrency(
+                      dashboard.walletBalance,
                     ),
-                    _WalletCardAnimator(
-                      delay: const Duration(milliseconds: 80),
-                      child: _buildWalletMetricTile(
-                        width: tileWidth,
-                        title: context.l10n.mayaWallet,
-                        value: _dashboardRepository.formatCurrency(
-                          dashboard.mayaWalletBalance,
-                        ),
-                        caption: context.l10n.availableBalance,
-                        icon: Icons.account_balance_rounded,
-                        accentColor: AppColors.secondary,
-                        onTap: () => _openWalletPerspectiveHistory(
-                          HistoryWalletPerspective.maya,
-                        ),
-                      ),
+                    caption: gcashCaption,
+                    icon: Icons.account_balance_wallet_rounded,
+                    accentColor: AppColors.primary,
+                    onTap: () => _openWalletPerspectiveHistory(
+                      HistoryWalletPerspective.gcash,
                     ),
-                    _WalletCardAnimator(
-                      delay: const Duration(milliseconds: 160),
-                      child: _buildWalletMetricTile(
-                        width: tileWidth,
-                        title: context.l10n.onHandCash,
-                        value: _dashboardRepository.formatCurrency(
-                          dashboard.onHandCash,
-                        ),
-                        caption: context.l10n.physicalCash,
-                        icon: Icons.payments_outlined,
-                        accentColor: const Color(0xFF8E6C00),
-                        onTap: () => _openWalletPerspectiveHistory(
-                          HistoryWalletPerspective.onHand,
-                        ),
-                      ),
-                    ),
-                    _WalletCardAnimator(
-                      delay: const Duration(milliseconds: 240),
-                      child: _buildWalletMetricTile(
-                        width: tileWidth,
-                        title: context.l10n.chargesEarnings,
-                        value: _dashboardRepository.formatCurrency(
-                          dashboard.remainingWithdrawableTotal,
-                        ),
-                        caption: 'Withdrawable now',
-                        icon: Icons.trending_up_rounded,
-                        accentColor: const Color(0xFF4A7EA6),
-                        titleMaxLines: 2,
-                        onTap: () => _openChargesEarnings(dashboard),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                _buildTotalFundsTile(context, dashboard),
+                _WalletCardAnimator(
+                  delay: const Duration(milliseconds: 80),
+                  child: _buildWalletMetricTile(
+                    width: tileWidth,
+                    title: context.l10n.mayaWallet,
+                    value: _dashboardRepository.formatCurrency(
+                      dashboard.mayaWalletBalance,
+                    ),
+                    caption: mayaCaption,
+                    icon: Icons.account_balance_rounded,
+                    accentColor: AppColors.secondary,
+                    onTap: () => _openWalletPerspectiveHistory(
+                      HistoryWalletPerspective.maya,
+                    ),
+                  ),
+                ),
+                _WalletCardAnimator(
+                  delay: const Duration(milliseconds: 160),
+                  child: _buildWalletMetricTile(
+                    width: constraints.maxWidth,
+                    title: context.l10n.onHandCash,
+                    value: _dashboardRepository.formatCurrency(
+                      dashboard.onHandCash,
+                    ),
+                    caption: onHandCaption,
+                    icon: Icons.payments_outlined,
+                    accentColor: AppColors.onHand,
+                    onTap: () => _openWalletPerspectiveHistory(
+                      HistoryWalletPerspective.onHand,
+                    ),
+                  ),
+                ),
               ],
             );
           },
@@ -318,6 +678,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     int titleMaxLines = 1,
     VoidCallback? onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tileBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLowest;
+    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant.withValues(alpha: 0.4);
+    Color adaptiveAccent = accentColor;
+    if (isDark) {
+      if (accentColor == AppColors.primary) {
+        adaptiveAccent = const Color(0xFF60A5FA);
+      } else if (accentColor == AppColors.secondary) {
+        adaptiveAccent = const Color(0xFF34D399);
+      } else if (accentColor == AppColors.onHand) {
+        adaptiveAccent = const Color(0xFFFBBF24);
+      } else if (accentColor == AppColors.softNavy) {
+        adaptiveAccent = const Color(0xFF94A3B8);
+      }
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Material(
@@ -327,18 +703,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Ink(
             width: width,
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: tileBg,
               border: Border(
-                left: BorderSide(color: accentColor, width: 4),
-                top: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
-                ),
-                right: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
-                ),
-                bottom: BorderSide(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.4),
-                ),
+                left: BorderSide(color: adaptiveAccent, width: 4),
+                top: BorderSide(color: borderColor),
+                right: BorderSide(color: borderColor),
+                bottom: BorderSide(color: borderColor),
               ),
               boxShadow: [
                 BoxShadow(
@@ -365,7 +735,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             maxLines: titleMaxLines,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: AppColors.onSurfaceVariant,
+                              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.3,
@@ -377,10 +747,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           width: 30,
                           height: 30,
                           decoration: BoxDecoration(
-                            color: accentColor.withValues(alpha: 0.12),
+                            color: adaptiveAccent.withValues(alpha: 0.12),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(icon, color: accentColor, size: 15),
+                          child: Icon(icon, color: adaptiveAccent, size: 15),
                         ),
                       ],
                     ),
@@ -392,7 +762,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         value,
                         maxLines: 1,
                         style: TextStyle(
-                          color: accentColor,
+                          color: adaptiveAccent,
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                         ),
@@ -403,8 +773,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       caption,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.onSurfaceVariant,
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                         fontSize: 11,
                         fontWeight: FontWeight.w400,
                       ),
@@ -419,110 +789,272 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildTotalFundsTile(
+  Widget _buildBusinessCashHeroCard(BuildContext context, DashboardSnapshot dashboard) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalBusinessCash = dashboard.businessUsableCash;
+
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final startingBusinessCash = (selectedSession?.startGcash ?? 0.0) +
+        (selectedSession?.startMaya ?? 0.0) +
+        (selectedSession?.startOnHand ?? 0.0);
+    final businessChange = totalBusinessCash - startingBusinessCash;
+    final changeSign = businessChange >= 0 ? '+' : '';
+    final changeStr = changeSign + _dashboardRepository.formatCurrency(businessChange);
+
+    final subtitle = selectedSession != null
+        ? '${selectedSession.name} • Started: ${_dashboardRepository.formatCurrency(startingBusinessCash)} ($changeStr)'
+        : 'Available now for business operations';
+
+    final heroGradient = const LinearGradient(
+      colors: [AppColors.primary, Color(0xFF0F172A)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
+    return Container(
+      key: ref.read(onboardingKeysProvider).topUpButtonKey,
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: heroGradient,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: isDark ? 0.3 : 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'CURRENT BUSINESS CASH',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Active',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _dashboardRepository.formatCurrency(totalBusinessCash),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _onAlertAction('RESTOCK FUNDS'),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('Top-Up'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _onAlertAction('TRANSFER FUNDS'),
+                  icon: const Icon(Icons.compare_arrows_rounded, size: 16),
+                  label: const Text('Transfer'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white30, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChargesEarningsAllocationCard(
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
-    final totalBusinessCash = dashboard.businessUsableCash;
-    final withdrawableEarnings = dashboard.remainingWithdrawableTotal;
-    const accentColor = Color(0xFF1E3A5F);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final withdrawable = dashboard.remainingWithdrawableTotal;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 16, 16, 16),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          border: Border(
-            left: const BorderSide(color: accentColor, width: 4),
-            top: BorderSide(
-              color: AppColors.outlineVariant.withValues(alpha: 0.4),
-            ),
-            right: BorderSide(
-              color: AppColors.outlineVariant.withValues(alpha: 0.4),
-            ),
-            bottom: BorderSide(
-              color: AppColors.outlineVariant.withValues(alpha: 0.4),
-            ),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.onSurface.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.outlineVariant,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    context.l10n.totalFunds,
-                    style: const TextStyle(
-                      color: AppColors.onSurfaceVariant,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.trending_up_rounded,
+                  color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Charges & Collected Fees',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Sub-allocation of your wallet balances',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _dashboardRepository.formatCurrency(withdrawable),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                     ),
                   ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Withdrawable Earnings',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.secondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              ElevatedButton(
+                key: ref.read(onboardingKeysProvider).manageEarningsButtonKey,
+                onPressed: () => _openChargesEarnings(dashboard),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFF334155) : AppColors.primary.withValues(alpha: 0.08),
+                  foregroundColor: isDark ? const Color(0xFFF8FAFC) : AppColors.primary,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                ),
+                child: const Text('Manage Earnings'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.account_balance_rounded,
-                    color: accentColor,
-                    size: 15,
+                Expanded(
+                  child: Text(
+                    'Collected fees are already physically inside your GCash, Maya, or On-hand Cash balances.',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _dashboardRepository.formatCurrency(totalBusinessCash),
-                maxLines: 1,
-                style: const TextStyle(
-                  color: accentColor,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.l10n.businessCashComputation,
-              style: const TextStyle(
-                color: AppColors.onSurfaceVariant,
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              context.l10n.withdrawableEarningsNote(
-                _dashboardRepository.formatCurrency(withdrawableEarnings),
-              ),
-              style: const TextStyle(
-                color: AppColors.onSurfaceVariant,
-                fontSize: 10,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -556,7 +1088,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
-      decoration: _minimalCardDecoration(),
+      decoration: _minimalCardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -631,13 +1163,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildPillTab(String label, bool isActive, VoidCallback onTap) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeBg = isDark ? const Color(0xFF60A5FA) : AppColors.primary;
+    final inactiveBg = isDark ? const Color(0xFF1E293B) : AppColors.surfaceContainerLow;
+    final activeText = isDark ? const Color(0xFF0B0F19) : Colors.white;
+    final inactiveText = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.primary : AppColors.surfaceContainerLow,
+          color: isActive ? activeBg : inactiveBg,
           borderRadius: BorderRadius.circular(20),
         ),
         child: FittedBox(
@@ -647,7 +1185,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+              color: isActive ? activeText : inactiveText,
             ),
           ),
         ),
@@ -688,7 +1226,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(18),
-        decoration: _minimalCardDecoration(),
+        decoration: _minimalCardDecoration(context),
         child: Text(
           context.l10n.noActivitiesFilter,
           style: const TextStyle(
@@ -737,7 +1275,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       onTap: _openPersonalExpenseStatementScreen,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: _minimalCardDecoration(),
+        decoration: _minimalCardDecoration(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -923,7 +1461,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _navigateToPersonalExpensePayment() async {
+    final selectedSession = ref.read(selectedSessionProvider).value;
+    if (selectedSession != null && selectedSession.status == 'CLOSED') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot pay borrowed funds on a closed monitoring session.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final screen = const AddOwnerMovementScreen(
+
       initialMovementType: 'Borrowed Funds Repayment',
     );
 
@@ -937,11 +1487,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  BoxDecoration _minimalCardDecoration() {
+  BoxDecoration _minimalCardDecoration(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return BoxDecoration(
-      color: Colors.white,
+      color: isDark ? const Color(0xFF161D30) : Colors.white,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: AppColors.surfaceContainerHigh),
+      border: Border.all(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : AppColors.surfaceContainerHigh,
+      ),
     );
   }
 }

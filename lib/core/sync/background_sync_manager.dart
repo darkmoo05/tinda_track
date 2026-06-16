@@ -46,7 +46,6 @@ class BackgroundSyncManager {
   static Future<void> initialize() async {
     await Workmanager().initialize(
       callbackDispatcher,
-      isInDebugMode: false,
     );
   }
 

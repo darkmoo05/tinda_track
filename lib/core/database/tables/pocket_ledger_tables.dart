@@ -205,3 +205,28 @@ class FeeTransactions extends Table with SyncedRow {
   @override
   String? get tableName => 'fee_transactions';
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONITORING SESSION — custom user accounting periods/cycles.
+// ─────────────────────────────────────────────────────────────────────────────
+@DataClassName('MonitoringSessionRow')
+class MonitoringSessions extends Table with SyncedRow {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get status => text().withDefault(const Constant('ACTIVE'))(); // ACTIVE | CLOSED
+  IntColumn get startDateMs => integer()();
+  IntColumn get endDateMs => integer().nullable()();
+  RealColumn get startGcash => real().withDefault(const Constant(0))();
+  RealColumn get startMaya => real().withDefault(const Constant(0))();
+  RealColumn get startOnHand => real().withDefault(const Constant(0))();
+  RealColumn get endGcash => real().nullable()();
+  RealColumn get endMaya => real().nullable()();
+  RealColumn get endOnHand => real().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  String? get tableName => 'monitoring_sessions';
+}
+

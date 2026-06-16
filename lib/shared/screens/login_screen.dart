@@ -1,9 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../core/google_fonts_shim.dart';
 
 import '../../core/database/providers/auth_providers.dart';
+import '../../core/l10n/l10n_extension.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -20,6 +21,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String _businessType = 'retail';
 
   bool _isSignUp = false;
+  bool _obscurePassword = true;
   String? _localError;
 
   @override
@@ -28,6 +30,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _passwordController.dispose();
     _businessNameController.dispose();
     super.dispose();
+  }
+
+  String _getLocalizedAuthError(String err) {
+    if (err == 'authErrorConnection') {
+      return context.l10n.authErrorConnection;
+    } else if (err == 'authErrorTimeout') {
+      return context.l10n.authErrorTimeout;
+    } else if (err == 'authErrorInvalidCredentials') {
+      return context.l10n.authErrorInvalidCredentials;
+    } else if (err == 'authErrorUsernameTaken') {
+      return context.l10n.authErrorUsernameTaken;
+    } else if (err == 'authErrorGeneric') {
+      return context.l10n.authErrorGeneric;
+    }
+    return err.isNotEmpty ? err : context.l10n.authErrorGeneric;
   }
 
   Future<void> _submit() async {
@@ -57,7 +74,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!success && mounted) {
       final state = ref.read(authStateProvider);
       setState(() {
-        _localError = state.errorMessage ?? 'Authentication failed';
+        _localError = _getLocalizedAuthError(state.errorMessage ?? '');
       });
     }
   }
@@ -75,18 +92,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(authStateProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Deep Dark Theme / Charcoal HSL Hue 240, 10%, 6%
-    const backgroundColor = Color(0xFF0F0F12);
-    const surfaceColor = Color(0xFF1E1E24);
-    const accentColor = Color(0xFF00E5FF); // Glowing Neon Cyan
-    const secondaryAccentColor = Color(0xFF651FFF); // Neon Purple
+    final backgroundColor = isDark ? const Color(0xFF0F0F12) : const Color(0xFFF8FAFC);
+    final surfaceColor = isDark ? const Color(0xFF1E1E24) : Colors.white;
+    final accentColor = isDark ? const Color(0xFF00E5FF) : const Color(0xFF2563EB);
+    final secondaryAccentColor = isDark ? const Color(0xFF651FFF) : const Color(0xFF059669);
+
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtitleColor = isDark ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF475569);
+    final textFormFillColor = isDark ? Colors.white.withValues(alpha: 0.02) : const Color(0xFFF1F5F9);
+    final borderAndDividerColor = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1);
+    final labelColor = isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF475569);
+    final dropdownColor = isDark ? surfaceColor : Colors.white;
 
     return Scaffold(
       backgroundColor: backgroundColor,
       body: Stack(
         children: [
-          // 1) Accent Neon Glows in the background
           Positioned(
             top: -100,
             right: -50,
@@ -97,7 +120,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: accentColor.withValues(alpha: 0.12),
+                    color: accentColor.withValues(alpha: isDark ? 0.12 : 0.03),
                     blurRadius: 100,
                     spreadRadius: 50,
                   ),
@@ -115,7 +138,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: secondaryAccentColor.withValues(alpha: 0.12),
+                    color: secondaryAccentColor.withValues(alpha: isDark ? 0.12 : 0.03),
                     blurRadius: 90,
                     spreadRadius: 45,
                   ),
@@ -152,7 +175,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           'tinda_tract_icon.png',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
-                              const CircleAvatar(
+                              CircleAvatar(
                             backgroundColor: surfaceColor,
                             child: Icon(
                               Icons.storefront_rounded,
@@ -171,7 +194,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       style: GoogleFonts.outfit(
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: textColor,
                         letterSpacing: -0.5,
                       ),
                     ),
@@ -182,7 +205,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       'Smart Pocket Ledger & Sales Tracker',
                       style: GoogleFonts.inter(
                         fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.5),
+                        color: subtitleColor,
                         fontWeight: FontWeight.w400,
                       ),
                     ),
@@ -192,16 +215,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(24),
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        filter: ImageFilter.blur(sigmaX: isDark ? 12 : 0, sigmaY: isDark ? 12 : 0),
                         child: Container(
                           padding: const EdgeInsets.all(28),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.03),
+                            color: isDark ? Colors.white.withValues(alpha: 0.03) : surfaceColor,
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.08),
+                              color: isDark ? Colors.white.withValues(alpha: 0.08) : borderAndDividerColor,
                               width: 1.5,
                             ),
+                            boxShadow: isDark
+                                ? null
+                                : [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
                           ),
                           child: Form(
                             key: _formKey,
@@ -213,40 +245,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   style: GoogleFonts.outfit(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.white,
+                                    color: textColor,
                                   ),
                                 ),
                                 const SizedBox(height: 24),
 
-                                // Username field
+                                 // Username field
                                 Text(
                                   'USERNAME',
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.white.withValues(alpha: 0.4),
+                                    color: labelColor,
                                     letterSpacing: 1.5,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 TextFormField(
                                   controller: _usernameController,
-                                  style: const TextStyle(color: Colors.white),
+                                  style: TextStyle(color: textColor),
                                   decoration: InputDecoration(
                                     hintText: 'Enter your username',
                                     hintStyle: TextStyle(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.25),
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.25)
+                                          : Colors.black.withValues(alpha: 0.38),
                                     ),
                                     prefixIcon: Icon(
                                       Icons.person_outline_rounded,
-                                      color:
-                                          Colors.white.withValues(alpha: 0.4),
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.4)
+                                          : const Color(0xFF64748B),
                                       size: 20,
                                     ),
                                     filled: true,
-                                    fillColor:
-                                        Colors.white.withValues(alpha: 0.02),
+                                    fillColor: textFormFillColor,
                                     contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 16,
                                       vertical: 16,
@@ -254,20 +287,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
                                       borderSide: BorderSide(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.08),
+                                        color: borderAndDividerColor,
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
                                       borderSide: BorderSide(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.08),
+                                        color: borderAndDividerColor,
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
+                                      borderSide: BorderSide(
                                         color: accentColor,
                                         width: 1.5,
                                       ),
@@ -275,7 +306,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                   validator: (v) {
                                     if (v == null || v.trim().length < 4) {
-                                      return 'Username must be at least 4 characters';
+                                      return context.l10n.usernameValidator;
+                                    }
+                                    final regex = RegExp(r'^[a-zA-Z0-9]+$');
+                                    if (!regex.hasMatch(v.trim())) {
+                                      return context.l10n.usernameValidator;
                                     }
                                     return null;
                                   },
@@ -288,30 +323,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.white.withValues(alpha: 0.4),
+                                    color: labelColor,
                                     letterSpacing: 1.5,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 TextFormField(
                                   controller: _passwordController,
-                                  obscureText: true,
-                                  style: const TextStyle(color: Colors.white),
+                                  obscureText: _obscurePassword,
+                                  style: TextStyle(color: textColor),
                                   decoration: InputDecoration(
                                     hintText: 'Enter your password',
                                     hintStyle: TextStyle(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.25),
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.25)
+                                          : Colors.black.withValues(alpha: 0.38),
                                     ),
                                     prefixIcon: Icon(
                                       Icons.lock_outline_rounded,
-                                      color:
-                                          Colors.white.withValues(alpha: 0.4),
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.4)
+                                          : const Color(0xFF64748B),
                                       size: 20,
                                     ),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility_off_rounded
+                                            : Icons.visibility_rounded,
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.4)
+                                            : const Color(0xFF64748B),
+                                        size: 20,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _obscurePassword = !_obscurePassword;
+                                        });
+                                      },
+                                    ),
                                     filled: true,
-                                    fillColor:
-                                        Colors.white.withValues(alpha: 0.02),
+                                    fillColor: textFormFillColor,
                                     contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 16,
                                       vertical: 16,
@@ -319,20 +371,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
                                       borderSide: BorderSide(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.08),
+                                        color: borderAndDividerColor,
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
                                       borderSide: BorderSide(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.08),
+                                        color: borderAndDividerColor,
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
+                                      borderSide: BorderSide(
                                         color: accentColor,
                                         width: 1.5,
                                       ),
@@ -340,7 +390,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                   validator: (v) {
                                     if (v == null || v.length < 6) {
-                                      return 'Password must be at least 6 characters';
+                                      return context.l10n.passwordValidator;
                                     }
                                     return null;
                                   },
@@ -352,26 +402,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.white.withValues(alpha: 0.4),
+                                      color: labelColor,
                                       letterSpacing: 1.5,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   TextFormField(
                                     controller: _businessNameController,
-                                    style: const TextStyle(color: Colors.white),
+                                    style: TextStyle(color: textColor),
                                     decoration: InputDecoration(
                                       hintText: 'Enter your business name',
                                       hintStyle: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.25),
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.25)
+                                            : Colors.black.withValues(alpha: 0.38),
                                       ),
                                       prefixIcon: Icon(
                                         Icons.storefront_outlined,
-                                        color: Colors.white.withValues(alpha: 0.4),
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.4)
+                                            : const Color(0xFF64748B),
                                         size: 20,
                                       ),
                                       filled: true,
-                                      fillColor: Colors.white.withValues(alpha: 0.02),
+                                      fillColor: textFormFillColor,
                                       contentPadding: const EdgeInsets.symmetric(
                                         horizontal: 16,
                                         vertical: 16,
@@ -379,19 +433,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
                                         borderSide: BorderSide(
-                                          color: Colors.white.withValues(alpha: 0.08),
+                                          color: borderAndDividerColor,
                                         ),
                                       ),
                                       enabledBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
                                         borderSide: BorderSide(
-                                          color: Colors.white.withValues(alpha: 0.08),
+                                          color: borderAndDividerColor,
                                         ),
                                       ),
                                       focusedBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFF00E5FF),
+                                        borderSide: BorderSide(
+                                          color: accentColor,
                                           width: 1.5,
                                         ),
                                       ),
@@ -409,23 +463,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.white.withValues(alpha: 0.4),
+                                      color: labelColor,
                                       letterSpacing: 1.5,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   DropdownButtonFormField<String>(
-                                    value: _businessType,
-                                    dropdownColor: const Color(0xFF1E1E24),
-                                    style: const TextStyle(color: Colors.white),
+                                    initialValue: _businessType,
+                                    dropdownColor: dropdownColor,
+                                    style: TextStyle(color: textColor),
                                     decoration: InputDecoration(
                                       prefixIcon: Icon(
                                         Icons.business_center_outlined,
-                                        color: Colors.white.withValues(alpha: 0.4),
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.4)
+                                            : const Color(0xFF64748B),
                                         size: 20,
                                       ),
                                       filled: true,
-                                      fillColor: Colors.white.withValues(alpha: 0.02),
+                                      fillColor: textFormFillColor,
                                       contentPadding: const EdgeInsets.symmetric(
                                         horizontal: 16,
                                         vertical: 16,
@@ -433,30 +489,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
                                         borderSide: BorderSide(
-                                          color: Colors.white.withValues(alpha: 0.08),
+                                          color: borderAndDividerColor,
                                         ),
                                       ),
                                       enabledBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
                                         borderSide: BorderSide(
-                                          color: Colors.white.withValues(alpha: 0.08),
+                                          color: borderAndDividerColor,
                                         ),
                                       ),
                                       focusedBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFF00E5FF),
+                                        borderSide: BorderSide(
+                                          color: accentColor,
                                           width: 1.5,
                                         ),
                                       ),
                                     ),
-                                    items: const [
-                                      DropdownMenuItem(value: 'retail', child: Text('Sari-Sari / Retail')),
-                                      DropdownMenuItem(value: 'food_service', child: Text('Carinderia / Food Service')),
-                                      DropdownMenuItem(value: 'auto_parts', child: Text('Auto Shop')),
-                                      DropdownMenuItem(value: 'hardware', child: Text('Hardware')),
-                                      DropdownMenuItem(value: 'marketplace', child: Text('Public Market')),
-                                      DropdownMenuItem(value: 'general', child: Text('General / Other')),
+                                    items: [
+                                      DropdownMenuItem(value: 'retail', child: Text(context.l10n.businessTypeRetail)),
+                                      DropdownMenuItem(value: 'food_service', child: Text(context.l10n.businessTypeFoodService)),
+                                      DropdownMenuItem(value: 'auto_parts', child: Text(context.l10n.businessTypeAutoParts)),
+                                      DropdownMenuItem(value: 'hardware', child: Text(context.l10n.businessTypeHardware)),
+                                      DropdownMenuItem(value: 'marketplace', child: Text(context.l10n.businessTypeMarketplace)),
+                                      DropdownMenuItem(value: 'general', child: Text(context.l10n.businessTypeGeneral)),
                                     ],
                                     onChanged: (val) {
                                       if (val != null) {
@@ -517,7 +573,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         state.isLoading ? null : _submit,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: accentColor,
-                                      foregroundColor: backgroundColor,
+                                      foregroundColor: isDark ? backgroundColor : Colors.white,
                                       disabledBackgroundColor:
                                           accentColor.withValues(alpha: 0.3),
                                       shape: RoundedRectangleBorder(
@@ -527,7 +583,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       elevation: 0,
                                     ),
                                     child: state.isLoading
-                                        ? const SizedBox(
+                                        ? SizedBox(
                                             height: 24,
                                             width: 24,
                                             child: CircularProgressIndicator(

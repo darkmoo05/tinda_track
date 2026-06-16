@@ -1,14 +1,16 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:tinda_track/l10n/app_localizations.dart';
 import 'core/app_theme.dart';
+import 'core/theme_provider.dart';
 import 'core/database/app_database.dart';
 import 'package:drift/drift.dart';
 import 'core/database/daos/app_meta_dao.dart';
@@ -21,7 +23,6 @@ import 'core/sync/sync_config.dart';
 import 'core/sync/sync_orchestrator.dart';
 import 'core/l10n/l10n_extension.dart';
 import 'core/l10n/locale_provider.dart';
-import 'shared/widgets/app_loading_modal.dart';
 import 'pocket_ledger/app/main_shell.dart';
 import 'tinda_tracker/app/tinda_tracker_shell.dart';
 
@@ -72,6 +73,7 @@ Future<void> main() async {
       ]);
 
       await LocaleProvider.instance.load();
+      await ThemeProvider.instance.load();
 
       // Build a Riverpod container up-front so we can run one-time DB migrations
       // and hydrate the API base URL before the first widget is built.
@@ -140,12 +142,14 @@ class TindaTrackApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: LocaleProvider.instance,
+      listenable: Listenable.merge([LocaleProvider.instance, ThemeProvider.instance]),
       builder: (context, _) {
         return MaterialApp(
           title: 'PocketLedger',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeProvider.instance.themeMode,
           locale: LocaleProvider.instance.locale,
           localizationsDelegates: [
             AppLocalizations.delegate,
@@ -227,23 +231,16 @@ class _StartupSyncGateState extends ConsumerState<StartupSyncGate> {
     }
     _startupTaskStarted = true;
 
-    final loading = showAppLoadingModal(
-      context,
-      message: 'Syncing startup data...',
-      caption: 'Please wait while we fetch your latest records.',
-    );
+    // Instantly transition to ready state so the user lands on the dashboard immediately
+    setState(() {
+      _ready = true;
+    });
 
     try {
       await ref.read(syncOrchestratorProvider).runOnce();
     } catch (_) {
-      // Startup should continue even if first sync attempt fails.
-    } finally {
-      loading.close();
+      // Startup continues even if first sync attempt fails.
     }
-    if (!mounted) return;
-    setState(() {
-      _ready = true;
-    });
   }
 
   @override
@@ -328,9 +325,9 @@ class AuthGate extends ConsumerWidget {
 
     return switch (authState.status) {
       AuthStatus.initial || AuthStatus.loading => const Scaffold(
-          backgroundColor: Color(0xFF0F0F12),
+          backgroundColor: AppColors.loginBackground,
           body: Center(
-            child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+            child: CircularProgressIndicator(color: AppColors.loginNeonCyan),
           ),
         ),
       AuthStatus.authenticated => const StartupSyncGate(),

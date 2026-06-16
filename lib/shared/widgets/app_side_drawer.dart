@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/theme_provider.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/l10n/locale_provider.dart';
 
@@ -64,7 +65,9 @@ class AppSideDrawer extends StatelessWidget {
     Navigator.of(context).pop();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF161D30)
+          : AppColors.surfaceContainerLowest,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -75,7 +78,9 @@ class AppSideDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Drawer(
+      backgroundColor: isDark ? const Color(0xFF0B0F19) : null,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -85,7 +90,10 @@ class AppSideDrawer extends StatelessWidget {
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLow,
+                color: isDark
+                    ? const Color(0xFF161D30)
+                    : AppColors.surfaceContainerLow,
+                border: isDark ? Border.all(color: Colors.white.withValues(alpha: 0.08)) : null,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -105,18 +113,18 @@ class AppSideDrawer extends StatelessWidget {
                     children: [
                       Text(
                         config.appTitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
+                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         config.appSubtitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
+                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -132,7 +140,12 @@ class AppSideDrawer extends StatelessWidget {
                   label: item.label,
                   onTap: () => _executeItem(context, item.onTap),
                 ),
-              const Divider(indent: 16, endIndent: 16, height: 24),
+              Divider(
+                indent: 16,
+                endIndent: 16,
+                height: 24,
+                color: isDark ? Colors.white.withValues(alpha: 0.08) : null,
+              ),
             ],
             // ── Settings ──
             for (final item in config.settingsItems)
@@ -141,6 +154,37 @@ class AppSideDrawer extends StatelessWidget {
                 label: item.label,
                 onTap: () => _executeItem(context, item.onTap),
               ),
+            // ── Dark Theme Mode Switch ──
+            ListenableBuilder(
+              listenable: ThemeProvider.instance,
+              builder: (context, _) {
+                final isDark = ThemeProvider.instance.isDarkMode;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: SwitchListTile(
+                    secondary: Icon(
+                      isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                      color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                    ),
+                    title: Text(
+                      'Dark Mode',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                      ),
+                    ),
+                    value: isDark,
+                    activeTrackColor: const Color(0xFF60A5FA).withValues(alpha: 0.4),
+                    activeThumbColor: const Color(0xFF60A5FA),
+                    onChanged: (val) {
+                      ThemeProvider.instance.toggleTheme();
+                    },
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                );
+              },
+            ),
             // ── App Switcher ──
             if (config.switcherConfig != null)
               ..._buildSwitcherStrip(context, config.switcherConfig!),
@@ -231,6 +275,7 @@ class _LanguagePickerSheetState extends State<_LanguagePickerSheet> {
       'ceb': l10n.languageCebuano,
     };
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
       child: Column(
@@ -242,7 +287,7 @@ class _LanguagePickerSheetState extends State<_LanguagePickerSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.outlineVariant,
+                color: isDark ? Colors.white.withValues(alpha: 0.15) : AppColors.outlineVariant,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -250,18 +295,18 @@ class _LanguagePickerSheetState extends State<_LanguagePickerSheet> {
           const SizedBox(height: 20),
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.language_rounded,
-                color: AppColors.primary,
+                color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
                 size: 22,
               ),
               const SizedBox(width: 10),
               Text(
                 l10n.selectLanguage,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
                 ),
               ),
             ],
@@ -315,13 +360,21 @@ class _LanguageOption extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.10)
-              : AppColors.surfaceContainerLow,
+              ? (Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF2563EB).withValues(alpha: 0.20)
+                  : AppColors.primary.withValues(alpha: 0.10))
+              : (Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E293B)
+                  : AppColors.surfaceContainerLow),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
-                ? AppColors.primary.withValues(alpha: 0.45)
-                : AppColors.outlineVariant.withValues(alpha: 0.35),
+                ? (Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF60A5FA)
+                    : AppColors.primary)
+                : (Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : AppColors.outlineVariant.withValues(alpha: 0.35)),
             width: isSelected ? 1.5 : 1.0,
           ),
         ),
@@ -337,25 +390,29 @@ class _LanguageOption extends StatelessWidget {
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: isSelected
-                          ? AppColors.primary
-                          : AppColors.onSurface,
+                          ? (Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF60A5FA)
+                              : AppColors.primary)
+                          : Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   if (label != nativeLabel)
                     Text(
                       nativeLabel,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
+                        color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
                       ),
                     ),
                 ],
               ),
             ),
             if (isSelected)
-              const Icon(
+              Icon(
                 Icons.check_circle_rounded,
-                color: AppColors.primary,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF60A5FA)
+                    : AppColors.primary,
                 size: 20,
               ),
           ],
@@ -378,13 +435,14 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ListTile(
-      leading: Icon(icon, color: AppColors.onSurfaceVariant),
+      leading: Icon(icon, color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant),
       title: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w600,
-          color: AppColors.onSurface,
+          color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
         ),
       ),
       onTap: onTap,
@@ -417,10 +475,18 @@ class _AppChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
-          color: isActive ? color : AppColors.surfaceContainerLow,
+          color: isActive
+              ? color
+              : (Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E293B)
+                  : AppColors.surfaceContainerLow),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isActive ? color : AppColors.outlineVariant,
+            color: isActive
+                ? color
+                : (Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : AppColors.outlineVariant),
             width: 1.5,
           ),
         ),
@@ -430,7 +496,11 @@ class _AppChip extends StatelessWidget {
             Icon(
               icon,
               size: 20,
-              color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+              color: isActive
+                  ? Colors.white
+                  : (Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF94A3B8)
+                      : AppColors.onSurfaceVariant),
             ),
             const SizedBox(height: 4),
             Text(
@@ -441,7 +511,11 @@ class _AppChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+                color: isActive
+                    ? Colors.white
+                    : (Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF94A3B8)
+                        : AppColors.onSurfaceVariant),
               ),
             ),
             if (isActive) ...[

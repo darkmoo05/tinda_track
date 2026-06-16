@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/app_theme.dart';
 
 class ArchitectAlertCard extends StatelessWidget {
   final String title;
@@ -16,11 +17,18 @@ class ArchitectAlertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final alertBg = isDark ? const Color(0xFF2C1B03) : AppColors.warningLight;
+    final iconBg = isDark ? const Color(0xFF523306) : AppColors.warningOrange.withValues(alpha: 0.2);
+    final iconColor = isDark ? const Color(0xFFFFB84D) : AppColors.warningText;
+    final textColor = isDark ? const Color(0xFFFFE0BD) : AppColors.warningTextDark;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFE0BD), // Tonal Orange from screenshot
+        color: alertBg,
         borderRadius: BorderRadius.circular(12),
+        border: isDark ? Border.all(color: const Color(0xFF523306)) : null,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,14 +36,12 @@ class ArchitectAlertCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(
-                0xFFD48A3E,
-              ).withValues(alpha: 0.2), // Darker orange icon container
+              color: iconBg,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.warning_amber_rounded,
-              color: Color(0xFF8B4513),
+              color: iconColor,
               size: 24,
             ),
           ),
@@ -46,17 +52,17 @@ class ArchitectAlertCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF4A2C00),
+                    color: textColor,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   message,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF4A2C00),
+                    color: textColor,
                   ),
                 ),
               ],
@@ -66,11 +72,11 @@ class ArchitectAlertCard extends StatelessWidget {
             onPressed: onAction,
             child: Text(
               actionLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
                 decoration: TextDecoration.underline,
-                color: Color(0xFF4A2C00),
+                color: textColor,
               ),
             ),
           ),
