@@ -13,6 +13,8 @@ import '../domain/entities/party.dart';
 import '../presentation/providers/party_providers.dart';
 import '../widgets/search_input.dart';
 import '../widgets/party_list_item.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
+import '../../../../core/di/database_providers.dart';
 
 String _normalizeAccount(String raw) =>
     raw.replaceAll(RegExp(r'[^0-9]'), '').trim();
@@ -27,11 +29,52 @@ class PartyManagementScreen extends ConsumerStatefulWidget {
       _PartyManagementScreenState();
 }
 
+enum _PartiesOnboardingStep {
+  inactive,
+  searchField,
+  addPerson,
+  completed,
+}
+
 class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Timer? _searchDebounce;
   String _searchQuery = '';
   String _currentSort = 'newest'; // 'newest', 'oldest', 'name'
+
+  _PartiesOnboardingStep _onboardingStep = _PartiesOnboardingStep.inactive;
+
+  final GlobalKey _searchFieldKey = GlobalKey();
+  final GlobalKey _addPersonFABKey = GlobalKey();
+  final GlobalKey _addPersonEmptyKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkTutorialStatus();
+  }
+
+  Future<void> _checkTutorialStatus() async {
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      final completed = await appMeta.get('tutorial_completed_party_management');
+      if (completed != 'true' && mounted) {
+        setState(() {
+          _onboardingStep = _PartiesOnboardingStep.searchField;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _completeTutorial() async {
+    setState(() {
+      _onboardingStep = _PartiesOnboardingStep.completed;
+    });
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      await appMeta.set('tutorial_completed_party_management', 'true');
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -44,7 +87,7 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
     final isCompact = MediaQuery.of(context).size.width < 380;
     final parties = ref.watch(partiesStreamProvider).value ?? const <Party>[];
     final hasData = parties.isNotEmpty;
-    return Scaffold(
+    final scaffold = Scaffold(
       key: _scaffoldKey,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
@@ -59,6 +102,7 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
           _buildHeader(context),
           const SizedBox(height: 16),
           ArchitectSearchInput(
+            key: _searchFieldKey,
             hintText: context.l10n.searchByNameAccount,
             onChanged: _onSearchChanged,
           ),
@@ -110,6 +154,7 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
           : Padding(
               padding: const EdgeInsets.only(bottom: 72),
               child: Container(
+                key: _addPersonFABKey,
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
@@ -146,6 +191,40 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
                 ),
               ),
             ),
+    );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (_onboardingStep == _PartiesOnboardingStep.searchField)
+          TutorialSpotlight(
+            targetKey: _searchFieldKey,
+            title: 'Search Customers & Suppliers',
+            description: 'Type a name or phone number here to quickly find existing customer accounts and check their transaction history.',
+            onNext: () {
+              setState(() {
+                _onboardingStep = _PartiesOnboardingStep.addPerson;
+              });
+            },
+            onSkip: _completeTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 12.0,
+          ),
+        if (_onboardingStep == _PartiesOnboardingStep.addPerson)
+          TutorialSpotlight(
+            targetKey: hasData ? _addPersonFABKey : _addPersonEmptyKey,
+            title: 'Register New Entity',
+            description: 'Tap this button to register a new customer or supplier. Keeping account names matches transaction records automatically.',
+            onNext: _completeTutorial,
+            onSkip: _completeTutorial,
+            nextLabel: 'Finish',
+            showNext: true,
+            shape: hasData ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: hasData ? 28.0 : 14.0,
+          ),
+      ],
     );
   }
 
@@ -286,6 +365,7 @@ class _PartyManagementScreenState extends ConsumerState<PartyManagementScreen> {
             if (!hasActiveSearch) ...[
               const SizedBox(height: 24),
               Container(
+                key: _addPersonEmptyKey,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],

@@ -8,7 +8,7 @@ import '../features/charges/screens/charges_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
 import '../../shared/features/settings/screens/about_app_screen.dart';
 import '../../shared/features/settings/screens/backup_data_screen.dart';
-import '../../shared/features/settings/screens/profile_screen.dart';
+import '../features/more/screens/profile_screen.dart';
 import '../features/parties/screens/party_management_screen.dart';
 
 AppDrawerConfig buildPocketLedgerDrawerConfig(

@@ -23,6 +23,8 @@ import '../remote/movement_category_remote_repository.dart';
 import '../remote/party_remote_repository.dart';
 import '../remote/transaction_remote_repository.dart';
 import '../remote/transaction_type_remote_repository.dart';
+import '../remote/monitoring_session_remote_repository.dart';
+import '../../../pocket_ledger/features/more/logic/monitoring_session_mapper.dart';
 
 /// Builds the `pocket_ledger` [SyncModule]. Pure factory — no state.
 ///
@@ -39,6 +41,7 @@ SyncModule buildPocketLedgerModule(PocketLedgerDao dao) {
   final LedgerEntriesDao ledgerEntries = dao.ledgerEntries;
   final FeeTransactionsDao feeTx = dao.feeTransactions;
   final TransactionsDao transactions = dao.transactions;
+  final monitoringSessions = dao.monitoringSessions;
 
   return SyncModule(
     key: 'pocket_ledger',
@@ -155,6 +158,24 @@ SyncModule buildPocketLedgerModule(PocketLedgerDao dao) {
             FeeTransactionRemoteRepository.instance.push(payload),
         pullRemote: ({required deviceId, since}) =>
             FeeTransactionRemoteRepository.instance.pull(
+              deviceId: deviceId,
+              since: since,
+            ),
+      ),
+      EntitySync<MonitoringSessionRow>(
+        entityKey: 'monitoring_sessions',
+        route: '/monitoring-sessions',
+        pendingPush: monitoringSessions.pendingPush,
+        markClean: monitoringSessions.markClean,
+        maxUpdatedAt: monitoringSessions.maxUpdatedAt,
+        toRemoteJson: (row) => monitoringSessionToRemoteJson(row),
+        applyRemote: (json) => monitoringSessions.upsertFromRemote(
+              monitoringSessionCompanionFromRemoteJson(json),
+            ),
+        pushRemote: (payload) =>
+            MonitoringSessionRemoteRepository.instance.push(payload),
+        pullRemote: ({required deviceId, since}) =>
+            MonitoringSessionRemoteRepository.instance.pull(
               deviceId: deviceId,
               since: since,
             ),

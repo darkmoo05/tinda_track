@@ -7406,6 +7406,1002 @@ class FeeTransactionsCompanion extends UpdateCompanion<FeeTransactionRow> {
   }
 }
 
+mixin $MonitoringSessionsTableToColumns
+    implements Insertable<MonitoringSessionRow> {
+  String get syncId;
+  String get deviceId;
+  bool get isDeleted;
+  bool get isDirty;
+  int get createdAtMs;
+  int get updatedAtMs;
+  String get id;
+  String get name;
+  String get status;
+  int get startDateMs;
+  int? get endDateMs;
+  double get startGcash;
+  double get startMaya;
+  double get startOnHand;
+  double? get endGcash;
+  double? get endMaya;
+  double? get endOnHand;
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['sync_id'] = Variable<String>(syncId);
+    map['device_id'] = Variable<String>(deviceId);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['is_dirty'] = Variable<bool>(isDirty);
+    map['created_at_ms'] = Variable<int>(createdAtMs);
+    map['updated_at_ms'] = Variable<int>(updatedAtMs);
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['status'] = Variable<String>(status);
+    map['start_date_ms'] = Variable<int>(startDateMs);
+    if (!nullToAbsent || endDateMs != null) {
+      map['end_date_ms'] = Variable<int>(endDateMs);
+    }
+    map['start_gcash'] = Variable<double>(startGcash);
+    map['start_maya'] = Variable<double>(startMaya);
+    map['start_on_hand'] = Variable<double>(startOnHand);
+    if (!nullToAbsent || endGcash != null) {
+      map['end_gcash'] = Variable<double>(endGcash);
+    }
+    if (!nullToAbsent || endMaya != null) {
+      map['end_maya'] = Variable<double>(endMaya);
+    }
+    if (!nullToAbsent || endOnHand != null) {
+      map['end_on_hand'] = Variable<double>(endOnHand);
+    }
+    return map;
+  }
+}
+
+class $MonitoringSessionsTable extends MonitoringSessions
+    with TableInfo<$MonitoringSessionsTable, MonitoringSessionRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MonitoringSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
+  @override
+  late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
+    'sync_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _isDirtyMeta = const VerificationMeta(
+    'isDirty',
+  );
+  @override
+  late final GeneratedColumn<bool> isDirty = GeneratedColumn<bool>(
+    'is_dirty',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_dirty" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMsMeta = const VerificationMeta(
+    'createdAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdAtMs = GeneratedColumn<int>(
+    'created_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
+    'updatedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAtMs = GeneratedColumn<int>(
+    'updated_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('ACTIVE'),
+  );
+  static const VerificationMeta _startDateMsMeta = const VerificationMeta(
+    'startDateMs',
+  );
+  @override
+  late final GeneratedColumn<int> startDateMs = GeneratedColumn<int>(
+    'start_date_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _endDateMsMeta = const VerificationMeta(
+    'endDateMs',
+  );
+  @override
+  late final GeneratedColumn<int> endDateMs = GeneratedColumn<int>(
+    'end_date_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _startGcashMeta = const VerificationMeta(
+    'startGcash',
+  );
+  @override
+  late final GeneratedColumn<double> startGcash = GeneratedColumn<double>(
+    'start_gcash',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _startMayaMeta = const VerificationMeta(
+    'startMaya',
+  );
+  @override
+  late final GeneratedColumn<double> startMaya = GeneratedColumn<double>(
+    'start_maya',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _startOnHandMeta = const VerificationMeta(
+    'startOnHand',
+  );
+  @override
+  late final GeneratedColumn<double> startOnHand = GeneratedColumn<double>(
+    'start_on_hand',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _endGcashMeta = const VerificationMeta(
+    'endGcash',
+  );
+  @override
+  late final GeneratedColumn<double> endGcash = GeneratedColumn<double>(
+    'end_gcash',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endMayaMeta = const VerificationMeta(
+    'endMaya',
+  );
+  @override
+  late final GeneratedColumn<double> endMaya = GeneratedColumn<double>(
+    'end_maya',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endOnHandMeta = const VerificationMeta(
+    'endOnHand',
+  );
+  @override
+  late final GeneratedColumn<double> endOnHand = GeneratedColumn<double>(
+    'end_on_hand',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    syncId,
+    deviceId,
+    isDeleted,
+    isDirty,
+    createdAtMs,
+    updatedAtMs,
+    id,
+    name,
+    status,
+    startDateMs,
+    endDateMs,
+    startGcash,
+    startMaya,
+    startOnHand,
+    endGcash,
+    endMaya,
+    endOnHand,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'monitoring_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MonitoringSessionRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('sync_id')) {
+      context.handle(
+        _syncIdMeta,
+        syncId.isAcceptableOrUnknown(data['sync_id']!, _syncIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_syncIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('is_dirty')) {
+      context.handle(
+        _isDirtyMeta,
+        isDirty.isAcceptableOrUnknown(data['is_dirty']!, _isDirtyMeta),
+      );
+    }
+    if (data.containsKey('created_at_ms')) {
+      context.handle(
+        _createdAtMsMeta,
+        createdAtMs.isAcceptableOrUnknown(
+          data['created_at_ms']!,
+          _createdAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMsMeta);
+    }
+    if (data.containsKey('updated_at_ms')) {
+      context.handle(
+        _updatedAtMsMeta,
+        updatedAtMs.isAcceptableOrUnknown(
+          data['updated_at_ms']!,
+          _updatedAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMsMeta);
+    }
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('start_date_ms')) {
+      context.handle(
+        _startDateMsMeta,
+        startDateMs.isAcceptableOrUnknown(
+          data['start_date_ms']!,
+          _startDateMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_startDateMsMeta);
+    }
+    if (data.containsKey('end_date_ms')) {
+      context.handle(
+        _endDateMsMeta,
+        endDateMs.isAcceptableOrUnknown(data['end_date_ms']!, _endDateMsMeta),
+      );
+    }
+    if (data.containsKey('start_gcash')) {
+      context.handle(
+        _startGcashMeta,
+        startGcash.isAcceptableOrUnknown(data['start_gcash']!, _startGcashMeta),
+      );
+    }
+    if (data.containsKey('start_maya')) {
+      context.handle(
+        _startMayaMeta,
+        startMaya.isAcceptableOrUnknown(data['start_maya']!, _startMayaMeta),
+      );
+    }
+    if (data.containsKey('start_on_hand')) {
+      context.handle(
+        _startOnHandMeta,
+        startOnHand.isAcceptableOrUnknown(
+          data['start_on_hand']!,
+          _startOnHandMeta,
+        ),
+      );
+    }
+    if (data.containsKey('end_gcash')) {
+      context.handle(
+        _endGcashMeta,
+        endGcash.isAcceptableOrUnknown(data['end_gcash']!, _endGcashMeta),
+      );
+    }
+    if (data.containsKey('end_maya')) {
+      context.handle(
+        _endMayaMeta,
+        endMaya.isAcceptableOrUnknown(data['end_maya']!, _endMayaMeta),
+      );
+    }
+    if (data.containsKey('end_on_hand')) {
+      context.handle(
+        _endOnHandMeta,
+        endOnHand.isAcceptableOrUnknown(data['end_on_hand']!, _endOnHandMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MonitoringSessionRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MonitoringSessionRow(
+      syncId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      isDirty: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_dirty'],
+      )!,
+      createdAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at_ms'],
+      )!,
+      updatedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at_ms'],
+      )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      startDateMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}start_date_ms'],
+      )!,
+      endDateMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}end_date_ms'],
+      ),
+      startGcash: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}start_gcash'],
+      )!,
+      startMaya: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}start_maya'],
+      )!,
+      startOnHand: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}start_on_hand'],
+      )!,
+      endGcash: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}end_gcash'],
+      ),
+      endMaya: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}end_maya'],
+      ),
+      endOnHand: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}end_on_hand'],
+      ),
+    );
+  }
+
+  @override
+  $MonitoringSessionsTable createAlias(String alias) {
+    return $MonitoringSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class MonitoringSessionRow extends DataClass
+    with $MonitoringSessionsTableToColumns {
+  @override
+  final String syncId;
+  @override
+  final String deviceId;
+  @override
+  final bool isDeleted;
+  @override
+  final bool isDirty;
+  @override
+  final int createdAtMs;
+  @override
+  final int updatedAtMs;
+  @override
+  final String id;
+  @override
+  final String name;
+  @override
+  final String status;
+  @override
+  final int startDateMs;
+  @override
+  final int? endDateMs;
+  @override
+  final double startGcash;
+  @override
+  final double startMaya;
+  @override
+  final double startOnHand;
+  @override
+  final double? endGcash;
+  @override
+  final double? endMaya;
+  @override
+  final double? endOnHand;
+  const MonitoringSessionRow({
+    required this.syncId,
+    required this.deviceId,
+    required this.isDeleted,
+    required this.isDirty,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.startDateMs,
+    this.endDateMs,
+    required this.startGcash,
+    required this.startMaya,
+    required this.startOnHand,
+    this.endGcash,
+    this.endMaya,
+    this.endOnHand,
+  });
+  MonitoringSessionsCompanion toCompanion(bool nullToAbsent) {
+    return MonitoringSessionsCompanion(
+      syncId: Value(syncId),
+      deviceId: Value(deviceId),
+      isDeleted: Value(isDeleted),
+      isDirty: Value(isDirty),
+      createdAtMs: Value(createdAtMs),
+      updatedAtMs: Value(updatedAtMs),
+      id: Value(id),
+      name: Value(name),
+      status: Value(status),
+      startDateMs: Value(startDateMs),
+      endDateMs: endDateMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endDateMs),
+      startGcash: Value(startGcash),
+      startMaya: Value(startMaya),
+      startOnHand: Value(startOnHand),
+      endGcash: endGcash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endGcash),
+      endMaya: endMaya == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endMaya),
+      endOnHand: endOnHand == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endOnHand),
+    );
+  }
+
+  factory MonitoringSessionRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MonitoringSessionRow(
+      syncId: serializer.fromJson<String>(json['syncId']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      isDirty: serializer.fromJson<bool>(json['isDirty']),
+      createdAtMs: serializer.fromJson<int>(json['createdAtMs']),
+      updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      status: serializer.fromJson<String>(json['status']),
+      startDateMs: serializer.fromJson<int>(json['startDateMs']),
+      endDateMs: serializer.fromJson<int?>(json['endDateMs']),
+      startGcash: serializer.fromJson<double>(json['startGcash']),
+      startMaya: serializer.fromJson<double>(json['startMaya']),
+      startOnHand: serializer.fromJson<double>(json['startOnHand']),
+      endGcash: serializer.fromJson<double?>(json['endGcash']),
+      endMaya: serializer.fromJson<double?>(json['endMaya']),
+      endOnHand: serializer.fromJson<double?>(json['endOnHand']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'syncId': serializer.toJson<String>(syncId),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'isDirty': serializer.toJson<bool>(isDirty),
+      'createdAtMs': serializer.toJson<int>(createdAtMs),
+      'updatedAtMs': serializer.toJson<int>(updatedAtMs),
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'status': serializer.toJson<String>(status),
+      'startDateMs': serializer.toJson<int>(startDateMs),
+      'endDateMs': serializer.toJson<int?>(endDateMs),
+      'startGcash': serializer.toJson<double>(startGcash),
+      'startMaya': serializer.toJson<double>(startMaya),
+      'startOnHand': serializer.toJson<double>(startOnHand),
+      'endGcash': serializer.toJson<double?>(endGcash),
+      'endMaya': serializer.toJson<double?>(endMaya),
+      'endOnHand': serializer.toJson<double?>(endOnHand),
+    };
+  }
+
+  MonitoringSessionRow copyWith({
+    String? syncId,
+    String? deviceId,
+    bool? isDeleted,
+    bool? isDirty,
+    int? createdAtMs,
+    int? updatedAtMs,
+    String? id,
+    String? name,
+    String? status,
+    int? startDateMs,
+    Value<int?> endDateMs = const Value.absent(),
+    double? startGcash,
+    double? startMaya,
+    double? startOnHand,
+    Value<double?> endGcash = const Value.absent(),
+    Value<double?> endMaya = const Value.absent(),
+    Value<double?> endOnHand = const Value.absent(),
+  }) => MonitoringSessionRow(
+    syncId: syncId ?? this.syncId,
+    deviceId: deviceId ?? this.deviceId,
+    isDeleted: isDeleted ?? this.isDeleted,
+    isDirty: isDirty ?? this.isDirty,
+    createdAtMs: createdAtMs ?? this.createdAtMs,
+    updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+    id: id ?? this.id,
+    name: name ?? this.name,
+    status: status ?? this.status,
+    startDateMs: startDateMs ?? this.startDateMs,
+    endDateMs: endDateMs.present ? endDateMs.value : this.endDateMs,
+    startGcash: startGcash ?? this.startGcash,
+    startMaya: startMaya ?? this.startMaya,
+    startOnHand: startOnHand ?? this.startOnHand,
+    endGcash: endGcash.present ? endGcash.value : this.endGcash,
+    endMaya: endMaya.present ? endMaya.value : this.endMaya,
+    endOnHand: endOnHand.present ? endOnHand.value : this.endOnHand,
+  );
+  MonitoringSessionRow copyWithCompanion(MonitoringSessionsCompanion data) {
+    return MonitoringSessionRow(
+      syncId: data.syncId.present ? data.syncId.value : this.syncId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
+      createdAtMs: data.createdAtMs.present
+          ? data.createdAtMs.value
+          : this.createdAtMs,
+      updatedAtMs: data.updatedAtMs.present
+          ? data.updatedAtMs.value
+          : this.updatedAtMs,
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      status: data.status.present ? data.status.value : this.status,
+      startDateMs: data.startDateMs.present
+          ? data.startDateMs.value
+          : this.startDateMs,
+      endDateMs: data.endDateMs.present ? data.endDateMs.value : this.endDateMs,
+      startGcash: data.startGcash.present
+          ? data.startGcash.value
+          : this.startGcash,
+      startMaya: data.startMaya.present ? data.startMaya.value : this.startMaya,
+      startOnHand: data.startOnHand.present
+          ? data.startOnHand.value
+          : this.startOnHand,
+      endGcash: data.endGcash.present ? data.endGcash.value : this.endGcash,
+      endMaya: data.endMaya.present ? data.endMaya.value : this.endMaya,
+      endOnHand: data.endOnHand.present ? data.endOnHand.value : this.endOnHand,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MonitoringSessionRow(')
+          ..write('syncId: $syncId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('createdAtMs: $createdAtMs, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('status: $status, ')
+          ..write('startDateMs: $startDateMs, ')
+          ..write('endDateMs: $endDateMs, ')
+          ..write('startGcash: $startGcash, ')
+          ..write('startMaya: $startMaya, ')
+          ..write('startOnHand: $startOnHand, ')
+          ..write('endGcash: $endGcash, ')
+          ..write('endMaya: $endMaya, ')
+          ..write('endOnHand: $endOnHand')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    syncId,
+    deviceId,
+    isDeleted,
+    isDirty,
+    createdAtMs,
+    updatedAtMs,
+    id,
+    name,
+    status,
+    startDateMs,
+    endDateMs,
+    startGcash,
+    startMaya,
+    startOnHand,
+    endGcash,
+    endMaya,
+    endOnHand,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MonitoringSessionRow &&
+          other.syncId == this.syncId &&
+          other.deviceId == this.deviceId &&
+          other.isDeleted == this.isDeleted &&
+          other.isDirty == this.isDirty &&
+          other.createdAtMs == this.createdAtMs &&
+          other.updatedAtMs == this.updatedAtMs &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.status == this.status &&
+          other.startDateMs == this.startDateMs &&
+          other.endDateMs == this.endDateMs &&
+          other.startGcash == this.startGcash &&
+          other.startMaya == this.startMaya &&
+          other.startOnHand == this.startOnHand &&
+          other.endGcash == this.endGcash &&
+          other.endMaya == this.endMaya &&
+          other.endOnHand == this.endOnHand);
+}
+
+class MonitoringSessionsCompanion
+    extends UpdateCompanion<MonitoringSessionRow> {
+  final Value<String> syncId;
+  final Value<String> deviceId;
+  final Value<bool> isDeleted;
+  final Value<bool> isDirty;
+  final Value<int> createdAtMs;
+  final Value<int> updatedAtMs;
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> status;
+  final Value<int> startDateMs;
+  final Value<int?> endDateMs;
+  final Value<double> startGcash;
+  final Value<double> startMaya;
+  final Value<double> startOnHand;
+  final Value<double?> endGcash;
+  final Value<double?> endMaya;
+  final Value<double?> endOnHand;
+  final Value<int> rowid;
+  const MonitoringSessionsCompanion({
+    this.syncId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    this.createdAtMs = const Value.absent(),
+    this.updatedAtMs = const Value.absent(),
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.status = const Value.absent(),
+    this.startDateMs = const Value.absent(),
+    this.endDateMs = const Value.absent(),
+    this.startGcash = const Value.absent(),
+    this.startMaya = const Value.absent(),
+    this.startOnHand = const Value.absent(),
+    this.endGcash = const Value.absent(),
+    this.endMaya = const Value.absent(),
+    this.endOnHand = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MonitoringSessionsCompanion.insert({
+    required String syncId,
+    this.deviceId = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    required int createdAtMs,
+    required int updatedAtMs,
+    required String id,
+    required String name,
+    this.status = const Value.absent(),
+    required int startDateMs,
+    this.endDateMs = const Value.absent(),
+    this.startGcash = const Value.absent(),
+    this.startMaya = const Value.absent(),
+    this.startOnHand = const Value.absent(),
+    this.endGcash = const Value.absent(),
+    this.endMaya = const Value.absent(),
+    this.endOnHand = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : syncId = Value(syncId),
+       createdAtMs = Value(createdAtMs),
+       updatedAtMs = Value(updatedAtMs),
+       id = Value(id),
+       name = Value(name),
+       startDateMs = Value(startDateMs);
+  static Insertable<MonitoringSessionRow> custom({
+    Expression<String>? syncId,
+    Expression<String>? deviceId,
+    Expression<bool>? isDeleted,
+    Expression<bool>? isDirty,
+    Expression<int>? createdAtMs,
+    Expression<int>? updatedAtMs,
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? status,
+    Expression<int>? startDateMs,
+    Expression<int>? endDateMs,
+    Expression<double>? startGcash,
+    Expression<double>? startMaya,
+    Expression<double>? startOnHand,
+    Expression<double>? endGcash,
+    Expression<double>? endMaya,
+    Expression<double>? endOnHand,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (syncId != null) 'sync_id': syncId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (isDirty != null) 'is_dirty': isDirty,
+      if (createdAtMs != null) 'created_at_ms': createdAtMs,
+      if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (status != null) 'status': status,
+      if (startDateMs != null) 'start_date_ms': startDateMs,
+      if (endDateMs != null) 'end_date_ms': endDateMs,
+      if (startGcash != null) 'start_gcash': startGcash,
+      if (startMaya != null) 'start_maya': startMaya,
+      if (startOnHand != null) 'start_on_hand': startOnHand,
+      if (endGcash != null) 'end_gcash': endGcash,
+      if (endMaya != null) 'end_maya': endMaya,
+      if (endOnHand != null) 'end_on_hand': endOnHand,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MonitoringSessionsCompanion copyWith({
+    Value<String>? syncId,
+    Value<String>? deviceId,
+    Value<bool>? isDeleted,
+    Value<bool>? isDirty,
+    Value<int>? createdAtMs,
+    Value<int>? updatedAtMs,
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? status,
+    Value<int>? startDateMs,
+    Value<int?>? endDateMs,
+    Value<double>? startGcash,
+    Value<double>? startMaya,
+    Value<double>? startOnHand,
+    Value<double?>? endGcash,
+    Value<double?>? endMaya,
+    Value<double?>? endOnHand,
+    Value<int>? rowid,
+  }) {
+    return MonitoringSessionsCompanion(
+      syncId: syncId ?? this.syncId,
+      deviceId: deviceId ?? this.deviceId,
+      isDeleted: isDeleted ?? this.isDeleted,
+      isDirty: isDirty ?? this.isDirty,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      id: id ?? this.id,
+      name: name ?? this.name,
+      status: status ?? this.status,
+      startDateMs: startDateMs ?? this.startDateMs,
+      endDateMs: endDateMs ?? this.endDateMs,
+      startGcash: startGcash ?? this.startGcash,
+      startMaya: startMaya ?? this.startMaya,
+      startOnHand: startOnHand ?? this.startOnHand,
+      endGcash: endGcash ?? this.endGcash,
+      endMaya: endMaya ?? this.endMaya,
+      endOnHand: endOnHand ?? this.endOnHand,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (syncId.present) {
+      map['sync_id'] = Variable<String>(syncId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (isDirty.present) {
+      map['is_dirty'] = Variable<bool>(isDirty.value);
+    }
+    if (createdAtMs.present) {
+      map['created_at_ms'] = Variable<int>(createdAtMs.value);
+    }
+    if (updatedAtMs.present) {
+      map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
+    }
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (startDateMs.present) {
+      map['start_date_ms'] = Variable<int>(startDateMs.value);
+    }
+    if (endDateMs.present) {
+      map['end_date_ms'] = Variable<int>(endDateMs.value);
+    }
+    if (startGcash.present) {
+      map['start_gcash'] = Variable<double>(startGcash.value);
+    }
+    if (startMaya.present) {
+      map['start_maya'] = Variable<double>(startMaya.value);
+    }
+    if (startOnHand.present) {
+      map['start_on_hand'] = Variable<double>(startOnHand.value);
+    }
+    if (endGcash.present) {
+      map['end_gcash'] = Variable<double>(endGcash.value);
+    }
+    if (endMaya.present) {
+      map['end_maya'] = Variable<double>(endMaya.value);
+    }
+    if (endOnHand.present) {
+      map['end_on_hand'] = Variable<double>(endOnHand.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MonitoringSessionsCompanion(')
+          ..write('syncId: $syncId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('createdAtMs: $createdAtMs, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('status: $status, ')
+          ..write('startDateMs: $startDateMs, ')
+          ..write('endDateMs: $endDateMs, ')
+          ..write('startGcash: $startGcash, ')
+          ..write('startMaya: $startMaya, ')
+          ..write('startOnHand: $startOnHand, ')
+          ..write('endGcash: $endGcash, ')
+          ..write('endMaya: $endMaya, ')
+          ..write('endOnHand: $endOnHand, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 mixin $ProductCategoriesTableToColumns
     implements Insertable<ProductCategoryRow> {
   String get syncId;
@@ -16649,6 +17645,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $FeeTransactionsTable feeTransactions = $FeeTransactionsTable(
     this,
   );
+  late final $MonitoringSessionsTable monitoringSessions =
+      $MonitoringSessionsTable(this);
   late final $ProductCategoriesTable productCategories =
       $ProductCategoriesTable(this);
   late final $ShelfLocationsTable shelfLocations = $ShelfLocationsTable(this);
@@ -16841,6 +17839,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ledgerEntries,
     transactions,
     feeTransactions,
+    monitoringSessions,
     productCategories,
     shelfLocations,
     products,
@@ -20223,6 +21222,457 @@ typedef $$FeeTransactionsTableProcessedTableManager =
         BaseReferences<_$AppDatabase, $FeeTransactionsTable, FeeTransactionRow>,
       ),
       FeeTransactionRow,
+      PrefetchHooks Function()
+    >;
+typedef $$MonitoringSessionsTableCreateCompanionBuilder =
+    MonitoringSessionsCompanion Function({
+      required String syncId,
+      Value<String> deviceId,
+      Value<bool> isDeleted,
+      Value<bool> isDirty,
+      required int createdAtMs,
+      required int updatedAtMs,
+      required String id,
+      required String name,
+      Value<String> status,
+      required int startDateMs,
+      Value<int?> endDateMs,
+      Value<double> startGcash,
+      Value<double> startMaya,
+      Value<double> startOnHand,
+      Value<double?> endGcash,
+      Value<double?> endMaya,
+      Value<double?> endOnHand,
+      Value<int> rowid,
+    });
+typedef $$MonitoringSessionsTableUpdateCompanionBuilder =
+    MonitoringSessionsCompanion Function({
+      Value<String> syncId,
+      Value<String> deviceId,
+      Value<bool> isDeleted,
+      Value<bool> isDirty,
+      Value<int> createdAtMs,
+      Value<int> updatedAtMs,
+      Value<String> id,
+      Value<String> name,
+      Value<String> status,
+      Value<int> startDateMs,
+      Value<int?> endDateMs,
+      Value<double> startGcash,
+      Value<double> startMaya,
+      Value<double> startOnHand,
+      Value<double?> endGcash,
+      Value<double?> endMaya,
+      Value<double?> endOnHand,
+      Value<int> rowid,
+    });
+
+class $$MonitoringSessionsTableFilterComposer
+    extends Composer<_$AppDatabase, $MonitoringSessionsTable> {
+  $$MonitoringSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get startDateMs => $composableBuilder(
+    column: $table.startDateMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get endDateMs => $composableBuilder(
+    column: $table.endDateMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get startGcash => $composableBuilder(
+    column: $table.startGcash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get startMaya => $composableBuilder(
+    column: $table.startMaya,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get startOnHand => $composableBuilder(
+    column: $table.startOnHand,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get endGcash => $composableBuilder(
+    column: $table.endGcash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get endMaya => $composableBuilder(
+    column: $table.endMaya,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get endOnHand => $composableBuilder(
+    column: $table.endOnHand,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MonitoringSessionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MonitoringSessionsTable> {
+  $$MonitoringSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get startDateMs => $composableBuilder(
+    column: $table.startDateMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get endDateMs => $composableBuilder(
+    column: $table.endDateMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get startGcash => $composableBuilder(
+    column: $table.startGcash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get startMaya => $composableBuilder(
+    column: $table.startMaya,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get startOnHand => $composableBuilder(
+    column: $table.startOnHand,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get endGcash => $composableBuilder(
+    column: $table.endGcash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get endMaya => $composableBuilder(
+    column: $table.endMaya,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get endOnHand => $composableBuilder(
+    column: $table.endOnHand,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MonitoringSessionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MonitoringSessionsTable> {
+  $$MonitoringSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get syncId =>
+      $composableBuilder(column: $table.syncId, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDirty =>
+      $composableBuilder(column: $table.isDirty, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAtMs => $composableBuilder(
+    column: $table.createdAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get startDateMs => $composableBuilder(
+    column: $table.startDateMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get endDateMs =>
+      $composableBuilder(column: $table.endDateMs, builder: (column) => column);
+
+  GeneratedColumn<double> get startGcash => $composableBuilder(
+    column: $table.startGcash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get startMaya =>
+      $composableBuilder(column: $table.startMaya, builder: (column) => column);
+
+  GeneratedColumn<double> get startOnHand => $composableBuilder(
+    column: $table.startOnHand,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get endGcash =>
+      $composableBuilder(column: $table.endGcash, builder: (column) => column);
+
+  GeneratedColumn<double> get endMaya =>
+      $composableBuilder(column: $table.endMaya, builder: (column) => column);
+
+  GeneratedColumn<double> get endOnHand =>
+      $composableBuilder(column: $table.endOnHand, builder: (column) => column);
+}
+
+class $$MonitoringSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MonitoringSessionsTable,
+          MonitoringSessionRow,
+          $$MonitoringSessionsTableFilterComposer,
+          $$MonitoringSessionsTableOrderingComposer,
+          $$MonitoringSessionsTableAnnotationComposer,
+          $$MonitoringSessionsTableCreateCompanionBuilder,
+          $$MonitoringSessionsTableUpdateCompanionBuilder,
+          (
+            MonitoringSessionRow,
+            BaseReferences<
+              _$AppDatabase,
+              $MonitoringSessionsTable,
+              MonitoringSessionRow
+            >,
+          ),
+          MonitoringSessionRow,
+          PrefetchHooks Function()
+        > {
+  $$MonitoringSessionsTableTableManager(
+    _$AppDatabase db,
+    $MonitoringSessionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MonitoringSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MonitoringSessionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MonitoringSessionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> syncId = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                Value<int> createdAtMs = const Value.absent(),
+                Value<int> updatedAtMs = const Value.absent(),
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> startDateMs = const Value.absent(),
+                Value<int?> endDateMs = const Value.absent(),
+                Value<double> startGcash = const Value.absent(),
+                Value<double> startMaya = const Value.absent(),
+                Value<double> startOnHand = const Value.absent(),
+                Value<double?> endGcash = const Value.absent(),
+                Value<double?> endMaya = const Value.absent(),
+                Value<double?> endOnHand = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MonitoringSessionsCompanion(
+                syncId: syncId,
+                deviceId: deviceId,
+                isDeleted: isDeleted,
+                isDirty: isDirty,
+                createdAtMs: createdAtMs,
+                updatedAtMs: updatedAtMs,
+                id: id,
+                name: name,
+                status: status,
+                startDateMs: startDateMs,
+                endDateMs: endDateMs,
+                startGcash: startGcash,
+                startMaya: startMaya,
+                startOnHand: startOnHand,
+                endGcash: endGcash,
+                endMaya: endMaya,
+                endOnHand: endOnHand,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String syncId,
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                required int createdAtMs,
+                required int updatedAtMs,
+                required String id,
+                required String name,
+                Value<String> status = const Value.absent(),
+                required int startDateMs,
+                Value<int?> endDateMs = const Value.absent(),
+                Value<double> startGcash = const Value.absent(),
+                Value<double> startMaya = const Value.absent(),
+                Value<double> startOnHand = const Value.absent(),
+                Value<double?> endGcash = const Value.absent(),
+                Value<double?> endMaya = const Value.absent(),
+                Value<double?> endOnHand = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MonitoringSessionsCompanion.insert(
+                syncId: syncId,
+                deviceId: deviceId,
+                isDeleted: isDeleted,
+                isDirty: isDirty,
+                createdAtMs: createdAtMs,
+                updatedAtMs: updatedAtMs,
+                id: id,
+                name: name,
+                status: status,
+                startDateMs: startDateMs,
+                endDateMs: endDateMs,
+                startGcash: startGcash,
+                startMaya: startMaya,
+                startOnHand: startOnHand,
+                endGcash: endGcash,
+                endMaya: endMaya,
+                endOnHand: endOnHand,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MonitoringSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MonitoringSessionsTable,
+      MonitoringSessionRow,
+      $$MonitoringSessionsTableFilterComposer,
+      $$MonitoringSessionsTableOrderingComposer,
+      $$MonitoringSessionsTableAnnotationComposer,
+      $$MonitoringSessionsTableCreateCompanionBuilder,
+      $$MonitoringSessionsTableUpdateCompanionBuilder,
+      (
+        MonitoringSessionRow,
+        BaseReferences<
+          _$AppDatabase,
+          $MonitoringSessionsTable,
+          MonitoringSessionRow
+        >,
+      ),
+      MonitoringSessionRow,
       PrefetchHooks Function()
     >;
 typedef $$ProductCategoriesTableCreateCompanionBuilder =
@@ -26657,6 +28107,8 @@ class $AppDatabaseManager {
       $$TransactionsTableTableManager(_db, _db.transactions);
   $$FeeTransactionsTableTableManager get feeTransactions =>
       $$FeeTransactionsTableTableManager(_db, _db.feeTransactions);
+  $$MonitoringSessionsTableTableManager get monitoringSessions =>
+      $$MonitoringSessionsTableTableManager(_db, _db.monitoringSessions);
   $$ProductCategoriesTableTableManager get productCategories =>
       $$ProductCategoriesTableTableManager(_db, _db.productCategories);
   $$ShelfLocationsTableTableManager get shelfLocations =>

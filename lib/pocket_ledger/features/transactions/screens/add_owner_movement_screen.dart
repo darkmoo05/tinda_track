@@ -18,7 +18,16 @@ import '../logic/owner_movement_fee_logic.dart';
 import '../presentation/providers/ledger_entry_providers.dart';
 import '../presentation/providers/movement_category_providers.dart';
 import '../../dashboard/logic/onboarding_provider.dart';
+import '../../more/logic/monitoring_session_provider.dart';
 import '../../../../shared/widgets/tutorial_spotlight.dart';
+
+enum _MovementOnboardingStep {
+  inactive,
+  selectType,
+  walletTransferDetails,
+  saveMovement,
+  completed,
+}
 
 class AddOwnerMovementScreen extends ConsumerStatefulWidget {
   const AddOwnerMovementScreen({
@@ -43,6 +52,11 @@ class _AddOwnerMovementScreenState
   final _notesController = TextEditingController();
   final _amountFieldKey = GlobalKey(debugLabel: 'onboardingAmountField');
   final _saveButtonKey = GlobalKey(debugLabel: 'onboardingSaveButton');
+
+  _MovementOnboardingStep _microOnboardingStep = _MovementOnboardingStep.inactive;
+
+  final GlobalKey _typeSelectorKey = GlobalKey(debugLabel: 'ownerMovementTypeSelector');
+  final GlobalKey _transferDetailsKey = GlobalKey(debugLabel: 'ownerMovementTransferDetails');
 
   static const List<String> _movementTypes = [
     'Top-up',
@@ -199,9 +213,33 @@ class _AddOwnerMovementScreenState
         final onboardingState = ref.read(onboardingProvider);
         if (onboardingState.step == OnboardingStep.setupCapitalPrompt) {
           ref.read(onboardingProvider.notifier).setStep(OnboardingStep.addCapitalForm);
+        } else {
+          _checkMicroTutorialStatus();
         }
       }
     });
+  }
+
+  Future<void> _checkMicroTutorialStatus() async {
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      final completed = await appMeta.get('tutorial_completed_owner_movement');
+      if (completed != 'true' && mounted) {
+        setState(() {
+          _microOnboardingStep = _MovementOnboardingStep.selectType;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _completeMicroTutorial() async {
+    setState(() {
+      _microOnboardingStep = _MovementOnboardingStep.completed;
+    });
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      await appMeta.set('tutorial_completed_owner_movement', 'true');
+    } catch (_) {}
   }
 
   @override
@@ -389,6 +427,9 @@ class _AddOwnerMovementScreenState
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final isClosed = selectedSession != null && selectedSession.status == 'CLOSED';
+
     final onboardingState = ref.watch(onboardingProvider);
     final isTourActive = onboardingState.step == OnboardingStep.addCapitalForm;
     final showSaveSpotlight = isTourActive && _amountController.text.isNotEmpty;
@@ -407,323 +448,358 @@ class _AddOwnerMovementScreenState
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          ScreenHeaderCard(
-            title: 'Owner Movement',
-            subtitle:
-                'Record a top-up, cash transfer, borrowed funds, or fee withdrawal.',
-          ),
-          const SizedBox(height: 16),
-          _buildCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSectionTitle('Movement Details'),
-                const SizedBox(height: 14),
-                _buildMovementTypeSelector(),
-                const SizedBox(height: 20),
-                _buildFlowMetaCard(),
-                const SizedBox(height: 20),
-                _buildAccountSelector(context),
-                if (_isFeeWithdrawal) ...[
-                  const SizedBox(height: 16),
-                ] else if (_isCashTransferToWallet) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark
-                            ? const Color(0xFF1E293B)
-                            : AppColors.outlineVariant.withValues(alpha: 0.5),
+          if (isClosed)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Viewing historical session: Recording movements is disabled.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.red.shade300 : Colors.red.shade800,
                       ),
                     ),
-                    child: _isLoadingFeeIncome
-                        ? Center(
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(isDark ? const Color(0xFF60A5FA) : AppColors.primary),
-                              ),
+                  ),
+                ],
+              ),
+            ),
+          IgnorePointer(
+            ignoring: isClosed,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ScreenHeaderCard(
+                  title: 'Owner Movement',
+                  subtitle:
+                      'Record a top-up, cash transfer, borrowed funds, or fee withdrawal.',
+                ),
+                const SizedBox(height: 16),
+                _buildCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle('Movement Details'),
+                      const SizedBox(height: 14),
+                      _buildMovementTypeSelector(),
+                      const SizedBox(height: 20),
+                      _buildFlowMetaCard(),
+                      const SizedBox(height: 20),
+                      _buildAccountSelector(context),
+                      if (_isFeeWithdrawal) ...[
+                        const SizedBox(height: 16),
+                      ] else if (_isCashTransferToWallet) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          key: _transferDetailsKey,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF1E293B)
+                                  : AppColors.outlineVariant.withValues(alpha: 0.5),
                             ),
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                          ),
+                          child: _isLoadingFeeIncome
+                              ? Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(isDark ? const Color(0xFF60A5FA) : AppColors.primary),
+                                    ),
+                                  ),
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
                                       children: [
-                                        Text(
-                                          'Transfer Fee Earnings?',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Transfer Fee Earnings?',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Avail. Fee On-Hand: ₱ ${(_availableFeeIncomeOnHand ?? 0).toStringAsFixed(2)}',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Avail. Fee On-Hand: ₱ ${(_availableFeeIncomeOnHand ?? 0).toStringAsFixed(2)}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
-                                          ),
+                                        Switch(
+                                          value: _includeFeeIncomeInTransfer,
+                                          activeThumbColor: AppColors.primary,
+                                          onChanged: (_availableFeeIncomeOnHand ?? 0) <= 0
+                                              ? null
+                                              : (v) => setState(
+                                                  () => _includeFeeIncomeInTransfer = v,
+                                                ),
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  Switch(
-                                    value: _includeFeeIncomeInTransfer,
-                                    activeThumbColor: AppColors.primary,
-                                    onChanged: (_availableFeeIncomeOnHand ?? 0) <= 0
-                                        ? null
-                                        : (v) => setState(
-                                            () => _includeFeeIncomeInTransfer = v,
-                                          ),
-                                  ),
-                                ],
-                              ),
-                              if (_onHandFeeIncomeTotal > 0 ||
-                                  _onHandFeeWithdrawnTotal > 0) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Earned: ₱ ${_onHandFeeIncomeTotal.toStringAsFixed(2)} • Moved: ₱ ${_onHandFeeWithdrawnTotal.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
-                                  ),
+                                    if (_onHandFeeIncomeTotal > 0 ||
+                                        _onHandFeeWithdrawnTotal > 0) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Earned: ₱ ${_onHandFeeIncomeTotal.toStringAsFixed(2)} • Moved: ₱ ${_onHandFeeWithdrawnTotal.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                    if (_onHandFeeAdjustment > 0) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Historical over-withdrawal adjusted: ₱ ${_onHandFeeAdjustment.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                    if ((_availableFeeIncomeOnHand ?? 0) <= 0 &&
+                                        _onHandFeeIncomeTotal > 0) ...[
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'No On-Hand fee is currently available because previous withdrawals/transfers already consumed it.',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.error,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                              ],
-                              if (_onHandFeeAdjustment > 0) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Historical over-withdrawal adjusted: ₱ ${_onHandFeeAdjustment.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                              if ((_availableFeeIncomeOnHand ?? 0) <= 0 &&
-                                  _onHandFeeIncomeTotal > 0) ...[
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'No On-Hand fee is currently available because previous withdrawals/transfers already consumed it.',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.error,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                  ),
-                  const SizedBox(height: 12),
-                ] else ...[
-                  const SizedBox(height: 16),
-                ],
-
-                if (_isPersonalExpense) ...[
-                  _buildCategorySection(),
-                  const SizedBox(height: 16),
-                ],
-
-                KeyedSubtree(
-                  key: _amountFieldKey,
-                  child: _buildTextField(
-                    controller: _amountController,
-                    label: 'Amount',
-                    hint: '0.00',
-                    prefixText: '₱  ',
-                    isRequired: true,
-                    hasError: _isAmountMissing,
-                    isUnderline: true,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                  ),
-                ),
-                if (_isCashTransferToWallet) ...[
-                  const SizedBox(height: 6),
-                  Builder(
-                    builder: (context) {
-                      final availableFeeOnHand = _availableFeeIncomeOnHand ?? 0;
-                      final totalToWallet = amount + _cashTransferFeeMoveAmount;
-                      final requiredOnHand =
-                          amount + _cashTransferFeeMoveAmount;
-                      final showFeeCapHint =
-                          _includeFeeIncomeInTransfer &&
-                          availableFeeOnHand > 0 &&
-                          amount > 0;
-                      final showFeeConsumeHint =
-                          !_includeFeeIncomeInTransfer &&
-                          availableFeeOnHand > 0 &&
-                          amount > 0;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _includeFeeIncomeInTransfer &&
-                                    _cashTransferFeeMoveAmount > 0
-                                ? 'Total to wallet: ₱ ${totalToWallet.toStringAsFixed(2)} = Transfer ₱ ${amount.toStringAsFixed(2)} + Fee Move ₱ ${_cashTransferFeeMoveAmount.toStringAsFixed(2)}'
-                                : 'Total to wallet: ₱ ${amount.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                          Text(
-                            'Requested On-Hand: ₱ ${requiredOnHand.toStringAsFixed(2)} = Transfer ₱ ${amount.toStringAsFixed(2)} + Fee Move ₱ ${_cashTransferFeeMoveAmount.toStringAsFixed(2)}. Fee move is capped by remaining On-Hand after transfer.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                          if (showFeeCapHint)
-                            const Text(
-                              'To move fee earnings, leave enough On-hand Cash after transfer or turn off the fee transfer option.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.error,
-                              ),
-                            ),
-                          if (showFeeConsumeHint)
-                            Text(
-                              'On-Hand Cash contains ₱ ${availableFeeOnHand.toStringAsFixed(2)} of undrawn fee earnings. '
-                              'If your transfer exceeds the non-fee portion, it will be blocked. '
-                              'Enable the fee toggle to move fee earnings along with the transfer.',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.error,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-                if (_isFeeWithdrawal) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: isDark ? 0.15 : 0.08),
-                          borderRadius: BorderRadius.circular(20),
                         ),
-                        child: _isLoadingFeeIncome
-                            ? SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(isDark ? const Color(0xFF60A5FA) : AppColors.primary),
-                                ),
-                              )
-                            : Text(
-                                'Available Fee: ₱ ${(_availableFeeIncome ?? 0).toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 11,
-                                ),
-                              ),
-                      ),
-                      GestureDetector(
-                        onTap: _isLoadingFeeIncome ? null : _applyMaxFeeWithdrawalAmount,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: isDark ? 0.25 : 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'Use Max',
-                            style: TextStyle(
-                              color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                            ),
+                        const SizedBox(height: 12),
+                      ] else ...[
+                        const SizedBox(height: 16),
+                      ],
+
+                      if (_isPersonalExpense) ...[
+                        _buildCategorySection(),
+                        const SizedBox(height: 16),
+                      ],
+
+                      KeyedSubtree(
+                        key: _amountFieldKey,
+                        child: _buildTextField(
+                          controller: _amountController,
+                          label: 'Amount',
+                          hint: '0.00',
+                          prefixText: '₱  ',
+                          isRequired: true,
+                          hasError: _isAmountMissing,
+                          isUnderline: true,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 20),
-
-                GestureDetector(
-                  onTap: () => setState(() => _showDetails = !_showDetails),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
+                      if (_isCashTransferToWallet) ...[
+                        const SizedBox(height: 6),
+                        Builder(
+                          builder: (context) {
+                            final availableFeeOnHand = _availableFeeIncomeOnHand ?? 0;
+                            final totalToWallet = amount + _cashTransferFeeMoveAmount;
+                            final requiredOnHand =
+                                amount + _cashTransferFeeMoveAmount;
+                            final showFeeCapHint =
+                                _includeFeeIncomeInTransfer &&
+                                availableFeeOnHand > 0 &&
+                                amount > 0;
+                            final showFeeConsumeHint =
+                                !_includeFeeIncomeInTransfer &&
+                                availableFeeOnHand > 0 &&
+                                amount > 0;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _includeFeeIncomeInTransfer &&
+                                          _cashTransferFeeMoveAmount > 0
+                                      ? 'Total to wallet: ₱ ${totalToWallet.toStringAsFixed(2)} = Transfer ₱ ${amount.toStringAsFixed(2)} + Fee Move ₱ ${_cashTransferFeeMoveAmount.toStringAsFixed(2)}'
+                                      : 'Total to wallet: ₱ ${amount.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                                Text(
+                                  'Requested On-Hand: ₱ ${requiredOnHand.toStringAsFixed(2)} = Transfer ₱ ${amount.toStringAsFixed(2)} + Fee Move ₱ ${_cashTransferFeeMoveAmount.toStringAsFixed(2)}. Fee move is capped by remaining On-Hand after transfer.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                                if (showFeeCapHint)
+                                  const Text(
+                                    'To move fee earnings, leave enough On-hand Cash after transfer or turn off the fee transfer option.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.error,
+                                    ),
+                                  ),
+                                if (showFeeConsumeHint)
+                                  Text(
+                                    'On-Hand Cash contains ₱ ${availableFeeOnHand.toStringAsFixed(2)} of undrawn fee earnings. '
+                                    'If your transfer exceeds the non-fee portion, it will be blocked. '
+                                    'Enable the fee toggle to move fee earnings along with the transfer.',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.error,
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                      if (_isFeeWithdrawal) ...[
+                        const SizedBox(height: 10),
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(
-                              Icons.receipt_long_rounded,
-                              color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
-                              size: 18,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: isDark ? 0.15 : 0.08),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: _isLoadingFeeIncome
+                                  ? SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        valueColor: AlwaysStoppedAnimation<Color>(isDark ? const Color(0xFF60A5FA) : AppColors.primary),
+                                      ),
+                                    )
+                                  : Text(
+                                      'Available Fee: ₱ ${(_availableFeeIncome ?? 0).toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11,
+                                      ),
+                                    ),
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Additional Details (Optional)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                            GestureDetector(
+                              onTap: _isLoadingFeeIncome ? null : _applyMaxFeeWithdrawalAmount,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: (isDark ? const Color(0xFF60A5FA) : AppColors.primary).withValues(alpha: isDark ? 0.25 : 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'Use Max',
+                                  style: TextStyle(
+                                    color: isDark ? const Color(0xFF60A5FA) : AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                        Icon(
-                          _showDetails ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                          color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                      ],
+                      const SizedBox(height: 20),
+
+                      GestureDetector(
+                        onTap: () => setState(() => _showDetails = !_showDetails),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkNavy : AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.receipt_long_rounded,
+                                    color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Additional Details (Optional)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Icon(
+                                _showDetails ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                                color: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_showDetails) ...[
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          controller: _referenceController,
+                          label: context.l10n.referenceOptional,
+                          hint: _referenceHint,
+                          isBorderless: true,
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ReceiptScanButton(onDraftReady: _applyReceiptDraft),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          controller: _notesController,
+                          label: context.l10n.notesOptional,
+                          hint: context.l10n.additionalDetails,
+                          maxLines: 3,
+                          isBorderless: true,
                         ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-                if (_showDetails) ...[
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _referenceController,
-                    label: context.l10n.referenceOptional,
-                    hint: _referenceHint,
-                    isBorderless: true,
-                  ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: ReceiptScanButton(onDraftReady: _applyReceiptDraft),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _notesController,
-                    label: context.l10n.notesOptional,
-                    hint: context.l10n.additionalDetails,
-                    maxLines: 3,
-                    isBorderless: true,
-                  ),
-                ],
+                const SizedBox(height: 16),
+                _buildSummaryCard(amount),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          _buildSummaryCard(amount),
           const SizedBox(height: 24),
           KeyedSubtree(
             key: _saveButtonKey,
@@ -764,6 +840,51 @@ class _AddOwnerMovementScreenState
             showNext: true,
             borderRadius: 12.0,
             shape: BoxShape.rectangle,
+          ),
+        if (_microOnboardingStep == _MovementOnboardingStep.selectType)
+          TutorialSpotlight(
+            targetKey: _typeSelectorKey,
+            title: 'Select Movement Type',
+            description: 'Choose the movement category. Select "Cash Transfer" to move funds from physical cash on-hand to your digital wallets.',
+            onNext: () {
+              setState(() {
+                _movementType = 'Cash Transfer (On-hand to Wallet)';
+                _microOnboardingStep = _MovementOnboardingStep.walletTransferDetails;
+              });
+            },
+            onSkip: _completeMicroTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 14.0,
+          ),
+        if (_microOnboardingStep == _MovementOnboardingStep.walletTransferDetails)
+          TutorialSpotlight(
+            targetKey: _transferDetailsKey,
+            title: 'Shift Fee Earnings',
+            description: 'Here you can select the destination wallet. Toggle "Transfer Fee Earnings" to move collected fees back into your active wallet capital.',
+            onNext: () {
+              setState(() {
+                _microOnboardingStep = _MovementOnboardingStep.saveMovement;
+              });
+            },
+            onSkip: _completeMicroTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 12.0,
+          ),
+        if (_microOnboardingStep == _MovementOnboardingStep.saveMovement)
+          TutorialSpotlight(
+            targetKey: _saveButtonKey,
+            title: 'Record Movement',
+            description: 'After entering the transfer amount, tap "Save Record" to update your balances. GCash/Maya will increase and On-hand cash will decrease!',
+            onNext: _completeMicroTutorial,
+            onSkip: _completeMicroTutorial,
+            nextLabel: 'Finish',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 12.0,
           ),
       ],
     );
@@ -1154,24 +1275,32 @@ class _AddOwnerMovementScreenState
   }
 
   Widget _buildSaveButton() {
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final isClosed = selectedSession != null && selectedSession.status == 'CLOSED';
+
     final color = _isInflow ? AppColors.secondary : AppColors.error;
     final endColor = _isInflow
         ? AppColors.successMedium
         : AppColors.errorDeep;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [color, endColor],
-        ),
+        gradient: isClosed
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color, endColor],
+              ),
+        color: isClosed ? (isDark ? Colors.white24 : Colors.grey.shade400) : null,
         borderRadius: BorderRadius.circular(12),
       ),
       child: ElevatedButton(
-        onPressed: _isSaving ? null : _handleSave,
+        onPressed: (isClosed || _isSaving) ? null : _handleSave,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
+          backgroundColor: isClosed ? (isDark ? Colors.white12 : Colors.grey.shade300) : Colors.transparent,
           shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
@@ -1204,6 +1333,20 @@ class _AddOwnerMovementScreenState
 
   Future<void> _handleSave() async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+
+    // Fix 4: Re-check session status at save time to guard against the race
+    // where the session was closed while this form was already open on screen.
+    final currentSession = ref.read(selectedSessionProvider).value;
+    if (currentSession != null &&
+        currentSession.status.toUpperCase() == 'CLOSED') {
+      _showSnackBar(
+        messenger,
+        'Cannot save to a closed session. Switch to the active session first.',
+        isError: true,
+      );
+      return;
+    }
+
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
     var feeTransferAmountForSave = 0.0;
     var requestedFeeTransferAmount = 0.0;
@@ -1344,6 +1487,10 @@ class _AddOwnerMovementScreenState
     }
 
     if (_isPersonalExpensePayment) {
+      // Repayment = owner brings money from their personal pocket INTO the
+      // business wallet. The money source is external (outside the system), so
+      // NO source balance check is needed — the wallet is the destination, not
+      // the source. The only meaningful check is how much debt is still outstanding.
       final (outstanding, _) = await _loadPersonalExpenseBalance();
       if (!mounted) {
         return;
@@ -1379,6 +1526,29 @@ class _AddOwnerMovementScreenState
           repaymentAmount: amount,
           topUpAmount: 0,
         );
+      }
+    }
+
+    // Fix 1: Guard unprotected outflow types (e.g. "Withdrawal") against
+    // driving the source balance negative. The other specific outflow types
+    // (CashTransferToWallet, FeeWithdrawal, PersonalExpense) each have their
+    // own tailored checks above — this catches everything else.
+    if (!_isInflow &&
+        !_isCashTransferToWallet &&
+        !_isFeeWithdrawal &&
+        !_isPersonalExpense &&
+        !_isPersonalExpensePayment) {
+      final sourceBalance = await _loadSelectedAccountBalance();
+      if (!mounted) return;
+      if (amount > sourceBalance) {
+        _showSnackBar(
+          messenger,
+          'Withdrawal cannot be processed due to insufficient '
+          '$_destinationLabel balance. '
+          'Available: \u20b1 ${sourceBalance.toStringAsFixed(2)}.',
+          isError: true,
+        );
+        return;
       }
     }
 
@@ -2121,6 +2291,13 @@ class _AddOwnerMovementScreenState
   }
 
   Future<double> _loadSelectedAccountBalance() async {
+    // Fix 3: Scope balance to the active session's start date so the check
+    // reflects only money earned/spent in the current accounting cycle.
+    final session = ref.read(selectedSessionProvider).value;
+    final sessionFilter = (session != null)
+        ? 'AND created_at_ms >= ${session.startDateMs}'
+        : '';
+
     final result = await _database.customSelect('''
       SELECT
         COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
@@ -2128,6 +2305,7 @@ class _AddOwnerMovementScreenState
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ledger_entries
       WHERE is_deleted = 0
+        $sessionFilter
     ''').get();
 
     if (result.isEmpty) {
@@ -2150,10 +2328,17 @@ class _AddOwnerMovementScreenState
   }
 
   Future<double> _loadOnHandCashBalance() async {
+    // Fix 3: Scope to current session so balance reflects this cycle only.
+    final session = ref.read(selectedSessionProvider).value;
+    final sessionFilter = (session != null)
+        ? 'AND created_at_ms >= ${session.startDateMs}'
+        : '';
+
     final result = await _database.customSelect('''
       SELECT COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ledger_entries
       WHERE is_deleted = 0
+        $sessionFilter
     ''').get();
 
     if (result.isEmpty) {
@@ -2731,6 +2916,7 @@ class _AddOwnerMovementScreenState
         ),
         const SizedBox(height: 10),
         SizedBox(
+          key: _typeSelectorKey,
           height: 82,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,

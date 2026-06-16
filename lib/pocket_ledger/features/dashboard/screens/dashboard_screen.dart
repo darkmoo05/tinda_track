@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/app_theme.dart';
+import '../../../../core/database/app_database.dart' show MonitoringSessionRow;
 import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/dashboard_tutorial_overlay.dart';
 import '../../../../shared/widgets/tutorial_spotlight.dart';
+import '../../more/logic/monitoring_session_provider.dart';
 import '../logic/onboarding_provider.dart';
+
 import '../../activity/screens/activity_history_screen.dart';
 import '../../charges/screens/charges_earnings_screen.dart';
 import '../../transactions/screens/add_owner_movement_screen.dart';
@@ -25,11 +28,13 @@ class DashboardScreen extends ConsumerStatefulWidget {
     this.openDrawer,
     this.onDataChanged,
     this.onWalletPerspectiveSelected,
+    this.refreshToken = 0,
   });
 
   final VoidCallback? openDrawer;
   final VoidCallback? onDataChanged;
   final ValueChanged<HistoryWalletPerspective>? onWalletPerspectiveSelected;
+  final int refreshToken;
 
   @override
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
@@ -46,15 +51,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _dashboardFuture = _dashboardRepository.loadSnapshot();
+    final initialSession = ref.read(selectedSessionProvider).value;
+    _dashboardFuture = _dashboardRepository.loadSnapshot(session: initialSession);
   }
 
+  @override
+  void didUpdateWidget(covariant DashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshToken != oldWidget.refreshToken) {
+      _reloadDashboardSnapshot();
+    }
+  }
 
   void _reloadDashboardSnapshot() {
+    final isAllTime = ref.read(allTimeViewProvider);
+    final selectedSession = isAllTime ? null : ref.read(selectedSessionProvider).value;
     setState(() {
-      _dashboardFuture = _dashboardRepository.loadSnapshot();
+      _dashboardFuture = _dashboardRepository.loadSnapshot(session: selectedSession);
     });
   }
+
 
   Widget _buildDemoModeBanner(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -133,10 +149,168 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Widget _buildReadOnlySessionBanner(BuildContext context, MonitoringSessionRow session) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bannerBg = isDark ? const Color(0xFF1E293B) : Colors.red.shade50;
+    final borderCol = isDark ? const Color(0xFFEF4444).withValues(alpha: 0.4) : Colors.red.shade200;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderCol, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_clock_rounded, color: Color(0xFFEF4444), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Historical Session: ${session.name}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFEF4444),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'You are viewing a closed session. Transaction recording is disabled.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF7F1D1D),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () async {
+              await ref.read(selectedSessionProvider.notifier).resetToActive();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Go Live', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllTimeBanner(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bannerBg = isDark ? const Color(0xFF1E1B3A) : const Color(0xFFF5F3FF);
+    final borderCol = isDark
+        ? const Color(0xFF7C3AED).withValues(alpha: 0.4)
+        : const Color(0xFFC4B5FD);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderCol, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.history_rounded, color: Color(0xFF7C3AED), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'All Sessions — All Time View',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF7C3AED),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Showing combined history from every monitoring session.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF5B21B6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () {
+              ref.read(allTimeViewProvider.notifier).state = false;
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Go Live', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final onboardingState = ref.watch(onboardingProvider);
     final onboardingKeys = ref.watch(onboardingKeysProvider);
+    final selectedSessionAsync = ref.watch(selectedSessionProvider);
+    final selectedSession = selectedSessionAsync.value;
+    final isAllTime = ref.watch(allTimeViewProvider);
+
+    ref.listen(selectedSessionProvider, (previous, next) {
+      final prevId = previous?.value?.id;
+      final nextId = next.value?.id;
+      final prevStart = previous?.value?.startDateMs;
+      final nextStart = next.value?.startDateMs;
+      // Reload whenever the session ID or start timestamp changes — this
+      // catches the new-session case where startDateMs differs even if the
+      // ID comparison alone might be skipped due to async ordering.
+      if (prevId != nextId || prevStart != nextStart) {
+        final allTime = ref.read(allTimeViewProvider);
+        setState(() {
+          _dashboardFuture = _dashboardRepository.loadSnapshot(
+            session: allTime ? null : next.value,
+          );
+        });
+      }
+    });
+
+    // React when the user switches to/from All-Time view.
+    ref.listen<bool>(allTimeViewProvider, (prev, next) {
+      if (prev == next) return;
+      setState(() {
+        _dashboardFuture = _dashboardRepository.loadSnapshot(
+          session: next ? null : ref.read(selectedSessionProvider).value,
+        );
+      });
+    });
 
     return FutureBuilder<DashboardSnapshot>(
       future: _dashboardFuture,
@@ -184,9 +358,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           body: ListView(
             padding: const EdgeInsets.all(24),
             children: [
+              if (isAllTime)
+                _buildAllTimeBanner(context)
+              else if (selectedSession != null && selectedSession.status == 'CLOSED')
+                _buildReadOnlySessionBanner(context, selectedSession),
               if (onboardingState.hasDemoData)
                 _buildDemoModeBanner(context),
               _buildBusinessCashHeroCard(context, dashboard),
+
               const SizedBox(height: 16),
               if (dashboard.showAlertCard)
                 ArchitectAlertCard(
@@ -292,7 +471,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _onAlertAction(String actionLabel) async {
+    final selectedSession = ref.read(selectedSessionProvider).value;
+    if (selectedSession != null && selectedSession.status == 'CLOSED') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot perform movements on a closed monitoring session.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     AddOwnerMovementScreen? screen;
+
 
     if (actionLabel == 'LOAD WALLET' || actionLabel == 'LOAD GCASH WALLET') {
       screen = const AddOwnerMovementScreen(
@@ -385,6 +576,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     BuildContext context,
     DashboardSnapshot dashboard,
   ) {
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+
+    final gcashStart = selectedSession?.startGcash ?? 0.0;
+    final gcashChange = dashboard.walletBalance - gcashStart;
+    final gcashChangeSign = gcashChange >= 0 ? '+' : '';
+    final gcashCaption = selectedSession != null
+        ? 'Started: ${_dashboardRepository.formatCurrency(gcashStart)} ($gcashChangeSign${_dashboardRepository.formatCurrency(gcashChange)})'
+        : context.l10n.availableBalance;
+
+    final mayaStart = selectedSession?.startMaya ?? 0.0;
+    final mayaChange = dashboard.mayaWalletBalance - mayaStart;
+    final mayaChangeSign = mayaChange >= 0 ? '+' : '';
+    final mayaCaption = selectedSession != null
+        ? 'Started: ${_dashboardRepository.formatCurrency(mayaStart)} ($mayaChangeSign${_dashboardRepository.formatCurrency(mayaChange)})'
+        : context.l10n.availableBalance;
+
+    final onHandStart = selectedSession?.startOnHand ?? 0.0;
+    final onHandChange = dashboard.onHandCash - onHandStart;
+    final onHandChangeSign = onHandChange >= 0 ? '+' : '';
+    final onHandCaption = selectedSession != null
+        ? 'Started: ${_dashboardRepository.formatCurrency(onHandStart)} ($onHandChangeSign${_dashboardRepository.formatCurrency(onHandChange)})'
+        : context.l10n.physicalCash;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -406,7 +620,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     value: _dashboardRepository.formatCurrency(
                       dashboard.walletBalance,
                     ),
-                    caption: context.l10n.availableBalance,
+                    caption: gcashCaption,
                     icon: Icons.account_balance_wallet_rounded,
                     accentColor: AppColors.primary,
                     onTap: () => _openWalletPerspectiveHistory(
@@ -422,7 +636,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     value: _dashboardRepository.formatCurrency(
                       dashboard.mayaWalletBalance,
                     ),
-                    caption: context.l10n.availableBalance,
+                    caption: mayaCaption,
                     icon: Icons.account_balance_rounded,
                     accentColor: AppColors.secondary,
                     onTap: () => _openWalletPerspectiveHistory(
@@ -438,7 +652,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     value: _dashboardRepository.formatCurrency(
                       dashboard.onHandCash,
                     ),
-                    caption: context.l10n.physicalCash,
+                    caption: onHandCaption,
                     icon: Icons.payments_outlined,
                     accentColor: AppColors.onHand,
                     onTap: () => _openWalletPerspectiveHistory(
@@ -579,6 +793,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final totalBusinessCash = dashboard.businessUsableCash;
 
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final startingBusinessCash = (selectedSession?.startGcash ?? 0.0) +
+        (selectedSession?.startMaya ?? 0.0) +
+        (selectedSession?.startOnHand ?? 0.0);
+    final businessChange = totalBusinessCash - startingBusinessCash;
+    final changeSign = businessChange >= 0 ? '+' : '';
+    final changeStr = changeSign + _dashboardRepository.formatCurrency(businessChange);
+
+    final subtitle = selectedSession != null
+        ? '${selectedSession.name} • Started: ${_dashboardRepository.formatCurrency(startingBusinessCash)} ($changeStr)'
+        : 'Available now for business operations';
+
     final heroGradient = const LinearGradient(
       colors: [AppColors.primary, Color(0xFF0F172A)],
       begin: Alignment.topLeft,
@@ -644,7 +870,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Available now for business operations',
+            subtitle,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.6),
               fontSize: 11,
@@ -1235,7 +1461,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _navigateToPersonalExpensePayment() async {
+    final selectedSession = ref.read(selectedSessionProvider).value;
+    if (selectedSession != null && selectedSession.status == 'CLOSED') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot pay borrowed funds on a closed monitoring session.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final screen = const AddOwnerMovementScreen(
+
       initialMovementType: 'Borrowed Funds Repayment',
     );
 

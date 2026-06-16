@@ -18,6 +18,7 @@ import '../../charges/domain/entities/charge.dart';
 import '../../charges/presentation/providers/charge_providers.dart';
 import '../../charges/screens/charges_screen.dart';
 import '../../dashboard/logic/onboarding_provider.dart';
+import '../../more/logic/monitoring_session_provider.dart';
 import '../../../../shared/widgets/tutorial_spotlight.dart';
 import '../../parties/domain/entities/party.dart';
 import '../../parties/presentation/providers/party_providers.dart';
@@ -351,6 +352,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final isClosed = selectedSession != null && selectedSession.status == 'CLOSED';
+
     // Watch partiesStreamProvider to keep it active and ensure cache matches database
     ref.watch(partiesStreamProvider);
 
@@ -395,152 +399,186 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(24),
             children: [
-              ScreenHeaderCard(
-                title: 'New Transaction',
-                subtitle:
-                    'Select wallet & service, then enter the customer account and amount.',
-              ),
-              const SizedBox(height: 16),
-              _buildCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionTitle('Transaction Details'),
-                    const SizedBox(height: 12),
-                    _buildTypeSelector(),
-                    const SizedBox(height: 16),
-                    KeyedSubtree(
-                      key: _accountFieldKey,
-                      child: _buildTextField(
-                        controller: _accountController,
-                        label: context.l10n.accountNumber,
-                        hint: context.l10n.searchOrEnterAccountNumber,
-                        isUnderline: true,
-                        suffixWidget: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: _openAccountSearchPicker,
-                              child: Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.15),
-                                  shape: BoxShape.circle,
-                                ),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.search,
-                                  size: 18,
-                                  color: AppColors.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ReceiptScanButton(
-                              onDraftReady: _applyReceiptDraft,
-                              child: Container(
-                                width: 32,
-                                height: 32,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.primary,
-                                  shape: BoxShape.circle,
-                                ),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.camera_alt_outlined,
-                                  size: 16,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                          ],
-                        ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        onChanged: _resolvePartyFromAccount,
-                        isRequired: true,
-                        hasError: _isAccountNumberMissing,
-                      ),
-                    ),
-                    if (_hasTypedAccount && _isRegisteredAccount) ...[
-                      const SizedBox(height: 8),
-                      _buildPartyFoundBanner(_matchedParty!.name),
-                    ] else if (_hasTypedAccount) ...[
-                      const SizedBox(height: 8),
-                      _buildPartyNotRegisteredAlert(),
-                    ],
-                    const SizedBox(height: 16),
-                    KeyedSubtree(
-                      key: _amountFieldKey,
-                      child: _buildTextField(
-                        controller: _principalController,
-                        label: context.l10n.transactionAmount,
-                        hint: '0.00',
-                        prefixText: '$_pesoLabel  ',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [_amountInputFormatter],
-                        onChanged: _onPrincipalChanged,
-                        isRequired: true,
-                        hasError: _isPrincipalMissing,
-                      ),
-                    ),
-                    if (_canCustomizeFeeHandling) ...[
-                      const SizedBox(height: 16),
-                      _buildChargeHandlingSelector(),
-                    ],
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Divider(color: AppColors.outlineVariant, thickness: 0.5),
-                    ),
-                    Theme(
-                      data: Theme.of(context).copyWith(
-                        dividerColor: Colors.transparent,
-                        hoverColor: Colors.transparent,
-                        splashColor: Colors.transparent,
-                        highlightColor: Colors.transparent,
-                      ),
-                      child: ExpansionTile(
-                        title: Text(
-                          'Additional Details (Optional)',
+              if (isClosed)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Viewing historical session: Recording transactions is disabled.',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: isDark
-                                ? const Color(0xFFF8FAFC).withValues(alpha: 0.8)
-                                : AppColors.onSurface.withValues(alpha: 0.8),
+                            color: isDark ? Colors.red.shade300 : Colors.red.shade800,
                           ),
                         ),
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: const EdgeInsets.only(top: 8, bottom: 8),
-                        iconColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
-                        collapsedIconColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              IgnorePointer(
+                ignoring: isClosed,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ScreenHeaderCard(
+                      title: 'New Transaction',
+                      subtitle:
+                          'Select wallet & service, then enter the customer account and amount.',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildTextField(
-                            controller: _referenceController,
-                            label: context.l10n.referenceOptional,
-                            hint: context.l10n.enterReferenceNumber,
-                            isBorderless: true,
-                          ),
+                          _buildSectionTitle('Transaction Details'),
+                          const SizedBox(height: 12),
+                          _buildTypeSelector(),
                           const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _notesController,
-                            label: context.l10n.notesOptional,
-                            hint: context.l10n.additionalDetails,
-                            maxLines: 3,
-                            isBorderless: true,
+                          KeyedSubtree(
+                            key: _accountFieldKey,
+                            child: _buildTextField(
+                              controller: _accountController,
+                              label: context.l10n.accountNumber,
+                              hint: context.l10n.searchOrEnterAccountNumber,
+                              isUnderline: true,
+                              suffixWidget: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  GestureDetector(
+                                    onTap: _openAccountSearchPicker,
+                                    child: Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.search,
+                                        size: 18,
+                                        color: AppColors.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ReceiptScanButton(
+                                    onDraftReady: _applyReceiptDraft,
+                                    child: Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.camera_alt_outlined,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                              ),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              onChanged: _resolvePartyFromAccount,
+                              isRequired: true,
+                              hasError: _isAccountNumberMissing,
+                            ),
+                          ),
+                          if (_hasTypedAccount && _isRegisteredAccount) ...[
+                            const SizedBox(height: 8),
+                            _buildPartyFoundBanner(_matchedParty!.name),
+                          ] else if (_hasTypedAccount) ...[
+                            const SizedBox(height: 8),
+                            _buildPartyNotRegisteredAlert(),
+                          ],
+                          const SizedBox(height: 16),
+                          KeyedSubtree(
+                            key: _amountFieldKey,
+                            child: _buildTextField(
+                              controller: _principalController,
+                              label: context.l10n.transactionAmount,
+                              hint: '0.00',
+                              prefixText: '$_pesoLabel  ',
+                              keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              inputFormatters: [_amountInputFormatter],
+                              onChanged: _onPrincipalChanged,
+                              isRequired: true,
+                              hasError: _isPrincipalMissing,
+                            ),
+                          ),
+                          if (_canCustomizeFeeHandling) ...[
+                            const SizedBox(height: 16),
+                            _buildChargeHandlingSelector(),
+                          ],
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Divider(color: AppColors.outlineVariant, thickness: 0.5),
+                          ),
+                          Theme(
+                            data: Theme.of(context).copyWith(
+                              dividerColor: Colors.transparent,
+                              hoverColor: Colors.transparent,
+                              splashColor: Colors.transparent,
+                              highlightColor: Colors.transparent,
+                            ),
+                            child: ExpansionTile(
+                              title: Text(
+                                'Additional Details (Optional)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? const Color(0xFFF8FAFC).withValues(alpha: 0.8)
+                                      : AppColors.onSurface.withValues(alpha: 0.8),
+                                ),
+                              ),
+                              tilePadding: EdgeInsets.zero,
+                              childrenPadding: const EdgeInsets.only(top: 8, bottom: 8),
+                              iconColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                              collapsedIconColor: isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant,
+                              children: [
+                                _buildTextField(
+                                  controller: _referenceController,
+                                  label: context.l10n.referenceOptional,
+                                  hint: context.l10n.enterReferenceNumber,
+                                  isBorderless: true,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _notesController,
+                                  label: context.l10n.notesOptional,
+                                  hint: context.l10n.additionalDetails,
+                                  maxLines: 3,
+                                  isBorderless: true,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    _buildCalculationPreview(context),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _buildCalculationPreview(context),
               const SizedBox(height: 24),
               _buildSaveButton(context),
               const SizedBox(height: 40),
@@ -1284,28 +1322,36 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Widget _buildSaveButton(BuildContext context) {
+    final selectedSession = ref.watch(selectedSessionProvider).value;
+    final isClosed = selectedSession != null && selectedSession.status == 'CLOSED';
+
     return KeyedSubtree(
       key: _saveButtonKey,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.primary, AppColors.primaryContainer],
-          ),
+          gradient: isClosed
+              ? null
+              : const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primary, AppColors.primaryContainer],
+                ),
+          color: isClosed ? (Theme.of(context).brightness == Brightness.dark ? Colors.white24 : Colors.grey.shade400) : null,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: isClosed
+              ? null
+              : [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
         ),
         child: ElevatedButton(
-          onPressed: _isSaving ? null : _onSaveTransaction,
+          onPressed: (isClosed || _isSaving) ? null : _onSaveTransaction,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
+            backgroundColor: isClosed ? (Theme.of(context).brightness == Brightness.dark ? Colors.white12 : Colors.grey.shade300) : Colors.transparent,
             shadowColor: Colors.transparent,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
@@ -2078,6 +2124,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   Future<void> _runSaveTransaction() async {
     final l10n = context.l10n;
+
+    // Fix 4: Re-check session status at save time — the session could have been
+    // closed on another device while this form was already open.
+    final currentSession = ref.read(selectedSessionProvider).value;
+    if (currentSession != null &&
+        currentSession.status.toUpperCase() == 'CLOSED') {
+      _showMessage('Cannot save to a closed session. Switch to the active session first.',
+          isError: true);
+      return;
+    }
+
     final accountNumber = _accountController.text.trim();
     final principal = _parseAmount(_principalController.text);
 
@@ -2567,6 +2624,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   Future<(double walletBalance, double mayaWalletBalance, double onHandBalance)>
   _loadCurrentBalances() async {
+    // Fix 3: Scope to active session start so the check uses only this cycle's
+    // balance, matching the "fresh start at ₱0" session design.
+    final session = ref.read(selectedSessionProvider).value;
+    final sessionFilter = (session != null)
+        ? 'AND created_at_ms >= ${session.startDateMs}'
+        : '';
+
     final rawRows = await _database.customSelect('''
       SELECT
         COALESCE(SUM(wallet_delta), 0) AS wallet_balance,
@@ -2574,6 +2638,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         COALESCE(SUM(on_hand_delta), 0) AS on_hand_balance
       FROM ledger_entries
       WHERE is_deleted = 0
+        $sessionFilter
     ''').get();
 
     if (rawRows.isEmpty) {

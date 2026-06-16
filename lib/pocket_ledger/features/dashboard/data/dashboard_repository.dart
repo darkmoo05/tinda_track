@@ -204,12 +204,20 @@ class DashboardRepository {
     return entries;
   }
 
-  Future<DashboardSnapshot> loadSnapshot() async {
-    final rows = await _selectRows(
-      "SELECT *, $_createdAtAlias FROM ledger_entries "
-      "WHERE COALESCE(is_deleted, 0) = 0 "
-      "ORDER BY created_at_ms ASC, id ASC",
-    );
+  Future<DashboardSnapshot> loadSnapshot({MonitoringSessionRow? session}) async {
+    String sql = "SELECT *, $_createdAtAlias FROM ledger_entries WHERE COALESCE(is_deleted, 0) = 0 ";
+    List<Variable> vars = [];
+    if (session != null) {
+      sql += "AND created_at_ms >= ? ";
+      vars.add(Variable.withInt(session.startDateMs));
+      if (session.endDateMs != null) {
+        sql += "AND created_at_ms <= ? ";
+        vars.add(Variable.withInt(session.endDateMs!));
+      }
+    }
+    sql += "ORDER BY created_at_ms ASC, id ASC";
+    final rows = await _selectRows(sql, variables: vars);
+
     final feeRows = await _selectRows(
       "SELECT related_transaction_sync_id, fee_amount, charge_destination, "
       "$_createdAtAlias "
@@ -217,12 +225,12 @@ class DashboardRepository {
       "WHERE COALESCE(is_deleted, 0) = 0",
     );
 
-    double walletBalance = 0;
-    double mayaWalletBalance = 0;
-    double onHandCash = 0;
-    double businessWalletBalance = 0;
-    double businessMayaWalletBalance = 0;
-    double businessOnHandCash = 0;
+    double walletBalance = session?.startGcash ?? 0.0;
+    double mayaWalletBalance = session?.startMaya ?? 0.0;
+    double onHandCash = session?.startOnHand ?? 0.0;
+    double businessWalletBalance = session?.startGcash ?? 0.0;
+    double businessMayaWalletBalance = session?.startMaya ?? 0.0;
+    double businessOnHandCash = session?.startOnHand ?? 0.0;
     double walletTopUpBaseline = 0;
     double mayaWalletTopUpBaseline = 0;
     double onHandTopUpBaseline = 0;
@@ -235,6 +243,7 @@ class DashboardRepository {
     double personalExpenseAmount = 0;
     double personalExpensePaymentAmount = 0;
     int transactionCount = 0;
+
 
     final walletSpots = <FlSpot>[];
     final mayaSpots = <FlSpot>[];
@@ -401,14 +410,31 @@ class DashboardRepository {
           ? null
           : transactionById[relatedTransactionSyncId];
       final createdAtRaw = (feeRow['created_at'] as String?)?.trim();
-      final createdAt =
+      DateTime createdAt =
           (createdAtRaw == null || createdAtRaw.isEmpty
               ? null
               : DateTime.tryParse(createdAtRaw)) ??
           DateTime.tryParse((relatedTx?['created_at'] as String?) ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0);
+      // Fix 4: epoch-0 means the timestamp column is invalid/missing.
+      // Fall back to the related transaction's ms column (already in memory),
+      // then to now — so the row is never silently excluded from session filters.
+      if (createdAt.millisecondsSinceEpoch == 0) {
+        final relatedMs = (relatedTx?['created_at_ms'] as num?)?.toInt();
+        createdAt = (relatedMs != null && relatedMs > 0)
+            ? DateTime.fromMillisecondsSinceEpoch(relatedMs)
+            : DateTime.now();
+      }
+
+      if (session != null) {
+        final ms = createdAt.millisecondsSinceEpoch;
+        if (ms < session.startDateMs || (session.endDateMs != null && ms > session.endDateMs!)) {
+          continue;
+        }
+      }
 
       chargesCollected += feeAmount;
+
       if (destinationKey == 'maya') {
         chargesToMaya += feeAmount;
         feeIncomeEventsBySource['maya']!.add(
@@ -537,9 +563,11 @@ class DashboardRepository {
       final lastDay = sortedDays.last;
       var dayCursor = firstDay;
       var pointIndex = 0;
-      var currentWalletBalance = 0.0;
-      var currentMayaWalletBalance = 0.0;
-      var currentCashBalance = 0.0;
+      // Fix 9: seed chart baseline from the session starting balances so
+      // historical session charts start at the correct Y value, not at zero.
+      var currentWalletBalance = session?.startGcash ?? 0.0;
+      var currentMayaWalletBalance = session?.startMaya ?? 0.0;
+      var currentCashBalance = session?.startOnHand ?? 0.0;
 
       while (!dayCursor.isAfter(lastDay)) {
         currentWalletBalance =

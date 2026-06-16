@@ -8,7 +8,10 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import '../../more/logic/monitoring_session_provider.dart';
+
 import 'package:share_plus/share_plus.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -18,20 +21,33 @@ import '../../../../core/di/database_providers.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../shared/widgets/architect_app_bar.dart';
 import '../../../../shared/widgets/screen_header_card.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
 import '../widgets/activity_tile.dart';
 import '../widgets/date_header.dart';
 
 enum HistoryWalletPerspective { gcash, maya, onHand }
+
+enum _HistoryOnboardingStep {
+  inactive,
+  tabBar,
+  filters,
+  export,
+  completed,
+}
 
 class ActivityHistoryScreen extends ConsumerStatefulWidget {
   const ActivityHistoryScreen({
     super.key,
     this.openDrawer,
     this.initialWalletPerspective,
+    this.refreshToken = 0,
+    this.viewToken = 0,
   });
 
   final VoidCallback? openDrawer;
   final HistoryWalletPerspective? initialWalletPerspective;
+  final int refreshToken;
+  final int viewToken;
 
   @override
   ConsumerState<ActivityHistoryScreen> createState() =>
@@ -65,6 +81,12 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
   DateTime? _endDateFilter;
   String? _selectedWalletFilter;
 
+  _HistoryOnboardingStep _onboardingStep = _HistoryOnboardingStep.inactive;
+
+  final GlobalKey _tabBarKey = GlobalKey(debugLabel: 'historyTabBar');
+  final GlobalKey _filtersKey = GlobalKey(debugLabel: 'historyFilters');
+  final GlobalKey _exportKey = GlobalKey(debugLabel: 'historyExport');
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +96,45 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
       widget.initialWalletPerspective,
     );
     _loadHistory();
+    _checkTutorialStatus();
+  }
+
+  Future<void> _checkTutorialStatus() async {
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      final completed = await appMeta.get('tutorial_completed_history_screen');
+      if (completed != 'true' && mounted) {
+        setState(() {
+          _onboardingStep = _HistoryOnboardingStep.tabBar;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _completeTutorial() async {
+    setState(() {
+      _onboardingStep = _HistoryOnboardingStep.completed;
+    });
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      await appMeta.set('tutorial_completed_history_screen', 'true');
+    } catch (_) {}
+  }
+
+  @override
+  void didUpdateWidget(covariant ActivityHistoryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialWalletPerspective != oldWidget.initialWalletPerspective) {
+      setState(() {
+        _selectedWalletFilter = _walletFilterFromPerspective(
+          widget.initialWalletPerspective,
+        );
+      });
+      _loadHistory();
+    } else if (widget.refreshToken != oldWidget.refreshToken ||
+        widget.viewToken != oldWidget.viewToken) {
+      _loadHistory();
+    }
   }
 
   void _handleTabSelection() {
@@ -118,6 +179,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
         title: context.l10n.movements,
         subtitle: dateRangeText,
         trailing: Row(
+          key: _exportKey,
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildQuickIconButton(
@@ -162,9 +224,64 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
     );
   }
 
+  Widget _buildReadOnlySessionBanner(BuildContext context, MonitoringSessionRow session) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bannerBg = isDark ? const Color(0xFF1E293B) : Colors.red.shade50;
+    final borderCol = isDark ? const Color(0xFFEF4444).withValues(alpha: 0.4) : Colors.red.shade200;
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderCol, width: 1.2),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_clock_rounded, color: Color(0xFFEF4444), size: 16),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Viewing Closed Session: ${session.name} (Read-Only)',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFEF4444),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () async {
+              await ref.read(selectedSessionProvider.notifier).resetToActive();
+              _loadHistory();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+            ),
+            child: const Text('Go Live', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+
+    final selectedSessionAsync = ref.watch(selectedSessionProvider);
+    final selectedSession = selectedSessionAsync.value;
+
+    ref.listen(selectedSessionProvider, (previous, next) {
+      if (previous?.value?.id != next.value?.id) {
+        _loadHistory();
+      }
+    });
+
+    final scaffold = Scaffold(
       key: _scaffoldKey,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
@@ -176,7 +293,10 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildSample3HeroBanner(),
+                if (selectedSession != null && selectedSession.status == 'CLOSED')
+                  _buildReadOnlySessionBanner(context, selectedSession),
                 _buildTabBar(),
+
                 _buildSearchAndFilters(),
                 Expanded(
                   child: TabBarView(
@@ -198,6 +318,56 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
               ],
             ),
     );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (_onboardingStep == _HistoryOnboardingStep.tabBar)
+          TutorialSpotlight(
+            targetKey: _tabBarKey,
+            title: 'Switch Views',
+            description: 'Toggle between customer Transactions and internal Owner Movements (capital top-ups or withdrawals).',
+            onNext: () {
+              setState(() {
+                _onboardingStep = _HistoryOnboardingStep.filters;
+              });
+            },
+            onSkip: _completeTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 14.0,
+          ),
+        if (_onboardingStep == _HistoryOnboardingStep.filters)
+          TutorialSpotlight(
+            targetKey: _filtersKey,
+            title: 'Filter and Audit',
+            description: 'Search for specific references, parties, or filter the list by date preset and wallet source to quickly audit records.',
+            onNext: () {
+              setState(() {
+                _onboardingStep = _HistoryOnboardingStep.export;
+              });
+            },
+            onSkip: _completeTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 14.0,
+          ),
+        if (_onboardingStep == _HistoryOnboardingStep.export)
+          TutorialSpotlight(
+            targetKey: _exportKey,
+            title: 'Export Ledger Reports',
+            description: 'Generate premium PDF reports or Excel sheets of your ledger movements for printing, sharing, or offline bookkeeping.',
+            onNext: _completeTutorial,
+            onSkip: _completeTutorial,
+            nextLabel: 'Finish',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 10.0,
+          ),
+      ],
+    );
   }
 
   Widget _buildTabBar() {
@@ -208,6 +378,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
     final unselectedLabelColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant.withValues(alpha: 0.7);
 
     return Container(
+      key: _tabBarKey,
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       decoration: BoxDecoration(
         color: tabBarBg,
@@ -266,6 +437,7 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
     final hintColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
 
     return Column(
+      key: _filtersKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Search bar
@@ -1498,7 +1670,8 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
 
   Future<void> _loadHistory() async {
     // Load ASC so we can compute accurate running (post) balances.
-    final rawRows = await _database.customSelect('''
+    final selectedSession = ref.read(selectedSessionProvider).value;
+    String sql = '''
       SELECT
         le.id,
         le.entry_type,
@@ -1519,15 +1692,28 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
       FROM ledger_entries le
       LEFT JOIN fee_transactions ft ON ft.related_transaction_sync_id = le.id AND ft.is_deleted = 0
       WHERE le.is_deleted = 0
-      ORDER BY le.created_at_ms ASC, le.id ASC
-    ''').get();
+    ''';
+    List<Variable> vars = [];
+    if (selectedSession != null) {
+      sql += ' AND le.created_at_ms >= ?';
+      vars.add(Variable.withInt(selectedSession.startDateMs));
+      if (selectedSession.endDateMs != null) {
+        sql += ' AND le.created_at_ms <= ?';
+        vars.add(Variable.withInt(selectedSession.endDateMs!));
+      }
+    }
+    sql += ' ORDER BY le.created_at_ms ASC, le.id ASC';
+
+    final rawRows = await _database.customSelect(sql, variables: vars).get();
+
     final rows = rawRows
         .map((r) => Map<String, Object?>.from(r.data))
         .toList(growable: false);
 
-    double runningGcash = 0;
-    double runningMaya = 0;
-    double runningOnHand = 0;
+    double runningGcash = selectedSession?.startGcash ?? 0.0;
+    double runningMaya = selectedSession?.startMaya ?? 0.0;
+    double runningOnHand = selectedSession?.startOnHand ?? 0.0;
+
 
     final allRows = <_HistoryRow>[];
     for (final row in rows) {
@@ -1762,6 +1948,13 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
       999,
     );
 
+    final selectedSession = ref.read(selectedSessionProvider).value;
+    int sessionStart = selectedSession?.startDateMs ?? 0;
+    int sessionEnd = selectedSession?.endDateMs ?? DateTime.now().millisecondsSinceEpoch;
+
+    final startMs = start.millisecondsSinceEpoch.clamp(sessionStart, sessionEnd);
+    final endMs = end.millisecondsSinceEpoch.clamp(sessionStart, sessionEnd);
+
     final rawRows = await _database
         .customSelect(
           '''
@@ -1790,11 +1983,12 @@ class _ActivityHistoryScreenState extends ConsumerState<ActivityHistoryScreen>
       ORDER BY le.created_at_ms ASC, le.id ASC
       ''',
           variables: [
-            Variable.withInt(start.millisecondsSinceEpoch),
-            Variable.withInt(end.millisecondsSinceEpoch),
+            Variable.withInt(startMs),
+            Variable.withInt(endMs),
           ],
         )
         .get();
+
     final rows = rawRows
         .map((r) => Map<String, Object?>.from(r.data))
         .toList(growable: false);

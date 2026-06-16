@@ -179,6 +179,7 @@ class OnboardingController extends StateNotifier<OnboardingState> {
 }
 
 final onboardingProvider = StateNotifierProvider<OnboardingController, OnboardingState>((ref) {
+  ref.watch(activeUsernameProvider);
   return OnboardingController(ref);
 });
 
@@ -196,6 +197,7 @@ class OnboardingKeys {
 }
 
 final onboardingKeysProvider = Provider<OnboardingKeys>((ref) {
+  ref.watch(activeUsernameProvider);
   return OnboardingKeys();
 });
 

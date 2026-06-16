@@ -6,6 +6,7 @@ import 'pocket_ledger/movement_categories_dao.dart';
 import 'pocket_ledger/parties_dao.dart';
 import 'pocket_ledger/transactions_dao.dart';
 import 'pocket_ledger/transaction_types_dao.dart';
+import 'pocket_ledger/monitoring_sessions_dao.dart';
 
 /// Grouped facade DAO for the **pocket_ledger** module.
 ///
@@ -32,7 +33,8 @@ class PocketLedgerDao {
       movementCategories = MovementCategoriesDao(_db),
       ledgerEntries = LedgerEntriesDao(_db),
       transactions = TransactionsDao(_db),
-      feeTransactions = FeeTransactionsDao(_db);
+      feeTransactions = FeeTransactionsDao(_db),
+      monitoringSessions = MonitoringSessionsDao(_db);
 
   final AppDatabase _db;
 
@@ -47,6 +49,7 @@ class PocketLedgerDao {
   final LedgerEntriesDao ledgerEntries;
   final TransactionsDao transactions;
   final FeeTransactionsDao feeTransactions;
+  final MonitoringSessionsDao monitoringSessions;
 
   // ── Cross-table atomic writes ──────────────────────────────────────────────
 

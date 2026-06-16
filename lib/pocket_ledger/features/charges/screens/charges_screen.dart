@@ -9,6 +9,8 @@ import '../../../../core/domain/sync_metadata.dart';
 import '../../transactions/data/fixed_transaction_type.dart';
 import '../domain/entities/charge.dart';
 import '../presentation/providers/charge_providers.dart';
+import '../../../../shared/widgets/tutorial_spotlight.dart';
+import '../../../../core/di/database_providers.dart';
 
 enum _ChargeRepoErrorCode {
   overlapRange,
@@ -97,6 +99,14 @@ class ChargesScreen extends ConsumerStatefulWidget {
   ConsumerState<ChargesScreen> createState() => _ChargesScreenState();
 }
 
+enum _ChargesOnboardingStep {
+  inactive,
+  walletTab,
+  serviceTab,
+  addBracket,
+  completed,
+}
+
 class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   static const List<String> _serviceOptionKeys = [
     'cashin',
@@ -114,6 +124,12 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
   late String _selectedService;
   String get _selectedTypeKey => '${_selectedWalletPrefix}_$_selectedService';
   bool _helpExpanded = false;
+
+  _ChargesOnboardingStep _onboardingStep = _ChargesOnboardingStep.inactive;
+
+  final GlobalKey _walletSelectorKey = GlobalKey();
+  final GlobalKey _serviceSelectorKey = GlobalKey();
+  final GlobalKey _addBracketButtonKey = GlobalKey();
 
   String _serviceLabel(BuildContext context, String serviceKey) {
     switch (serviceKey) {
@@ -167,6 +183,29 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
       _selectedWalletPrefix = 'gcash';
       _selectedService = initialKey.replaceFirst('gcash_', '');
     }
+    _checkTutorialStatus();
+  }
+
+  Future<void> _checkTutorialStatus() async {
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      final completed = await appMeta.get('tutorial_completed_charges_screen');
+      if (completed != 'true' && mounted) {
+        setState(() {
+          _onboardingStep = _ChargesOnboardingStep.walletTab;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _completeTutorial() async {
+    setState(() {
+      _onboardingStep = _ChargesOnboardingStep.completed;
+    });
+    try {
+      final appMeta = ref.read(databaseAppMetaDaoProvider);
+      await appMeta.set('tutorial_completed_charges_screen', 'true');
+    } catch (_) {}
   }
 
   @override
@@ -183,7 +222,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
     final actionBg = isDark ? const Color(0xFF161D30) : AppColors.surfaceContainerLow;
     final actionIconColor = isDark ? const Color(0xFF94A3B8) : AppColors.onSurfaceVariant;
 
-    return Scaffold(
+    final scaffold = Scaffold(
       key: _scaffoldKey,
       appBar: ArchitectAppBar(
         title: context.l10n.appTitle,
@@ -234,6 +273,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 72),
         child: Container(
+          key: _addBracketButtonKey,
           width: 56,
           height: 56,
           decoration: BoxDecoration(
@@ -271,11 +311,62 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
         ),
       ),
     );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (_onboardingStep == _ChargesOnboardingStep.walletTab)
+          TutorialSpotlight(
+            targetKey: _walletSelectorKey,
+            title: 'GCash vs Maya Wallet',
+            description: 'Select the wallet you want to set fee brackets for. Each wallet has its own separate fee tiers.',
+            onNext: () {
+              setState(() {
+                _onboardingStep = _ChargesOnboardingStep.serviceTab;
+              });
+            },
+            onSkip: _completeTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 14.0,
+          ),
+        if (_onboardingStep == _ChargesOnboardingStep.serviceTab)
+          TutorialSpotlight(
+            targetKey: _serviceSelectorKey,
+            title: 'Select Service Type',
+            description: 'Choose the service you want to configure. You can set different fee tables for Cash-In, Cash-Out, Pay Bills, or Load.',
+            onNext: () {
+              setState(() {
+                _onboardingStep = _ChargesOnboardingStep.addBracket;
+              });
+            },
+            onSkip: _completeTutorial,
+            nextLabel: 'Next',
+            showNext: true,
+            shape: BoxShape.rectangle,
+            borderRadius: 20.0,
+          ),
+        if (_onboardingStep == _ChargesOnboardingStep.addBracket)
+          TutorialSpotlight(
+            targetKey: _addBracketButtonKey,
+            title: 'Add New Fee Bracket',
+            description: 'Tap this button to define a new fee bracket (e.g. range ₱1 to ₱1,000 has a ₱15 fee). Automated fees make checkouts fast and error-free!',
+            onNext: _completeTutorial,
+            onSkip: _completeTutorial,
+            nextLabel: 'Finish',
+            showNext: true,
+            shape: BoxShape.circle,
+            borderRadius: 28.0,
+          ),
+      ],
+    );
   }
 
   Widget _buildInlineWalletSelector() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
+      key: _walletSelectorKey,
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkIndigo : AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(14),
@@ -371,6 +462,7 @@ class _ChargesScreenState extends ConsumerState<ChargesScreen> {
         : (isDark ? const Color(0xFF60A5FA) : AppColors.primary);
 
     return SingleChildScrollView(
+      key: _serviceSelectorKey,
       scrollDirection: Axis.horizontal,
       child: Row(
         children: _serviceOptionKeys.map((key) {

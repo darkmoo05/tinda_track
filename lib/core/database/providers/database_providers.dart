@@ -34,6 +34,7 @@ import '../daos/pocket_ledger/movement_categories_dao.dart';
 import '../daos/pocket_ledger/parties_dao.dart';
 import '../daos/pocket_ledger/transaction_types_dao.dart';
 import '../daos/pocket_ledger/transactions_dao.dart';
+import '../daos/pocket_ledger/monitoring_sessions_dao.dart';
 import '../daos/pocket_ledger_dao.dart';
 import '../daos/sync_state_dao.dart';
 import '../daos/tinda_tracker/customers_dao.dart';
@@ -110,6 +111,9 @@ final transactionsDaoProvider = Provider<TransactionsDao>(
 );
 final feeTransactionsDaoProvider = Provider<FeeTransactionsDao>(
   (ref) => FeeTransactionsDao(ref.watch(currentAppDatabaseProvider)),
+);
+final monitoringSessionsDaoProvider = Provider<MonitoringSessionsDao>(
+  (ref) => MonitoringSessionsDao(ref.watch(currentAppDatabaseProvider)),
 );
 
 // ── Tinda Tracker DAOs ───────────────────────────────────────────────────────
